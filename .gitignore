@@ -1,0 +1,28 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+
+# Generated data and local caches
+tmp/
+exports/
+.cache/
+.DS_Store
+*.log
+npm-debug.log*
+coverage/
+dist/
+build/
+
+# Patch rejects and local backups
+*.rej
+*.orig
