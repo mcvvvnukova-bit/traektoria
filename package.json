@@ -1,0 +1,12 @@
+{
+  "name": "traektoria51-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4"
+  }
+}

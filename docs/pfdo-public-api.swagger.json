@@ -1,0 +1,3121 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "PFDO Public API v2 (Observed OpenAPI)",
+    "version": "2026-05-13",
+    "description": "Наблюдаемая OpenAPI-спецификация публично доступных методов https://api.pfdo.ru/v2, подтвержденных прямыми запросами 13 мая 2026 года и разбором публичных фронтендов pfdo.ru и 51.pfdo.ru/app. Это не официальный vendor-контракт: у PFDO не найден публичный swagger/openapi endpoint, а фактический контракт может меняться без уведомления."
+  },
+  "externalDocs": {
+    "description": "Публичный портал PFDO",
+    "url": "https://pfdo.ru/"
+  },
+  "servers": [
+    {
+      "url": "https://api.pfdo.ru/v2",
+      "description": "PFDO API v2"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Main Page",
+      "description": "Данные публичной витрины региона."
+    },
+    {
+      "name": "Search",
+      "description": "Поиск программ, организаций и мероприятий."
+    },
+    {
+      "name": "Public",
+      "description": "Публичные справочные endpoint'ы."
+    },
+    {
+      "name": "News",
+      "description": "Новости публичной витрины."
+    },
+    {
+      "name": "FAQ",
+      "description": "FAQ и ответы."
+    },
+    {
+      "name": "Instructions",
+      "description": "Инструкции и видеоинструкции."
+    },
+    {
+      "name": "Operators",
+      "description": "Операторы и регионы."
+    },
+    {
+      "name": "Experts",
+      "description": "Экспертные группы и карточки экспертов."
+    },
+    {
+      "name": "Enrollment Verification",
+      "description": "Открытый сценарий проверки зачислений."
+    }
+  ],
+  "paths": {
+    "/main-page/regions": {
+      "get": {
+        "tags": [
+          "Main Page"
+        ],
+        "summary": "Список регионов на публичной витрине",
+        "operationId": "getMainPageRegions",
+        "description": "Возвращает регионы, подключенные к публичной витрине pfdo.ru: ID, название, URL портала региона и признак внешнего портала.",
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Region"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": 37,
+                      "name": "Мурманская область",
+                      "url": "https://51.pfdo.ru",
+                      "external": false
+                    }
+                  ],
+                  "result_code": "FLSCS",
+                  "result_message": "Полный успех"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/operator/regions": {
+      "get": {
+        "tags": [
+          "Operators"
+        ],
+        "summary": "Регионы для карты PFDO",
+        "operationId": "getOperatorRegions",
+        "description": "Используется публичной картой регионов. Может принимать expand=certificate_source.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/MapRegion"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/operator-info/{operatorId}": {
+      "get": {
+        "tags": [
+          "Main Page"
+        ],
+        "summary": "Информация о региональном операторе",
+        "operationId": "getMainPageOperatorInfo",
+        "description": "Возвращает контактные данные, настройки и служебные признаки регионального оператора. На 51.pfdo.ru метод вызывается с expand=authorized_organization,region_password_security_policy,create_pdf_on_certificate_user_change.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/OperatorInfo"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/muns/{operatorId}": {
+      "get": {
+        "tags": [
+          "Main Page"
+        ],
+        "summary": "Муниципалитеты регионального оператора",
+        "operationId": "getMainPageMunicipalities",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Municipality"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "example": {
+                  "data": [
+                    {
+                      "id": 1535,
+                      "name": "г. Мурманск"
+                    }
+                  ],
+                  "result_code": "FLSCS",
+                  "result_message": "Полный успех"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/info-mun/{municipalityId}": {
+      "get": {
+        "tags": [
+          "Main Page"
+        ],
+        "summary": "Информация по муниципалитету",
+        "operationId": "getMunicipalityInfo",
+        "description": "Текстовый блок для страницы получения сертификата в выбранном муниципалитете. HTML приходит в поле text.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/MunicipalityIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/MunicipalityInfo"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/certificate-ways/{operatorId}": {
+      "get": {
+        "tags": [
+          "Main Page"
+        ],
+        "summary": "Способы получения сертификата",
+        "operationId": "getCertificateWays",
+        "description": "Возвращает доступные способы получения/оформления сертификата для региона.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/CertificateWay"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page-settings": {
+      "get": {
+        "tags": [
+          "Main Page"
+        ],
+        "summary": "Настройки публичной главной страницы региона",
+        "operationId": "getMainPageSettings",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorIdQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/MainPageSettings"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/news": {
+      "get": {
+        "tags": [
+          "News"
+        ],
+        "summary": "Публичные новости витрины",
+        "operationId": "getMainPageNews",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PerPageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/NewsItem"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/news/{id}": {
+      "get": {
+        "tags": [
+          "News"
+        ],
+        "summary": "Детальная публичная новость",
+        "operationId": "getMainPageNewsItem",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "ID новости.",
+            "schema": {
+              "type": "integer",
+              "example": 1
+            }
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/NewsItem"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/search/programs": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Поиск программ на региональной витрине",
+        "operationId": "searchMainPagePrograms",
+        "description": "Основной поиск программ. Подтверждены operator, page, per-page, search[name], search[mun], search[direction], search[age]. В интерфейсе также используется expand для дополнительных полей.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PerPageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchNameQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchMunQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchDirectionQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchAgeQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchKeywordsIdsQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/MainPageProgramItem"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/search/programs/{id}": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Детальная карточка программы из витринного поиска",
+        "operationId": "getMainPageProgramDetail",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProgramIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/MainPageProgramDetail"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/search/es-programs": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Поиск программ через elastic-витрину",
+        "operationId": "searchElasticPrograms",
+        "description": "Альтернативный поиск программ. Фронтенд автоматически добавляет expand=program_nok_rating,duration_string,kind и per-page=24, если размер страницы не задан.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PerPageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchNameQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchMunQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchDirectionQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchAgeQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchKeywordsIdsQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/MainPageProgramItem"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/search/organizations": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Поиск организаций",
+        "operationId": "searchMainPageOrganizations",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PerPageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchNameQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/SearchOrganizationItem"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/search/organizations/{id}": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Детальная карточка организации",
+        "operationId": "getMainPageOrganizationDetail",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OrganizationIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/OperatorOptionalQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/SearchOrganizationDetail"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/search/events": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Поиск мероприятий",
+        "operationId": "searchMainPageEvents",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PerPageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          },
+          {
+            "$ref": "#/components/parameters/SearchNameQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/EventItem"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/main-page/search/events/{id}": {
+      "get": {
+        "tags": [
+          "Search"
+        ],
+        "summary": "Детальная карточка мероприятия",
+        "operationId": "getMainPageEventDetail",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EventIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/OperatorOptionalQuery"
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/EventDetail"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/municipalities": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Публичный поиск муниципалитетов",
+        "operationId": "getPublicMunicipalities",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SearchMunicipalityNameQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/Municipality"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/municipality-useful-contact": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Полезные контакты муниципалитетов/оператора",
+        "operationId": "getMunicipalityUsefulContacts",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SearchOperatorIdQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PageQuery"
+          },
+          {
+            "$ref": "#/components/parameters/PerPageQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/MunicipalityUsefulContact"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/programs/{id}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Публичная детальная карточка программы",
+        "operationId": "getPublicProgramDetail",
+        "description": "Самая подробная публичная карточка программы. Региональный фронтенд использует expand=address,program_image,registry,reestrs,direction,activity,is_open,available_groups,program_text,distance_technology,organization,images,interest,modules,rating,region,img_transparent,program_icons,program_nok_rating,phone.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProgramIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/ExpandQuery"
+          },
+          {
+            "$ref": "#/components/parameters/FieldsQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/PublicProgramDetail"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/faq/search": {
+      "get": {
+        "tags": [
+          "FAQ"
+        ],
+        "summary": "Поиск вопросов FAQ по ключевым словам",
+        "operationId": "searchPublicFaq",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/SearchKeywordsIdsQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/FaqItem"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/faq/{id}": {
+      "get": {
+        "tags": [
+          "FAQ"
+        ],
+        "summary": "Ответ FAQ",
+        "operationId": "getPublicFaqAnswer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/FaqIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/FaqItem"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/instructions": {
+      "get": {
+        "tags": [
+          "Instructions"
+        ],
+        "summary": "Список публичных инструкций",
+        "operationId": "getPublicInstructions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorOptionalQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/InstructionListItem"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/instructions/{id}": {
+      "get": {
+        "tags": [
+          "Instructions"
+        ],
+        "summary": "Детальная публичная инструкция",
+        "operationId": "getPublicInstruction",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InstructionIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/OperatorOptionalQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/InstructionDetail"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/instructions/download-pdf/{id}": {
+      "get": {
+        "tags": [
+          "Instructions"
+        ],
+        "summary": "Ссылка на PDF публичной инструкции",
+        "operationId": "getPublicInstructionPdf",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/InstructionIdPath"
+          },
+          {
+            "$ref": "#/components/parameters/OperatorOptionalQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "url": {
+                              "type": "string",
+                              "format": "uri"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/instructions/video-instructions": {
+      "get": {
+        "tags": [
+          "Instructions"
+        ],
+        "summary": "Публичные видеоинструкции",
+        "operationId": "getPublicVideoInstructionsLegacy",
+        "description": "Метод возвращает результат_code MST01 при пустом/ограниченном наборе, но HTTP 200. В актуальном региональном интерфейсе чаще используется /video-instructions.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorOptionalQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/VideoInstruction"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/video-instructions": {
+      "get": {
+        "tags": [
+          "Instructions"
+        ],
+        "summary": "Видеоинструкции",
+        "operationId": "getVideoInstructions",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorOptionalQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/VideoInstruction"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/privacy-policy/get-document-url": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "summary": "Ссылка на документ политики обработки персональных данных",
+        "operationId": "getPrivacyPolicyDocumentUrl",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "properties": {
+                            "document_url": {
+                              "type": "string",
+                              "format": "uri"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/expert-groups": {
+      "get": {
+        "tags": [
+          "Experts"
+        ],
+        "summary": "Публичные экспертные группы региона",
+        "operationId": "getPublicExpertGroups",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperatorIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ExpertGroup"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/public/critic/{id}": {
+      "get": {
+        "tags": [
+          "Experts"
+        ],
+        "summary": "Публичная карточка эксперта/критика",
+        "operationId": "getPublicCritic",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CriticIdPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/Critic"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/enrollment-verification": {
+      "post": {
+        "tags": [
+          "Enrollment Verification"
+        ],
+        "summary": "Проверка зачислений ребенка",
+        "operationId": "createEnrollmentVerification",
+        "description": "Открытый POST из раздела pfdo.ru/enrollments. Передает персональные данные ребенка и последние 4 цифры документа. Используйте только при наличии правового основания и согласия пользователя.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollmentVerificationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/EnrollmentVerificationResult"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/enrollment-verification/verify": {
+      "post": {
+        "tags": [
+          "Enrollment Verification"
+        ],
+        "summary": "Подтверждение/подписка по результатам проверки зачислений",
+        "operationId": "verifyEnrollmentVerification",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EnrollmentVerificationVerifyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "422": {
+            "$ref": "#/components/responses/422"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/enrollment-verification/confirm-email/{token}": {
+      "post": {
+        "tags": [
+          "Enrollment Verification"
+        ],
+        "summary": "Подтверждение email по токену проверки зачислений",
+        "operationId": "confirmEnrollmentVerificationEmail",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConfirmTokenPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "object",
+                          "additionalProperties": true
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    },
+    "/enrollment-verification/statistics/{token}": {
+      "get": {
+        "tags": [
+          "Enrollment Verification"
+        ],
+        "summary": "Статистика после проверки зачислений",
+        "operationId": "getEnrollmentVerificationStatistics",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ConfirmTokenPath"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Успешный ответ PFDO",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/ApiStatus"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/EnrollmentVerificationStatistic"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          },
+          "404": {
+            "$ref": "#/components/responses/404"
+          },
+          "500": {
+            "$ref": "#/components/responses/500"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "400": {
+        "description": "Некорректные параметры запроса.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "name": "Bad Request",
+              "message": "Некорректный запрос.",
+              "code": 0,
+              "status": 400
+            }
+          }
+        }
+      },
+      "401": {
+        "description": "Требуется авторизация. Такие endpoint'ы не включались как публично доступные.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "name": "Unauthorized",
+              "message": "Your request was made with invalid credentials.",
+              "code": 0,
+              "status": 401
+            }
+          }
+        }
+      },
+      "404": {
+        "description": "Сущность или маршрут не найдены.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "name": "Not Found",
+              "message": "Страница не найдена.",
+              "code": 0,
+              "status": 404
+            }
+          }
+        }
+      },
+      "405": {
+        "description": "Метод HTTP не поддерживается.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            },
+            "example": {
+              "name": "Method Not Allowed",
+              "status": 405
+            }
+          }
+        }
+      },
+      "422": {
+        "description": "Ошибка валидации.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ValidationErrorEnvelope"
+            }
+          }
+        }
+      },
+      "500": {
+        "description": "Внутренняя ошибка удаленного API.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorEnvelope"
+            }
+          }
+        }
+      }
+    },
+    "parameters": {
+      "OperatorIdPath": {
+        "name": "operatorId",
+        "in": "path",
+        "required": true,
+        "description": "ID регионального оператора PFDO. Для 51.pfdo.ru подтверждено значение 37.",
+        "schema": {
+          "type": "integer",
+          "example": 37
+        }
+      },
+      "MunicipalityIdPath": {
+        "name": "municipalityId",
+        "in": "path",
+        "required": true,
+        "description": "ID муниципалитета внутри PFDO.",
+        "schema": {
+          "type": "integer",
+          "example": 1535
+        }
+      },
+      "ProgramIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "ID образовательной программы.",
+        "schema": {
+          "type": "integer",
+          "example": 1241964
+        }
+      },
+      "OrganizationIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "ID организации.",
+        "schema": {
+          "type": "integer",
+          "example": 19622
+        }
+      },
+      "EventIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "ID мероприятия.",
+        "schema": {
+          "type": "integer",
+          "example": 1
+        }
+      },
+      "FaqIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "ID вопроса FAQ.",
+        "schema": {
+          "type": "integer",
+          "example": 1
+        }
+      },
+      "InstructionIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "ID инструкции.",
+        "schema": {
+          "type": "integer",
+          "example": 336
+        }
+      },
+      "CriticIdPath": {
+        "name": "id",
+        "in": "path",
+        "required": true,
+        "description": "ID эксперта/критика.",
+        "schema": {
+          "type": "integer",
+          "example": 1
+        }
+      },
+      "ConfirmTokenPath": {
+        "name": "token",
+        "in": "path",
+        "required": true,
+        "description": "Токен подтверждения из шага проверки зачислений.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "OperatorQuery": {
+        "name": "operator",
+        "in": "query",
+        "required": true,
+        "description": "ID оператора/региона. Основной обязательный параметр для витринного поиска.",
+        "schema": {
+          "type": "integer",
+          "example": 37
+        }
+      },
+      "OperatorOptionalQuery": {
+        "name": "operator",
+        "in": "query",
+        "required": false,
+        "description": "ID оператора/региона. Если не указан, API может вернуть общий список или пустой результат в зависимости от метода.",
+        "schema": {
+          "type": "integer",
+          "example": 37
+        }
+      },
+      "OperatorIdQuery": {
+        "name": "operator_id",
+        "in": "query",
+        "required": true,
+        "description": "ID оператора/региона в snake_case-формате.",
+        "schema": {
+          "type": "integer",
+          "example": 37
+        }
+      },
+      "PageQuery": {
+        "name": "page",
+        "in": "query",
+        "required": false,
+        "description": "Номер страницы.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1,
+          "example": 1
+        }
+      },
+      "PerPageQuery": {
+        "name": "per-page",
+        "in": "query",
+        "required": false,
+        "description": "Размер страницы. В интерфейсах PFDO чаще используется 5, 24 или 100.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 24,
+          "example": 24
+        }
+      },
+      "ExpandQuery": {
+        "name": "expand",
+        "in": "query",
+        "required": false,
+        "description": "Связанные сущности через запятую. Набор поддерживаемых значений зависит от метода.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "FieldsQuery": {
+        "name": "fields",
+        "in": "query",
+        "required": false,
+        "description": "Список полей через запятую. Используется в некоторых карточках для частичной загрузки данных.",
+        "schema": {
+          "type": "string",
+          "example": "0"
+        }
+      },
+      "SearchNameQuery": {
+        "name": "search[name]",
+        "in": "query",
+        "required": false,
+        "description": "Поиск по названию/имени.",
+        "schema": {
+          "type": "string",
+          "example": "робот"
+        }
+      },
+      "SearchMunQuery": {
+        "name": "search[mun]",
+        "in": "query",
+        "required": false,
+        "description": "Фильтр программ по ID муниципалитета. Подтвержден для /main-page/search/programs и /main-page/search/es-programs.",
+        "schema": {
+          "type": "integer",
+          "example": 1535
+        }
+      },
+      "SearchDirectionQuery": {
+        "name": "search[direction]",
+        "in": "query",
+        "required": false,
+        "description": "Фильтр программ по ID направленности.",
+        "schema": {
+          "type": "integer",
+          "example": 3
+        }
+      },
+      "SearchAgeQuery": {
+        "name": "search[age]",
+        "in": "query",
+        "required": false,
+        "description": "Фильтр программ по возрасту ребенка в месяцах.",
+        "schema": {
+          "type": "integer",
+          "example": 60
+        }
+      },
+      "SearchKeywordsIdsQuery": {
+        "name": "search[keywords_ids]",
+        "in": "query",
+        "required": false,
+        "description": "ID ключевых слов/тегов. Для FAQ используется как фильтр вопросов, для программ может работать как дополнительный поисковый фильтр.",
+        "schema": {
+          "type": "string",
+          "example": "1"
+        }
+      },
+      "SearchOperatorIdQuery": {
+        "name": "search[operator_id]",
+        "in": "query",
+        "required": false,
+        "description": "Фильтр по ID оператора в search-формате.",
+        "schema": {
+          "type": "integer",
+          "example": 37
+        }
+      },
+      "SearchProgramIdQuery": {
+        "name": "search[program_id]",
+        "in": "query",
+        "required": false,
+        "description": "Фильтр по ID программы.",
+        "schema": {
+          "type": "integer",
+          "example": 1241964
+        }
+      },
+      "SearchMunicipalityNameQuery": {
+        "name": "search[name]",
+        "in": "query",
+        "required": false,
+        "description": "Поиск муниципалитета по названию.",
+        "schema": {
+          "type": "string",
+          "example": "Мурманск"
+        }
+      }
+    },
+    "schemas": {
+      "ApiStatus": {
+        "type": "object",
+        "properties": {
+          "result_code": {
+            "type": "string",
+            "example": "FLSCS"
+          },
+          "result_message": {
+            "type": "string",
+            "example": "Полный успех"
+          }
+        }
+      },
+      "ErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "code": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "result_code": {
+            "type": "string"
+          },
+          "result_message": {
+            "type": "string"
+          }
+        }
+      },
+      "ValidationErrorEnvelope": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "result_code": {
+            "type": "string",
+            "example": "VAL01"
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "data": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "Region": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "external": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MapRegion": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "href": {
+            "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "reg_id": {
+            "type": "string"
+          },
+          "operator_id": {
+            "type": "integer"
+          },
+          "certificate_source": {
+            "type": "integer"
+          }
+        }
+      },
+      "Municipality": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "MunicipalityInfo": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "description": "HTML-текст."
+          },
+          "create-certificate-link": {
+            "type": "string",
+            "nullable": true
+          },
+          "statement_example": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "OperatorInfo": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "full_region_name": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone_extra": {
+            "type": "string",
+            "nullable": true
+          },
+          "address_actual": {
+            "type": "string",
+            "nullable": true
+          },
+          "address_legal": {
+            "type": "string",
+            "nullable": true
+          },
+          "email_operator": {
+            "type": "string",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "external": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CertificateWay": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "MainPageSettings": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "operator_id": {
+            "type": "integer"
+          },
+          "blocks_arrangement": {
+            "type": "array",
+            "items": {}
+          },
+          "navigator_title": {
+            "type": "string",
+            "nullable": true
+          },
+          "news_title": {
+            "type": "string",
+            "nullable": true
+          },
+          "login_form_title": {
+            "type": "string",
+            "nullable": true
+          },
+          "certificate_info_cards": {
+            "type": "array",
+            "items": {}
+          }
+        }
+      },
+      "NewsItem": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "caption": {
+            "type": "string"
+          },
+          "text_short": {
+            "type": "string",
+            "nullable": true
+          },
+          "text_full": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer"
+          },
+          "thumb": {
+            "type": "string",
+            "nullable": true
+          },
+          "thumb_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "image_1_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "date_publication": {
+            "type": "string",
+            "nullable": true
+          },
+          "author": {
+            "type": "string",
+            "nullable": true
+          },
+          "count_view": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "Direction": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Address": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "string",
+            "nullable": true
+          },
+          "lng": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "Reestrs": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "certified": {
+            "type": "boolean"
+          },
+          "meaningful": {
+            "type": "boolean"
+          },
+          "general": {
+            "type": "boolean"
+          },
+          "preprofessional": {
+            "type": "boolean"
+          },
+          "commercial": {
+            "type": "boolean"
+          }
+        }
+      },
+      "MainPageProgramItem": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "direction": {
+            "$ref": "#/components/schemas/Direction"
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "organization_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "age_min": {
+            "type": "integer",
+            "description": "Возраст в месяцах."
+          },
+          "age_max": {
+            "type": "integer",
+            "description": "Возраст в месяцах."
+          },
+          "module_count": {
+            "type": "integer"
+          },
+          "reestrs": {
+            "$ref": "#/components/schemas/Reestrs"
+          },
+          "enrollment": {
+            "type": "integer",
+            "nullable": true
+          },
+          "duration_string": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "MainPageProgramDetail": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "image": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "direction": {
+            "$ref": "#/components/schemas/Direction"
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "task": {
+            "type": "string",
+            "nullable": true
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "SearchOrganizationItem": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "image_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "fio_contact": {
+            "type": "string",
+            "nullable": true
+          },
+          "site": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "SearchOrganizationDetail": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "image_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "image_color": {
+            "type": "string",
+            "nullable": true
+          },
+          "fio_contact": {
+            "type": "string",
+            "nullable": true
+          },
+          "site": {
+            "type": "string",
+            "nullable": true
+          },
+          "director_name": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "EventItem": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "short_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "image": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "period": {
+            "type": "string",
+            "nullable": true
+          },
+          "deadline_entry": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "EventDetail": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "short_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "image": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          },
+          "period": {
+            "type": "string",
+            "nullable": true
+          },
+          "deadline_entry": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "MunicipalityUsefulContact": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "operator_id": {
+            "type": "integer"
+          },
+          "municipality_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "name": {
+            "type": "string",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "nullable": true
+          },
+          "address": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "PublicProgramCore": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "full_name": {
+            "type": "string"
+          },
+          "short_name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "integer"
+          },
+          "direction_id": {
+            "type": "integer"
+          },
+          "activity_ids": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "edu_form": {
+            "type": "integer"
+          },
+          "duration_year": {
+            "type": "integer"
+          },
+          "duration_month": {
+            "type": "integer"
+          },
+          "mun": {
+            "type": "integer"
+          },
+          "annotation": {
+            "type": "string",
+            "nullable": true
+          },
+          "task": {
+            "type": "string",
+            "nullable": true
+          },
+          "age_group_min": {
+            "type": "integer",
+            "description": "Возраст в месяцах."
+          },
+          "age_group_max": {
+            "type": "integer",
+            "description": "Возраст в месяцах."
+          },
+          "status": {
+            "type": "integer"
+          },
+          "modules_count": {
+            "type": "integer"
+          }
+        }
+      },
+      "AvailableGroup": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "organization_id": {
+            "type": "integer"
+          },
+          "program_id": {
+            "type": "integer"
+          },
+          "module_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "start_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "end_date": {
+            "type": "string",
+            "nullable": true
+          },
+          "free_places_counter": {
+            "type": "integer",
+            "nullable": true
+          },
+          "typical_lesson_duration_minutes": {
+            "type": "integer",
+            "nullable": true
+          },
+          "module_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "period_price": {
+            "type": "string",
+            "nullable": true
+          },
+          "periods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "Organization": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "organizational_form": {
+            "type": "integer",
+            "nullable": true
+          },
+          "level_id": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "ProgramText": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "value": {
+            "type": "string"
+          },
+          "link": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PublicProgramDetail": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "program": {
+            "$ref": "#/components/schemas/PublicProgramCore"
+          },
+          "available_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AvailableGroup"
+            }
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "organization": {
+            "$ref": "#/components/schemas/Organization"
+          },
+          "direction": {
+            "$ref": "#/components/schemas/Direction"
+          },
+          "program_text": {
+            "$ref": "#/components/schemas/ProgramText"
+          },
+          "modules": {
+            "type": "array",
+            "items": {}
+          },
+          "images": {
+            "type": "array",
+            "items": {}
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "FaqItem": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "question": {
+            "type": "string",
+            "nullable": true
+          },
+          "question_short": {
+            "type": "string",
+            "nullable": true
+          },
+          "answer": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "InstructionListItem": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "updated_at": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "InstructionDetail": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string",
+            "description": "HTML-текст инструкции."
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "updated_at": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "VideoInstruction": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        }
+      },
+      "ExpertGroup": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "operator_id": {
+            "type": "integer"
+          }
+        }
+      },
+      "Critic": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "organization_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "post": {
+            "type": "string",
+            "nullable": true
+          },
+          "image_url": {
+            "type": "string",
+            "nullable": true
+          },
+          "skills": {
+            "type": "array",
+            "items": {}
+          }
+        }
+      },
+      "EnrollmentVerificationRequest": {
+        "type": "object",
+        "required": [
+          "soname",
+          "name",
+          "number",
+          "operator_id"
+        ],
+        "properties": {
+          "soname": {
+            "type": "string",
+            "description": "Фамилия ребенка."
+          },
+          "name": {
+            "type": "string",
+            "description": "Имя ребенка."
+          },
+          "phname": {
+            "type": "string",
+            "nullable": true,
+            "description": "Отчество ребенка, если есть."
+          },
+          "number": {
+            "type": "string",
+            "description": "Последние 4 цифры документа ребенка."
+          },
+          "fillDocument": {
+            "type": "boolean",
+            "description": "true, если переданы последние 4 цифры документа."
+          },
+          "operator_id": {
+            "type": "integer",
+            "description": "ID регионального оператора."
+          },
+          "region": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Объект региона из /operator/regions; фронтенд передает его целиком."
+          }
+        }
+      },
+      "EnrollmentVerificationResult": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "record_marks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "confirm_token": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "EnrollmentVerificationVerifyRequest": {
+        "type": "object",
+        "required": [
+          "confirm_token",
+          "soname",
+          "name",
+          "email"
+        ],
+        "properties": {
+          "confirm_token": {
+            "type": "string"
+          },
+          "soname": {
+            "type": "string",
+            "description": "Фамилия родителя/заявителя."
+          },
+          "name": {
+            "type": "string",
+            "description": "Имя родителя/заявителя."
+          },
+          "phname": {
+            "type": "string",
+            "nullable": true
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "yanao": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "description": "Флаг специального регионального сценария ЯНАО."
+          }
+        }
+      },
+      "EnrollmentVerificationStatistic": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "certificates_verified_count": {
+            "type": "integer"
+          },
+          "certificates_with_fakes_count": {
+            "type": "integer"
+          }
+        }
+      }
+    }
+  },
+  "x-observation": {
+    "checked_at": "2026-05-13",
+    "checked_sources": [
+      "https://api.pfdo.ru/v2",
+      "https://pfdo.ru/app/",
+      "https://51.pfdo.ru/app/"
+    ],
+    "excluded_as_not_public_without_token": [
+      "/addresses",
+      "/municipalities",
+      "/programs/learning-tools/{id}",
+      "/news"
+    ],
+    "notes": [
+      "У API не найден публичный /swagger.json, /openapi.json, /swagger, /docs или /api-docs.",
+      "Спека включает методы, которые ответили без авторизационного токена или используются открытыми публичными фронтендами.",
+      "Для части поисковых search[*] параметров PFDO принимает дополнительные ключи, но в спецификацию включены только подтвержденные/видимые публичные параметры."
+    ]
+  }
+}

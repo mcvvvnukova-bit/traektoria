@@ -1,0 +1,11 @@
+{
+  "name": "program-topic-extractor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Offline Node.js service for extracting raw topics from local PFDO program files",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "extract": "node index.js"
+  }
+}

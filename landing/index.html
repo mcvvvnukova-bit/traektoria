@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Траектория 51 — подбор кружков и траекторий развития</title>
+    <meta
+      name="description"
+      content="Сервис подбора кружков и траекторий развития для детей в Мурманской области."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="site-header">
+        <a class="brand" href="#top" aria-label="Траектория 51">
+          <img class="brand-logo" src="./assets/figma/logo-header.svg" alt="" />
+        </a>
+
+        <nav class="main-nav">
+          <a href="#trust">Нам доверяют</a>
+          <a href="#trajectory">Траектории развития</a>
+          <a href="#contact">Подобрать кружки</a>
+          <a href="#stats">Статистика</a>
+        </nav>
+
+        <a class="nav-action" href="https://51.pfdo.ru/app/" target="_blank" rel="noreferrer">
+          <span>Портал ПФДО</span>
+          <img class="nav-action-arrow" src="./assets/figma/arrow-right.svg" alt="" aria-hidden="true" />
+        </a>
+      </header>
+
+      <main class="layout" id="top">
+        <section class="hero-section">
+          <div class="hero-copy">
+            <h1>Развитие ребенка без ошибок и перегрузки</h1>
+            <p>
+              Подберем кружки и план занятий за 2 минуты
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#contact">
+                Подобрать кружок
+              </a>
+            </div>
+          </div>
+
+          <div class="hero-visual" aria-hidden="true">
+            <img class="hero-orbit" src="./assets/figma/hero-orbit.svg" alt="" />
+            <div class="hero-cap-crop">
+              <img class="hero-cap" src="./assets/figma/hero-cap.png" alt="" />
+            </div>
+            <img class="hero-star hero-star-large" src="./assets/figma/hero-star.png" alt="" />
+            <img class="hero-star hero-star-small" src="./assets/figma/hero-star.png" alt="" />
+          </div>
+        </section>
+
+        <section class="trust-band" id="trust">
+          <div class="trust-header">
+            <h2>Почему нам доверяют родители</h2>
+          </div>
+          <div class="trust-grid">
+            <article class="trust-card">
+              <strong>10 000+</strong>
+              <span>кружков</span>
+              <p>подбор за 2 минуты вместо часов поиска</p>
+            </article>
+            <article class="trust-card">
+              <strong>90+</strong>
+              <span>параметров</span>
+              <p>учитываем интересы, уровень и особенности ребенка</p>
+            </article>
+            <article class="trust-card">
+              <strong>1</strong>
+              <span>план на год</span>
+              <p>сбалансированная траектория развития без перегрузки</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="reason-section" id="advantages">
+          <h2>Не какой кружок, а зачем этот кружок</h2>
+          <div class="reason-pills">
+            <article class="reason-pill">
+              <span class="reason-icon"><img src="./assets/figma/icon-balance.svg" alt="" /></span>
+              <span>Сбалансированное развитие</span>
+            </article>
+            <article class="reason-pill">
+              <span class="reason-icon"><img src="./assets/figma/icon-rocket.svg" alt="" /></span>
+              <span>Развитие сильных сторон</span>
+            </article>
+            <article class="reason-pill">
+              <span class="reason-icon"><img src="./assets/figma/icon-puzzle.svg" alt="" /></span>
+              <span>Компенсация слабых зон</span>
+            </article>
+          </div>
+        </section>
+
+        <section class="trajectory-panel" id="trajectory">
+          <div class="trajectory-header">
+            <h2>Ваш темп. Ваш план. Ваш результат</h2>
+          </div>
+          <div class="trajectory-grid">
+            <article class="trajectory-card">
+              <h3>Ознакомительная траектория</h3>
+              <p>Для тех, кто ещё в поиске</p>
+              <ul>
+                <li><img src="./assets/figma/list-plus.svg" alt="" />пробные занятия по разным направлениям</li>
+                <li><img src="./assets/figma/list-plus.svg" alt="" />короткие курсы, чтобы понять “моё/не моё”</li>
+                <li><img src="./assets/figma/list-plus.svg" alt="" />занятия без требований к начальной подготовке</li>
+              </ul>
+            </article>
+
+            <article class="trajectory-card trajectory-card-accent">
+              <h3>Основная траектория</h3>
+              <p>Для тех, кто готов к результату</p>
+              <ul>
+                <li><img src="./assets/figma/list-plus.svg" alt="" />годовой план с четкими этапами и контрольными точками</li>
+                <li><img src="./assets/figma/list-plus.svg" alt="" />подготовка к поступлению в ВУЗ или СПО</li>
+                <li><img src="./assets/figma/list-check.svg" alt="" />участие в конкурсах и соревнованиях</li>
+              </ul>
+            </article>
+
+            <article class="trajectory-card">
+              <h3>Дополнительная траектория</h3>
+              <p>Для тех, у кого яркие каникулы</p>
+              <ul>
+                <li><img src="./assets/figma/list-plus.svg" alt="" />программы на летние каникулы, праздники и межсезонье</li>
+                <li><img src="./assets/figma/list-plus.svg" alt="" />интенсивы, мастер-классы и творческие смены</li>
+                <li><img src="./assets/figma/list-plus.svg" alt="" />направления, на которые не хватало времени в учебный год</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="contact-block" id="contact">
+          <div class="contact-header">
+            <h2>Поговорим?</h2>
+            <div class="ai-chip">
+              <img src="./assets/figma/icon-ai.svg" alt="" />
+              <span>Подбор с помощью ИИ</span>
+            </div>
+          </div>
+          <div class="contact-card chat-card" data-web-chat data-chat-api="https://bot.traektoria51.ru/web-chat">
+            <div class="chat-toolbar">
+              <img class="chat-toolbar-logo" src="./assets/figma/chat-logo.svg" alt="" />
+              <button class="chat-reset" type="button" data-chat-reset>
+                <img src="./assets/figma/chat-reset.svg" alt="" />
+                <span>Очистить чат</span>
+              </button>
+            </div>
+
+            <div class="chat-stage">
+              <div class="chat-intro" data-chat-intro>
+                <img class="contact-mark" src="./assets/figma/ai-orb.svg" alt="" />
+                <p>
+                  Просто напишите, какой он — ваш ребенок?<br />
+                  Потому что правильный кружок начинается с правильных вопросов
+                </p>
+              </div>
+
+              <div class="chat-stream" data-chat-stream role="log" aria-live="polite" aria-label="Чат подбора кружков"></div>
+            </div>
+
+            <form class="chat-composer" data-chat-form>
+              <label class="visually-hidden" for="landing-chat-message">Сообщение</label>
+              <textarea
+                id="landing-chat-message"
+                data-chat-input
+                rows="1"
+                maxlength="2000"
+                placeholder="Введите запрос..."
+              ></textarea>
+              <button class="chat-send" type="submit" aria-label="Отправить сообщение">
+                <img src="./assets/figma/chat-send.svg" alt="" />
+              </button>
+            </form>
+            <div class="chat-status" data-chat-status aria-live="polite"></div>
+          </div>
+        </section>
+
+        <section class="next-band">
+          <div class="next-copy">
+            <h2>Что дальше?</h2>
+            <p>Самое интересное только начинается</p>
+          </div>
+          <div class="next-steps">
+            <article class="step-tile">
+              <span class="step-number">1</span>
+              <span>Сохраняйте файл с подборкой</span>
+            </article>
+            <article class="step-tile">
+              <span class="step-number">2</span>
+              <span>Запишитесь на занятия</span>
+            </article>
+            <article class="step-tile">
+              <span class="step-number">3</span>
+              <span>Отслеживайте развитие ребенка</span>
+            </article>
+            <article class="step-tile">
+              <span class="step-number">4</span>
+              <span>Вовремя замечайте успехи — и корректируйте план, если нужно</span>
+            </article>
+          </div>
+        </section>
+
+        <section class="stats-section" id="stats">
+          <div class="stats-header">
+            <h2>Статистика по кружкам</h2>
+          </div>
+
+          <div class="stats-canvas stats-canvas-segments">
+            <div class="stats-inner-tabs" role="tablist" aria-label="Подраздел статистики">
+              <button class="stats-inner-tab is-active" type="button" role="tab" aria-selected="true" data-stats-view="cost">
+                Стоимость
+              </button>
+              <button class="stats-inner-tab" type="button" role="tab" aria-selected="false" data-stats-view="directions">
+                Направления развития
+              </button>
+              <button class="stats-inner-tab" type="button" role="tab" aria-selected="false" data-stats-view="load">
+                Загруженность
+              </button>
+            </div>
+
+            <div class="stats-view is-active" data-stats-panel="cost">
+              <div class="segments-visual" data-cost-dashboard>
+                <div class="segments-chart-wrap">
+                  <div class="segments-chart"></div>
+                  <div class="segments-center">
+                    <strong data-cost-total>0</strong>
+                    <span>программ</span>
+                  </div>
+                </div>
+
+                <div class="segment-label segment-label-left-bottom" data-cost-slot="0">
+                  <span class="segment-copy">
+                    <strong>0</strong>
+                    <span>—</span>
+                    <em>0%</em>
+                  </span>
+                </div>
+
+                <div class="segment-label segment-label-left-top" data-cost-slot="1">
+                  <span class="segment-copy">
+                    <strong>0</strong>
+                    <span>—</span>
+                    <em>0%</em>
+                  </span>
+                </div>
+
+                <div class="segment-label segment-label-right-top" data-cost-slot="2">
+                  <span class="segment-copy">
+                    <strong>0</strong>
+                    <span>—</span>
+                    <em>0%</em>
+                  </span>
+                </div>
+
+                <div class="segment-label segment-label-right-mid" data-cost-slot="3">
+                  <span class="segment-copy">
+                    <strong>0</strong>
+                    <span>—</span>
+                    <em>0%</em>
+                  </span>
+                </div>
+
+                <div class="segment-label segment-label-right-bottom" data-cost-slot="4">
+                  <span class="segment-copy">
+                    <strong>0</strong>
+                    <span>—</span>
+                    <em>0%</em>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="stats-view" data-stats-panel="directions" hidden>
+              <div class="directions-visual">
+                <div class="bubble-stat bubble-left-small">
+                  <strong>2000</strong>
+                  <span>спорт</span>
+                </div>
+                <div class="bubble-stat bubble-top-right">
+                  <strong>400</strong>
+                  <span>танцы</span>
+                </div>
+                <div class="bubble-stat bubble-center-large">
+                  <strong>5000</strong>
+                  <span>творчество</span>
+                </div>
+                <div class="bubble-stat bubble-right-large bubble-green">
+                  <strong>800</strong>
+                  <span>музыка</span>
+                </div>
+                <div class="bubble-stat bubble-mid bubble-blue">
+                  <strong>300</strong>
+                  <span>язык</span>
+                </div>
+                <div class="bubble-stat bubble-top-left bubble-green">
+                  <strong>1000</strong>
+                  <span>точные науки</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="stats-view" data-stats-panel="load" hidden>
+              <div class="load-visual">
+                <div class="load-card">
+                  <div class="load-card-head">
+                    <strong>Легкая загрузка</strong>
+                    <span>1–2 занятия в неделю</span>
+                  </div>
+                  <div class="load-bar"><i style="--w: 34%"></i></div>
+                </div>
+                <div class="load-card">
+                  <div class="load-card-head">
+                    <strong>Средняя загрузка</strong>
+                    <span>2–4 занятия в неделю</span>
+                  </div>
+                  <div class="load-bar"><i style="--w: 63%"></i></div>
+                </div>
+                <div class="load-card">
+                  <div class="load-card-head">
+                    <strong>Интенсивная загрузка</strong>
+                    <span>4+ занятий в неделю</span>
+                  </div>
+                  <div class="load-bar"><i style="--w: 88%"></i></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <footer class="site-footer">
+          <div class="footer-copy">
+            <span>© 2026 Министерство просвещения Мурманской области</span>
+            <a href="https://nashsever51.ru/" target="_blank" rel="noreferrer">Портал Наш Север</a>
+          </div>
+          <div class="footer-socials" aria-label="Боты в мессенджерах">
+            <a class="footer-social-link" href="https://t.me/Traektoria51_bot" target="_blank" rel="noreferrer">
+              <img class="footer-social-icon" src="./assets/figma/icon-telegram.png" alt="" />
+              <span>Бот в Telegram</span>
+            </a>
+            <a class="footer-social-link" href="https://max.ru/id3123287655_bot" target="_blank" rel="noreferrer">
+              <img class="footer-social-icon" src="./assets/figma/icon-max.png" alt="" />
+              <span>Бот в MAX</span>
+            </a>
+          </div>
+          <div class="footer-note">
+            <span>+7 900 000 00 00</span>
+            <span>emailname@mail.ru</span>
+            <img class="footer-logo" src="./assets/figma/logo-footer.svg" alt="" />
+          </div>
+        </footer>
+      </main>
+    </div>
+    <script src="./assets/apexcharts.min.js"></script>
+    <script>
+      (() => {
+        const tabs = Array.from(document.querySelectorAll(".stats-inner-tab"));
+        const panels = Array.from(document.querySelectorAll("[data-stats-panel]"));
+
+        if (!tabs.length || !panels.length) return;
+
+        const costDashboard = document.querySelector("[data-cost-dashboard]");
+        const costChart = document.querySelector(".segments-chart");
+        const costTotal = document.querySelector("[data-cost-total]");
+        const costSlots = Array.from(document.querySelectorAll("[data-cost-slot]"));
+        const fallbackCostSegments = [
+          { key: "no_price", label: "Стоимость не указана", count: 2040, color: "#BFC3CC" },
+          { key: "free", label: "Бесплатно", count: 2998, color: "#63D1F8" },
+          { key: "1_5000", label: "От 1 до 5 000 ₽", count: 3, color: "#68FDB6" },
+          { key: "5001_10000", label: "От 5 001 до 10 000 ₽", count: 4, color: "#8C9EFF" },
+          { key: "10001_plus", label: "От 10 001 ₽", count: 569, color: "#5149E2" }
+        ];
+        let latestCostSegments = fallbackCostSegments;
+        let costChartInstance = null;
+        let costResizeObserver = null;
+        let costResizeFrame = null;
+        const costLabelOrder = ["no_price", "free", "1_5000", "5001_10000", "10001_plus"];
+        const costDisplayOrder = ["free", "1_5000", "5001_10000", "10001_plus", "no_price"];
+
+        function formatNumber(value) {
+          return new Intl.NumberFormat("ru-RU").format(value);
+        }
+
+        function buildGradientPalette(segments) {
+          const targets = {
+            no_price: "#D8DCE5",
+            free: "#8CFDFF",
+            "1_5000": "#94FFD0",
+            "5001_10000": "#B6C1FF",
+            "10001_plus": "#7A72FF"
+          };
+
+          return {
+            colors: segments.map((segment) => segment.color),
+            gradientToColors: segments.map((segment) => targets[segment.key] || segment.color)
+          };
+        }
+
+        function getCostChartSize() {
+          const wrap = costChart ? costChart.closest(".segments-chart-wrap") : null;
+          if (!wrap) return 411;
+
+          const width = wrap.getBoundingClientRect().width;
+          return Math.round(Math.max(220, Math.min(width || 411, 411)));
+        }
+
+        function scheduleCostChartResize() {
+          if (!costChartInstance || costResizeFrame) return;
+
+          costResizeFrame = window.requestAnimationFrame(() => {
+            costResizeFrame = null;
+            const size = getCostChartSize();
+            costChartInstance.updateOptions(
+              {
+                chart: {
+                  width: size,
+                  height: size
+                }
+              },
+              false,
+              false
+            );
+          });
+        }
+
+        function buildDisplaySeries(segments) {
+          const minVisiblePercent = 3;
+          const minVisibleDegrees = 5;
+          const total = segments.reduce((sum, segment) => sum + segment.count, 0);
+
+          if (!total) {
+            return segments.map(() => 0);
+          }
+
+          const meta = segments.map((segment) => {
+            const percent = (segment.count / total) * 100;
+            return {
+              ...segment,
+              percent
+            };
+          });
+
+          const forced = meta.filter((segment) => segment.percent > 0 && segment.percent < minVisiblePercent);
+          const regular = meta.filter((segment) => !(segment.percent > 0 && segment.percent < minVisiblePercent));
+          const reservedDegrees = forced.length * minVisibleDegrees;
+          const regularPercentSum = regular.reduce((sum, segment) => sum + segment.percent, 0);
+          const remainingDegrees = Math.max(360 - reservedDegrees, 0);
+
+          const displayMap = new Map();
+
+          forced.forEach((segment) => {
+            displayMap.set(segment.key, minVisibleDegrees);
+          });
+
+          regular.forEach((segment) => {
+            const degrees = regularPercentSum
+              ? (segment.percent / regularPercentSum) * remainingDegrees
+              : 0;
+            displayMap.set(segment.key, degrees);
+          });
+
+          return segments.map((segment) => displayMap.get(segment.key) || 0);
+        }
+
+        async function renderApexCostChart(segments) {
+          if (!costChart || typeof ApexCharts === "undefined") return;
+
+          const byKey = new Map(segments.map((segment) => [segment.key, segment]));
+          const displaySegments = costDisplayOrder
+            .map((key) => byKey.get(key))
+            .filter(Boolean);
+          const palette = buildGradientPalette(displaySegments);
+          const series = buildDisplaySeries(displaySegments);
+          const labels = displaySegments.map((segment) => segment.label);
+          const chartSize = getCostChartSize();
+
+          const baseOptions = {
+            chart: {
+              type: "donut",
+              width: chartSize,
+              height: chartSize,
+              sparkline: { enabled: true },
+              animations: {
+                enabled: true,
+                speed: 550
+              }
+            },
+            series,
+            labels,
+            legend: { show: false },
+            dataLabels: { enabled: false },
+            tooltip: {
+              shared: false,
+              intersect: true,
+              followCursor: false,
+              y: {
+                formatter: (_value, opts) => {
+                  const segment = displaySegments[opts.seriesIndex];
+                  return segment ? `${formatNumber(segment.count)} программ` : "";
+                }
+              }
+            },
+            stroke: {
+              width: 0
+            },
+            colors: palette.colors,
+            fill: {
+              type: "gradient",
+              gradient: {
+                shade: "dark",
+                type: "diagonal1",
+                shadeIntensity: 0.28,
+                gradientToColors: palette.gradientToColors,
+                inverseColors: false,
+                opacityFrom: 1,
+                opacityTo: 1,
+                stops: [0, 78, 100]
+              }
+            },
+            states: {
+              hover: {
+                filter: {
+                  type: "lighten",
+                  value: 0.08
+                }
+              },
+              active: {
+                allowMultipleDataPointsSelection: false,
+                filter: {
+                  type: "none"
+                }
+              }
+            },
+            plotOptions: {
+              pie: {
+                startAngle: -105,
+                endAngle: 255,
+                expandOnClick: false,
+                donut: {
+                  size: "58%"
+                }
+              }
+            }
+          };
+
+          if (!costChartInstance) {
+            costChart.innerHTML = "";
+            costChartInstance = new ApexCharts(costChart, baseOptions);
+            await costChartInstance.render();
+            return;
+          }
+
+          await costChartInstance.updateOptions(
+            {
+              chart: {
+                width: chartSize,
+                height: chartSize
+              },
+              labels,
+              colors: palette.colors,
+              fill: baseOptions.fill,
+              tooltip: baseOptions.tooltip
+            },
+            false,
+            true
+          );
+          await costChartInstance.updateSeries(series, true);
+        }
+
+        function renderCostDashboard(segments) {
+          if (!costDashboard || !costChart || !costTotal) return;
+
+          const normalized = segments
+            .map((segment) => ({
+              ...segment,
+              count: Number(segment.count) || 0
+            }))
+            .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+
+          const total = normalized.reduce((sum, segment) => sum + segment.count, 0);
+          costTotal.textContent = formatNumber(total);
+          latestCostSegments = normalized;
+
+          if (!total) return;
+
+          const byKey = new Map(normalized.map((segment) => [segment.key, segment]));
+
+          costSlots.forEach((slot, index) => {
+            const segment = byKey.get(costLabelOrder[index]);
+            if (!segment) {
+              slot.hidden = true;
+              return;
+            }
+
+            const copy = slot.querySelector(".segment-copy");
+            const [countEl, labelEl, shareEl] = copy.children;
+            const share = total ? (segment.count / total) * 100 : 0;
+
+            slot.hidden = false;
+            countEl.textContent = formatNumber(segment.count);
+            labelEl.textContent = segment.label;
+            shareEl.textContent = `${share.toFixed(1).replace(".", ",")}%`;
+          });
+
+          renderApexCostChart(normalized);
+        }
+
+        async function hydrateCostDashboard() {
+          try {
+            const response = await fetch("./assets/cost-stats.json", { cache: "no-store" });
+            if (!response.ok) throw new Error("stats fetch failed");
+            const payload = await response.json();
+            renderCostDashboard(payload.segments || fallbackCostSegments);
+          } catch (error) {
+            renderCostDashboard(fallbackCostSegments);
+          }
+        }
+
+        function activateStatsView(view) {
+          tabs.forEach((tab) => {
+            const active = tab.dataset.statsView === view;
+            tab.classList.toggle("is-active", active);
+            tab.setAttribute("aria-selected", String(active));
+          });
+
+          panels.forEach((panel) => {
+            const active = panel.dataset.statsPanel === view;
+            panel.classList.toggle("is-active", active);
+            panel.hidden = !active;
+          });
+
+          if (view === "cost") scheduleCostChartResize();
+        }
+
+        tabs.forEach((tab) => {
+          tab.addEventListener("click", () => activateStatsView(tab.dataset.statsView));
+        });
+
+        window.addEventListener("resize", scheduleCostChartResize);
+
+        if ("ResizeObserver" in window && costChart) {
+          const wrap = costChart.closest(".segments-chart-wrap");
+          if (wrap) {
+            costResizeObserver = new ResizeObserver(scheduleCostChartResize);
+            costResizeObserver.observe(wrap);
+          }
+        }
+
+        hydrateCostDashboard();
+      })();
+    </script>
+    <script>
+      (() => {
+        const root = document.querySelector("[data-web-chat]");
+        if (!root) return;
+
+        const stream = root.querySelector("[data-chat-stream]");
+        const form = root.querySelector("[data-chat-form]");
+        const input = root.querySelector("[data-chat-input]");
+        const status = root.querySelector("[data-chat-status]");
+        const reset = root.querySelector("[data-chat-reset]");
+        const apiBase = root.dataset.chatApi || "https://bot.traektoria51.ru/web-chat";
+        const storageKey = "traektoria51.webChat.v2";
+
+        const state = loadState();
+        let pending = false;
+
+        render();
+        resizeInput();
+
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          const text = input.value.trim();
+          if (!text || pending) return;
+
+          input.value = "";
+          resizeInput();
+          clearBotButtons();
+          addMessage({ type: "message", role: "user", text });
+          sendToChat("message", { text });
+        });
+
+        input.addEventListener("input", resizeInput);
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            form.requestSubmit();
+          }
+        });
+
+        stream.addEventListener("click", (event) => {
+          const button = event.target.closest("[data-chat-callback]");
+          if (!button || pending) return;
+
+          const data = button.dataset.chatCallback;
+          const label = button.textContent.trim();
+          clearBotButtons();
+          addMessage({ type: "message", role: "user", text: label });
+          sendToChat("callback", { data });
+        });
+
+        reset.addEventListener("click", () => {
+          if (pending) return;
+          resetChat();
+        });
+
+        function loadState() {
+          try {
+            const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+            if (saved?.clientId && Array.isArray(saved.messages)) {
+              return saved;
+            }
+          } catch (_error) {
+            localStorage.removeItem(storageKey);
+          }
+
+          return {
+            clientId: createClientId(),
+            messages: []
+          };
+        }
+
+        function saveState() {
+          localStorage.setItem(storageKey, JSON.stringify(state));
+        }
+
+        function createClientId() {
+          const random = new Uint32Array(1);
+          window.crypto.getRandomValues(random);
+          return String((Date.now() * 1000) + (random[0] % 1000));
+        }
+
+        function addMessage(message) {
+          state.messages.push({
+            id: message.id || `${message.role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            ...message
+          });
+          saveState();
+          render();
+        }
+
+        function addMessages(messages) {
+          messages.forEach((message) => state.messages.push(message));
+          saveState();
+          render();
+        }
+
+        function clearBotButtons() {
+          state.messages = state.messages.map((message) => {
+            if (!message.buttons) return message;
+            const { buttons: _buttons, ...rest } = message;
+            return rest;
+          });
+          saveState();
+          render();
+        }
+
+        async function sendToChat(action, payload) {
+          setPending(true);
+          status.textContent = "";
+
+          try {
+            const response = await fetch(`${apiBase}/${action}`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                clientId: state.clientId,
+                ...payload
+              })
+            });
+            const data = await response.json();
+
+            if (!response.ok || !data.ok) {
+              throw new Error(data.error || "chat_request_failed");
+            }
+
+            if (data.clientId) state.clientId = data.clientId;
+            addMessages(data.messages || []);
+            status.textContent = "";
+          } catch (_error) {
+            addMessage({
+              type: "message",
+              role: "bot",
+              text: "Сейчас не удалось получить ответ. Попробуйте еще раз чуть позже."
+            });
+            status.textContent = "";
+          } finally {
+            setPending(false);
+          }
+        }
+
+        async function resetChat() {
+          const previousClientId = state.clientId;
+          state.clientId = createClientId();
+          state.messages = [];
+          saveState();
+          render();
+
+          try {
+            await fetch(`${apiBase}/reset`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ clientId: previousClientId })
+            });
+          } catch (_error) {
+            // Local reset still keeps the next request in a fresh web session.
+          }
+        }
+
+        function setPending(value) {
+          pending = value;
+          root.classList.toggle("is-pending", pending);
+          input.disabled = pending;
+          render();
+        }
+
+        function render() {
+          stream.innerHTML = "";
+          root.classList.toggle("has-conversation", state.messages.length > 0 || pending);
+          state.messages.forEach((message) => {
+            stream.appendChild(renderMessage(message));
+          });
+          if (pending) {
+            stream.appendChild(renderTyping());
+          }
+          stream.scrollTop = stream.scrollHeight;
+        }
+
+        function renderMessage(message) {
+          const item = document.createElement("article");
+          item.className = `chat-message chat-message-${message.role || "bot"} chat-message-${message.type || "message"}`;
+
+          const bubble = document.createElement("div");
+          bubble.className = "chat-bubble";
+
+          const text = document.createElement("div");
+          text.className = "chat-text";
+          renderTextContent(text, message.text || "");
+          bubble.appendChild(text);
+
+          if (message.type === "document" && message.url) {
+            const link = document.createElement("a");
+            link.className = "chat-document-link";
+            link.href = new URL(message.url, new URL(apiBase, window.location.origin).origin).toString();
+            link.target = "_blank";
+            link.rel = "noreferrer";
+            const icon = document.createElement("img");
+            icon.src = "./assets/figma/chat-download.svg";
+            icon.alt = "";
+            link.append(icon, "Скачать подборку");
+            bubble.appendChild(link);
+          }
+
+          if (message.buttons?.length) {
+            const actions = document.createElement("div");
+            actions.className = "chat-buttons";
+            message.buttons.forEach((row) => {
+              row.forEach((button) => {
+                const choice = document.createElement("button");
+                choice.type = "button";
+                choice.className = "chat-choice";
+                choice.dataset.chatCallback = button.data;
+                choice.textContent = button.label;
+                actions.appendChild(choice);
+              });
+            });
+            bubble.appendChild(actions);
+          }
+
+          item.appendChild(bubble);
+          return item;
+        }
+
+        function renderTyping() {
+          const item = document.createElement("article");
+          item.className = "chat-message chat-message-bot chat-message-typing";
+          const bubble = document.createElement("div");
+          bubble.className = "chat-bubble";
+          const dots = document.createElement("img");
+          dots.src = "./assets/figma/chat-typing.svg";
+          dots.alt = "Ассистент печатает";
+          bubble.appendChild(dots);
+          item.appendChild(bubble);
+          return item;
+        }
+
+        function renderTextContent(target, value) {
+          const text = String(value);
+          const urlPattern = /(https?:\/\/[^\s)]+)/g;
+          let cursor = 0;
+          for (const match of text.matchAll(urlPattern)) {
+            if (match.index > cursor) {
+              target.appendChild(document.createTextNode(text.slice(cursor, match.index)));
+            }
+            const link = document.createElement("a");
+            link.href = match[0];
+            link.target = "_blank";
+            link.rel = "noreferrer";
+            link.textContent = match[0];
+            target.appendChild(link);
+            cursor = match.index + match[0].length;
+          }
+          if (cursor < text.length) {
+            target.appendChild(document.createTextNode(text.slice(cursor)));
+          }
+        }
+
+        function resizeInput() {
+          input.style.height = "auto";
+          input.style.height = `${Math.min(input.scrollHeight, 190)}px`;
+        }
+      })();
+    </script>
+  </body>
+</html>
