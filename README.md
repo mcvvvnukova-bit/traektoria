@@ -1,6 +1,6 @@
 # Traektoria51 Bot MVP
 
-Минимальный бот для подбора кружков на основе уже проработанного диалогового сценария. Сейчас поддерживает Telegram и может работать в MAX через отдельный webhook.
+Минимальный бот для подбора кружков на основе уже проработанного диалогового сценария. Сейчас поддерживает Telegram, MAX, web-chat и Mattermost.
 
 ## Что уже умеет
 
@@ -50,6 +50,16 @@
 
 - `ALICE_ENABLED=true`
 - `ALICE_WEBHOOK_PATH=/alice/webhook/...` — секретная часть URL, который указывается в Яндекс.Диалогах
+
+Для Mattermost дополнительно нужны:
+
+- `MATTERMOST_ENABLED=true`
+- `MATTERMOST_URL=https://mattermost.example.ru`
+- `MATTERMOST_USERNAME=botnumber2`
+- `MATTERMOST_PASSWORD=...` — только в `.env` или переменных окружения, не коммитить
+- `MATTERMOST_TOKEN=...` — опционально; если задан, используется вместо логина и пароля
+- `MATTERMOST_MODE=mentions` — личные сообщения и сообщения в канале только при упоминании бота
+- `MATTERMOST_REPLY_MODE=thread` — ответы в канале отправляются в тред к сообщению пользователя
 
 5. Запустить бота:
 

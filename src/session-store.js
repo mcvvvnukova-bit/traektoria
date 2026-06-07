@@ -5,7 +5,7 @@ async function loadSession(platform, chatId) {
     SELECT replace(encode(convert_to(payload::text, 'UTF8'), 'base64'), E'\n', '')
     FROM bot_sessions
     WHERE platform = ${textToSql(normalizePlatform(platform))}
-      AND chat_id = ${Number(chatId)}
+      AND chat_id = ${textToSql(normalizeChatId(chatId))}
     LIMIT 1;
   `);
 
@@ -16,7 +16,7 @@ async function loadSession(platform, chatId) {
 async function saveSession(platform, chatId, payload) {
   await executeSql(`
     INSERT INTO bot_sessions (platform, chat_id, payload, updated_at)
-    VALUES (${textToSql(normalizePlatform(platform))}, ${Number(chatId)}, ${jsonToSql(payload)}, NOW())
+    VALUES (${textToSql(normalizePlatform(platform))}, ${textToSql(normalizeChatId(chatId))}, ${jsonToSql(payload)}, NOW())
     ON CONFLICT (platform, chat_id)
     DO UPDATE SET
       payload = EXCLUDED.payload,
@@ -28,7 +28,7 @@ async function deleteSession(platform, chatId) {
   await executeSql(`
     DELETE FROM bot_sessions
     WHERE platform = ${textToSql(normalizePlatform(platform))}
-      AND chat_id = ${Number(chatId)};
+      AND chat_id = ${textToSql(normalizeChatId(chatId))};
   `);
 }
 
@@ -60,7 +60,7 @@ async function logRecommendation(platform, chatId, result) {
     INSERT INTO recommendation_history (platform, chat_id, source, confidence, payload)
     VALUES (
       ${textToSql(normalizePlatform(platform))},
-      ${Number(chatId)},
+      ${textToSql(normalizeChatId(chatId))},
       ${textToSql(result.source || "unknown")},
       ${textToSql(result.confidence || "unknown")},
       ${jsonToSql(result)}
@@ -70,6 +70,13 @@ async function logRecommendation(platform, chatId, result) {
 
 function normalizePlatform(platform) {
   return platform || "telegram";
+}
+
+function normalizeChatId(chatId) {
+  if (chatId === null || chatId === undefined || chatId === "") {
+    throw new Error("Missing chat id");
+  }
+  return String(chatId);
 }
 
 module.exports = {

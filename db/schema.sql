@@ -1,12 +1,26 @@
 CREATE TABLE IF NOT EXISTS bot_sessions (
   platform TEXT NOT NULL DEFAULT 'telegram',
-  chat_id BIGINT PRIMARY KEY,
+  chat_id TEXT PRIMARY KEY,
   payload JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE bot_sessions
   ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'telegram';
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'bot_sessions'
+      AND column_name = 'chat_id'
+      AND data_type <> 'text'
+  ) THEN
+    ALTER TABLE bot_sessions
+      ALTER COLUMN chat_id TYPE TEXT USING chat_id::TEXT;
+  END IF;
+END $$;
 
 DO $$
 BEGIN
@@ -39,7 +53,7 @@ CREATE TABLE IF NOT EXISTS bot_runtime_state (
 CREATE TABLE IF NOT EXISTS recommendation_history (
   id BIGSERIAL PRIMARY KEY,
   platform TEXT NOT NULL DEFAULT 'telegram',
-  chat_id BIGINT NOT NULL,
+  chat_id TEXT NOT NULL,
   source TEXT,
   confidence TEXT,
   payload JSONB NOT NULL,
@@ -48,6 +62,20 @@ CREATE TABLE IF NOT EXISTS recommendation_history (
 
 ALTER TABLE recommendation_history
   ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'telegram';
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_name = 'recommendation_history'
+      AND column_name = 'chat_id'
+      AND data_type <> 'text'
+  ) THEN
+    ALTER TABLE recommendation_history
+      ALTER COLUMN chat_id TYPE TEXT USING chat_id::TEXT;
+  END IF;
+END $$;
 
 DROP INDEX IF EXISTS recommendation_history_chat_id_idx;
 

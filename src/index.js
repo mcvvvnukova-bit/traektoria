@@ -6,7 +6,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
-const { FLOW, SCENARIO_2, SCENARIO_3 } = require("./flow");
+const { FLOW, SCENARIO_1, SCENARIO_2, SCENARIO_3 } = require("./flow");
 const { getRecommendations } = require("./recommendations");
 const { createSelectionPdf } = require("./pdf-selection");
 const { analyzeFreeText } = require("./llm-router");
@@ -34,6 +34,8 @@ const {
   logRecommendation,
 } = require("./session-store");
 const { initializeDatabase } = require("./database-init");
+const { makeTarget, normalizeTarget, targetKey, targetFilePart } = require("./target");
+const { createMattermostTransport, replyMarkupOptions } = require("./mattermost-transport");
 
 const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED !== "false";
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -81,6 +83,13 @@ const WEB_CHAT_BODY_LIMIT_BYTES = Number(process.env.WEB_CHAT_BODY_LIMIT_BYTES |
 const WEB_CHAT_MESSAGE_MAX_LENGTH = Number(process.env.WEB_CHAT_MESSAGE_MAX_LENGTH || 2000);
 const WEB_CHAT_RATE_LIMIT_PER_MINUTE = Number(process.env.WEB_CHAT_RATE_LIMIT_PER_MINUTE || 30);
 const WEB_CHAT_DOCUMENT_TTL_MS = Number(process.env.WEB_CHAT_DOCUMENT_TTL_MS || 60 * 60 * 1000);
+const MATTERMOST_ENABLED = process.env.MATTERMOST_ENABLED === "true";
+const MATTERMOST_URL = process.env.MATTERMOST_URL || "";
+const MATTERMOST_TOKEN = process.env.MATTERMOST_TOKEN || "";
+const MATTERMOST_USERNAME = process.env.MATTERMOST_USERNAME || "";
+const MATTERMOST_PASSWORD = process.env.MATTERMOST_PASSWORD || "";
+const MATTERMOST_MODE = process.env.MATTERMOST_MODE || "mentions";
+const MATTERMOST_REPLY_MODE = process.env.MATTERMOST_REPLY_MODE || "thread";
 
 if (TELEGRAM_ENABLED && !TOKEN) {
   console.error("Missing TELEGRAM_BOT_TOKEN");
@@ -92,7 +101,12 @@ if (MAX_ENABLED && !MAX_TOKEN) {
   process.exit(1);
 }
 
-if (!TELEGRAM_ENABLED && !MAX_ENABLED && !ALICE_ENABLED && !WEB_CHAT_ENABLED) {
+if (MATTERMOST_ENABLED && (!MATTERMOST_URL || (!MATTERMOST_TOKEN && (!MATTERMOST_USERNAME || !MATTERMOST_PASSWORD)))) {
+  console.error("Missing Mattermost configuration");
+  process.exit(1);
+}
+
+if (!TELEGRAM_ENABLED && !MAX_ENABLED && !ALICE_ENABLED && !WEB_CHAT_ENABLED && !MATTERMOST_ENABLED) {
   console.error("At least one transport must be enabled");
   process.exit(1);
 }
@@ -102,6 +116,7 @@ const webResponseBuffers = new Map();
 const webDocuments = new Map();
 const webRateLimits = new Map();
 let updateOffset = 0;
+let mattermostTransport = null;
 const RESTART_BUTTON_TEXT = "Начать заново";
 
 function createSession() {
@@ -143,25 +158,6 @@ function createScenario2State() {
     directionLabel: "",
     pdfRequested: null,
   };
-}
-
-function makeTarget(platform, chatId) {
-  return {
-    platform: platform || "telegram",
-    id: Number(chatId),
-  };
-}
-
-function normalizeTarget(target) {
-  if (typeof target === "object" && target !== null) {
-    return makeTarget(target.platform, target.id ?? target.chatId ?? target.chat_id);
-  }
-  return makeTarget("telegram", target);
-}
-
-function targetKey(target) {
-  const normalized = normalizeTarget(target);
-  return `${normalized.platform}:${normalized.id}`;
 }
 
 async function getSession(target) {
@@ -243,6 +239,10 @@ async function sendMessage(target, text, replyMarkup) {
     return sendMaxMessage(normalized.id, text, replyMarkup);
   }
 
+  if (normalized.platform === "mattermost") {
+    return mattermostTransport.sendMessage(normalized, text, replyMarkup);
+  }
+
   const payload = {
     chat_id: normalized.id,
     text,
@@ -262,6 +262,10 @@ async function sendDocument(target, filePath, caption) {
 
   if (normalized.platform === "max") {
     return sendMaxDocument(normalized.id, filePath, caption);
+  }
+
+  if (normalized.platform === "mattermost") {
+    return mattermostTransport.sendDocument(normalized, filePath, caption);
   }
 
   const buffer = await fs.readFile(filePath);
@@ -292,6 +296,10 @@ async function editMessage(target, messageId, text, replyMarkup) {
     return editMaxMessage(messageId, text, replyMarkup);
   }
 
+  if (normalized.platform === "mattermost") {
+    return sendMessage(normalized, text, replyMarkup);
+  }
+
   const payload = {
     chat_id: normalized.id,
     message_id: messageId,
@@ -307,6 +315,7 @@ async function editMessage(target, messageId, text, replyMarkup) {
 async function answerCallbackQuery(platform, callbackQueryId) {
   if (!callbackQueryId) return null;
   if (platform === "web") return null;
+  if (platform === "mattermost") return null;
   if (platform === "max") {
     return maxApi("/answers", {
       method: "POST",
@@ -1036,7 +1045,7 @@ async function sendScenario2Pdf(chatId, session) {
     const target = normalizeTarget(chatId);
     const outputPath = path.join(
       process.env.PDF_OUTPUT_DIR || path.join(os.tmpdir(), "telegram-bot-pdfs"),
-      `selection-${target.platform}-${target.id}-${Date.now()}.pdf`,
+      `selection-${targetFilePart(target)}-${Date.now()}.pdf`,
     );
     await createSelectionPdf({
       outputPath,
@@ -1053,13 +1062,16 @@ async function sendScenario2Pdf(chatId, session) {
 }
 
 function incomingMessageTarget(message) {
-  return makeTarget(message.platform || "telegram", message.chat?.id ?? message.chat_id);
+  const chat = message.chat || {};
+  return makeTarget(message.platform || "telegram", chat.id ?? message.chat_id, chat);
 }
 
 function incomingCallbackTarget(callbackQuery) {
+  const chat = callbackQuery.message?.chat || {};
   return makeTarget(
     callbackQuery.platform || callbackQuery.message?.platform || "telegram",
-    callbackQuery.message?.chat?.id ?? callbackQuery.chat_id,
+    chat.id ?? callbackQuery.chat_id,
+    chat,
   );
 }
 
@@ -1332,6 +1344,89 @@ function getMaxMessageText(update) {
     update.text ||
     ""
   ).trim();
+}
+
+async function processMattermostText(target, text) {
+  const trimmed = String(text || "").trim().slice(0, WEB_CHAT_MESSAGE_MAX_LENGTH);
+  if (!trimmed) return;
+
+  if (trimmed !== "/start" && trimmed !== RESTART_BUTTON_TEXT) {
+    const session = await getSession(target);
+    const callbackData = mattermostCallbackForSession(session, trimmed);
+    if (callbackData) {
+      await handleCallback({
+        platform: "mattermost",
+        id: null,
+        data: callbackData,
+        message: {
+          platform: "mattermost",
+          chat: target,
+          message_id: null,
+        },
+      });
+      return;
+    }
+  }
+
+  await handleText({
+    platform: "mattermost",
+    chat: target,
+    text: trimmed,
+  });
+}
+
+function mattermostCallbackForSession(session, text) {
+  const replyMarkup = mattermostReplyMarkupForSession(session);
+  return matchReplyMarkupChoice(replyMarkup, text);
+}
+
+function mattermostReplyMarkupForSession(session) {
+  if (!session || session.step === "entry") return FLOW.entry.keyboard;
+  if (session.step === "s1_confirm_summary") return SCENARIO_1.confirmation.keyboard;
+  if (session.step === "s1_pdf") return SCENARIO_1.pdfDownload.keyboard;
+  if (session.step === "s3_choose_municipality") {
+    return buildMunicipalityKeyboard(session.scenario3?.municipalityOptions || []);
+  }
+  if (session.step === "s2_goal") {
+    return multiSelectKeyboard("goal", SCENARIO_2.goal.options, session.scenario2?.goals || []);
+  }
+  if (session.step === "s2_special") {
+    return multiSelectKeyboard("special", SCENARIO_2.specialNeeds.options, selectedSpecialNeeds(session.scenario2 || {}));
+  }
+  if (session.step === "s2_schedule") {
+    return multiSelectKeyboard("schedule", SCENARIO_2.schedule.options, session.scenario2?.schedule || []);
+  }
+  if (session.step === "s2_format") return inlineKeyboard(SCENARIO_2.format.options);
+  if (session.step === "s2_refinement") return inlineKeyboard(SCENARIO_2.refinement.options);
+  if (session.step === "s2_group_size") return inlineKeyboard(SCENARIO_2.groupSize.options);
+  if (session.step === "s2_avoidances") {
+    return multiSelectKeyboard("avoidance", SCENARIO_2.avoidances.options, session.scenario2?.avoidances || [], true);
+  }
+  if (session.step === "s2_direction") return inlineKeyboard(SCENARIO_2.direction.options);
+  if (session.step === "s2_results") return inlineKeyboard(SCENARIO_2.pdfDownload.options);
+  return null;
+}
+
+function matchReplyMarkupChoice(replyMarkup, text) {
+  const options = replyMarkupOptions(replyMarkup);
+  if (!options.length) return null;
+
+  const value = normalizeChoiceText(text);
+  const number = value.match(/^\d+$/) ? Number(value) : null;
+  if (number && number >= 1 && number <= options.length) {
+    return options[number - 1].data;
+  }
+
+  const exact = options.find((option) => normalizeChoiceText(option.label) === value);
+  return exact?.data || null;
+}
+
+function normalizeChoiceText(text) {
+  return String(text || "")
+    .trim()
+    .replace(/^✓\s*/, "")
+    .replace(/\s+/g, " ")
+    .toLowerCase();
 }
 
 async function processWebChatText(target, text) {
@@ -1607,6 +1702,7 @@ async function startWebhookServer() {
   if (MAX_ENABLED) paths.push(`max=${MAX_WEBHOOK_PATH}`);
   if (ALICE_ENABLED) paths.push(`alice=${ALICE_WEBHOOK_PATH}`);
   if (WEB_CHAT_ENABLED) paths.push(`web=${WEB_CHAT_PATH_PREFIX}`);
+  if (MATTERMOST_ENABLED) paths.push("mattermost=websocket");
   console.log(`Webhook server is running on ${WEBHOOK_HOST}:${WEBHOOK_PORT} (${paths.join(", ")})`);
 }
 
@@ -1621,6 +1717,7 @@ async function handleWebhookRequest(req, res) {
           max: MAX_ENABLED ? "webhook" : "disabled",
           alice: ALICE_ENABLED ? "webhook" : "disabled",
           web: WEB_CHAT_ENABLED ? "enabled" : "disabled",
+          mattermost: MATTERMOST_ENABLED ? mattermostTransport?.getStatus() : "disabled",
         },
       }));
       return;
@@ -1801,11 +1898,30 @@ async function bootstrap() {
     await configureMaxWebhookMode();
   }
 
+  if (MATTERMOST_ENABLED) {
+    mattermostTransport = createMattermostTransport(
+      {
+        url: MATTERMOST_URL,
+        token: MATTERMOST_TOKEN,
+        username: MATTERMOST_USERNAME,
+        password: MATTERMOST_PASSWORD,
+        mode: MATTERMOST_MODE,
+        replyMode: MATTERMOST_REPLY_MODE,
+      },
+      {
+        onText: (message) => processMattermostText(message.chat, message.text),
+      },
+    );
+    await mattermostTransport.start();
+    console.log("Mattermost transport is running...");
+  }
+
   const needsWebhookServer =
     (TELEGRAM_ENABLED && TELEGRAM_TRANSPORT === "webhook") ||
     MAX_ENABLED ||
     ALICE_ENABLED ||
-    WEB_CHAT_ENABLED;
+    WEB_CHAT_ENABLED ||
+    MATTERMOST_ENABLED;
   if (needsWebhookServer) {
     await startWebhookServer();
   }
