@@ -12,7 +12,7 @@ function postedEvent(post, data = {}) {
   return {
     event: "posted",
     data: {
-      channel_type: data.channelType || "O",
+      ...(data.omitDataChannelType ? {} : { channel_type: data.channelType || "O" }),
       post: JSON.stringify({
         id: data.postId || "post1",
         user_id: data.userId || "user1",
@@ -23,6 +23,7 @@ function postedEvent(post, data = {}) {
     },
     broadcast: {
       channel_id: data.channelId || "channel1",
+      ...(data.broadcastChannelType ? { channel_type: data.broadcastChannelType } : {}),
     },
   };
 }
@@ -37,6 +38,16 @@ test("accepts direct Mattermost messages without mention", () => {
   assert.equal(incoming.target.id, "dm:user1");
   assert.equal(incoming.target.channelId, "channel1");
   assert.equal(incoming.target.rootId, "");
+});
+
+test("uses broadcast channel type when Mattermost omits data channel type", () => {
+  const incoming = parseMattermostPostedEvent(
+    postedEvent("Здравствуйте", { omitDataChannelType: true, broadcastChannelType: "D" }),
+    { botUserId: "bot1", username: "botnumber2", replyMode: "thread" },
+  );
+
+  assert.equal(incoming.text, "Здравствуйте");
+  assert.equal(incoming.target.id, "dm:user1");
 });
 
 test("accepts channel messages only when bot is mentioned", () => {

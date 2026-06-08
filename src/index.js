@@ -1366,6 +1366,14 @@ async function processMattermostText(target, text) {
       });
       return;
     }
+    if (session.step === "entry") {
+      await handleText({
+        platform: "mattermost",
+        chat: target,
+        text: "/start",
+      });
+      return;
+    }
   }
 
   await handleText({

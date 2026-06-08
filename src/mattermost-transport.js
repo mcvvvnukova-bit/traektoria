@@ -284,7 +284,7 @@ function parseMattermostPostedEvent(payload, options) {
   if (!post || !post.message || post.delete_at) return null;
   if (post.user_id && post.user_id === options.botUserId) return null;
 
-  const channelType = payload?.data?.channel_type || post.channel_type || "";
+  const channelType = payload?.data?.channel_type || payload?.broadcast?.channel_type || post.channel_type || "";
   const isDirect = channelType === "D";
   const isMentioned = isMattermostMention(post.message, options.username, options.botUserId);
   if (!isDirect && !isMentioned) return null;
