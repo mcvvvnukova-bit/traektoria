@@ -1,0 +1,30 @@
+name: Deploy to Beget
+
+# Авто-деплой: при каждом push в main GitHub по SSH заходит на сервер Beget
+# и запускает deploy/remote-deploy.sh (git pull + npm install + restart сервиса).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}   # можно запускать вручную из вкладки Actions
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.BEGET_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "${{ secrets.BEGET_SSH_PORT || 22 }}" -H "${{ secrets.BEGET_SSH_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy over SSH
+        run: |
+          ssh -i ~/.ssh/id_deploy \
+              -p "${{ secrets.BEGET_SSH_PORT || 22 }}" \
+              "${{ secrets.BEGET_SSH_USER }}@${{ secrets.BEGET_SSH_HOST }}" \
+              'bash -s' < deploy/remote-deploy.sh

@@ -1,0 +1,32 @@
+[Unit]
+Description=Traektoria51 bot (Telegram/MAX/Alice/web-chat)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Пользователь, от которого работает бот (создайте: adduser --system --group botuser)
+User=botuser
+Group=botuser
+
+WorkingDirectory=/opt/telegram-bot
+# Путь к node уточните командой: which node  (часто /usr/bin/node)
+ExecStart=/usr/bin/node src/index.js
+
+# Переменные берутся из .env (его читает сам код через src/load-env.js)
+Environment=NODE_ENV=production
+
+Restart=always
+RestartSec=3
+# Логи идут в journald: journalctl -u traektoria51-bot -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=traektoria51-bot
+
+# Безопасность
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
