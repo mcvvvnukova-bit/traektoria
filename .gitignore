@@ -2,6 +2,9 @@
 .env
 .env.*
 !.env.example
+_env.uu
+_env.*
+*_env.uu
 *.pem
 *.key
 *.p12
