@@ -16,9 +16,16 @@ cd "$APP_DIR"
 echo "==> git fetch origin"
 git fetch --prune origin
 
+echo "==> sparse-checkout: skills/ держим только в репозитории, на прод не выкатываем"
+git config core.sparseCheckout true
+mkdir -p .git/info
+printf '/*\n!/skills/\n' > .git/info/sparse-checkout
+
 echo "==> git reset --hard origin/$BRANCH"
 # .env, node_modules, tmp/, .deploy-backups/ — в .gitignore/untracked, reset их не трогает
+# skills/ исключается sparse-checkout, codex-skills/ (старое имя) удаляется как отсутствующий в main
 git reset --hard "origin/$BRANCH"
+rm -rf "$APP_DIR/codex-skills" "$APP_DIR/skills"
 
 echo "==> npm install (prod-зависимости)"
 npm install --omit=dev --no-audit --no-fund
