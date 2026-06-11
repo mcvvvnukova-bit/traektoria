@@ -3,11 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Прогрессивное улучшение: reveal-эффекты включаются только при работающем JS
+      document.documentElement.classList.add("js");
+    </script>
     <title>Траектория 51 — подбор кружков и траекторий развития</title>
     <meta
       name="description"
       content="Сервис подбора кружков и траекторий развития для детей в Мурманской области."
     />
+    <meta name="theme-color" content="#5042e1" />
+    <link rel="icon" href="./assets/figma/logo-header.svg" type="image/svg+xml" />
+    <link rel="canonical" href="https://traektoria51.ru/" />
+
+    <!-- Open Graph / Twitter — превью при шеринге ссылки (Telegram, MAX, соцсети).
+         Рекомендуется добавить отдельный баннер 1200×630 (assets/og-cover.png). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:site_name" content="Траектория 51" />
+    <meta property="og:title" content="Траектория 51 — подбор кружков и траекторий развития" />
+    <meta
+      property="og:description"
+      content="Подберём кружки и план занятий за 2 минуты. Сервис для детей в Мурманской области."
+    />
+    <meta property="og:url" content="https://traektoria51.ru/" />
+    <meta property="og:image" content="https://traektoria51.ru/assets/figma/hero-cap.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Траектория 51 — подбор кружков и траекторий развития" />
+    <meta
+      name="twitter:description"
+      content="Подберём кружки и план занятий за 2 минуты. Сервис для детей в Мурманской области."
+    />
+    <meta name="twitter:image" content="https://traektoria51.ru/assets/figma/hero-cap.png" />
+
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -53,14 +81,14 @@
           <div class="hero-visual" aria-hidden="true">
             <img class="hero-orbit" src="./assets/figma/hero-orbit.svg" alt="" />
             <div class="hero-cap-crop">
-              <img class="hero-cap" src="./assets/figma/hero-cap.png" alt="" />
+              <img class="hero-cap" src="./assets/figma/hero-cap.png" alt="" fetchpriority="high" decoding="async" />
             </div>
             <img class="hero-star hero-star-large" src="./assets/figma/hero-star.png" alt="" />
             <img class="hero-star hero-star-small" src="./assets/figma/hero-star.png" alt="" />
           </div>
         </section>
 
-        <section class="trust-band" id="trust">
+        <section class="trust-band" id="trust" data-reveal>
           <div class="trust-header">
             <h2>Почему нам доверяют родители</h2>
           </div>
@@ -83,7 +111,7 @@
           </div>
         </section>
 
-        <section class="reason-section" id="advantages">
+        <section class="reason-section" id="advantages" data-reveal>
           <h2>Не какой кружок, а зачем этот кружок</h2>
           <div class="reason-pills">
             <article class="reason-pill">
@@ -101,7 +129,7 @@
           </div>
         </section>
 
-        <section class="trajectory-panel" id="trajectory">
+        <section class="trajectory-panel" id="trajectory" data-reveal>
           <div class="trajectory-header">
             <h2>Ваш темп. Ваш план. Ваш результат</h2>
           </div>
@@ -157,7 +185,7 @@
 
             <div class="chat-stage">
               <div class="chat-intro" data-chat-intro>
-                <img class="contact-mark" src="./assets/figma/ai-orb.svg" alt="" />
+                <img class="contact-mark" src="./assets/figma/ai-orb.svg" alt="" loading="lazy" decoding="async" />
                 <p>
                   Просто напишите, какой он — ваш ребенок?<br />
                   Потому что правильный кружок начинается с правильных вопросов
@@ -184,7 +212,7 @@
           </div>
         </section>
 
-        <section class="next-band">
+        <section class="next-band" data-reveal>
           <div class="next-copy">
             <h2>Что дальше?</h2>
             <p>Самое интересное только начинается</p>
@@ -209,25 +237,25 @@
           </div>
         </section>
 
-        <section class="stats-section" id="stats">
+        <section class="stats-section" id="stats" data-reveal>
           <div class="stats-header">
             <h2>Статистика по кружкам</h2>
           </div>
 
           <div class="stats-canvas stats-canvas-segments">
             <div class="stats-inner-tabs" role="tablist" aria-label="Подраздел статистики">
-              <button class="stats-inner-tab is-active" type="button" role="tab" aria-selected="true" data-stats-view="cost">
+              <button class="stats-inner-tab is-active" type="button" role="tab" id="stats-tab-cost" aria-controls="stats-panel-cost" aria-selected="true" tabindex="0" data-stats-view="cost">
                 Стоимость
               </button>
-              <button class="stats-inner-tab" type="button" role="tab" aria-selected="false" data-stats-view="directions">
+              <button class="stats-inner-tab" type="button" role="tab" id="stats-tab-directions" aria-controls="stats-panel-directions" aria-selected="false" tabindex="-1" data-stats-view="directions">
                 Направления развития
               </button>
-              <button class="stats-inner-tab" type="button" role="tab" aria-selected="false" data-stats-view="load">
+              <button class="stats-inner-tab" type="button" role="tab" id="stats-tab-load" aria-controls="stats-panel-load" aria-selected="false" tabindex="-1" data-stats-view="load">
                 Загруженность
               </button>
             </div>
 
-            <div class="stats-view is-active" data-stats-panel="cost">
+            <div class="stats-view is-active" data-stats-panel="cost" role="tabpanel" id="stats-panel-cost" aria-labelledby="stats-tab-cost" tabindex="0">
               <div class="segments-visual" data-cost-dashboard>
                 <div class="segments-chart-wrap">
                   <div class="segments-chart"></div>
@@ -279,7 +307,7 @@
               </div>
             </div>
 
-            <div class="stats-view" data-stats-panel="directions" hidden>
+            <div class="stats-view" data-stats-panel="directions" role="tabpanel" id="stats-panel-directions" aria-labelledby="stats-tab-directions" tabindex="0" hidden>
               <div class="directions-visual">
                 <div class="bubble-stat bubble-left-small">
                   <strong>2000</strong>
@@ -308,7 +336,7 @@
               </div>
             </div>
 
-            <div class="stats-view" data-stats-panel="load" hidden>
+            <div class="stats-view" data-stats-panel="load" role="tabpanel" id="stats-panel-load" aria-labelledby="stats-tab-load" tabindex="0" hidden>
               <div class="load-visual">
                 <div class="load-card">
                   <div class="load-card-head">
@@ -343,18 +371,18 @@
           </div>
           <div class="footer-socials" aria-label="Боты в мессенджерах">
             <a class="footer-social-link" href="https://t.me/Traektoria51_bot" target="_blank" rel="noreferrer">
-              <img class="footer-social-icon" src="./assets/figma/icon-telegram.png" alt="" />
+              <img class="footer-social-icon" src="./assets/figma/icon-telegram.svg" alt="" width="20" height="20" loading="lazy" decoding="async" />
               <span>Бот в Telegram</span>
             </a>
             <a class="footer-social-link" href="https://max.ru/id3123287655_bot" target="_blank" rel="noreferrer">
-              <img class="footer-social-icon" src="./assets/figma/icon-max.png" alt="" />
+              <img class="footer-social-icon" src="./assets/figma/icon-max.svg" alt="" width="20" height="20" loading="lazy" decoding="async" />
               <span>Бот в MAX</span>
             </a>
           </div>
           <div class="footer-note">
             <span>+7 900 000 00 00</span>
             <span>emailname@mail.ru</span>
-            <img class="footer-logo" src="./assets/figma/logo-footer.svg" alt="" />
+            <img class="footer-logo" src="./assets/figma/logo-footer.svg" alt="" width="41" height="48" loading="lazy" decoding="async" />
           </div>
         </footer>
       </main>
@@ -624,11 +652,13 @@
           }
         }
 
-        function activateStatsView(view) {
+        function activateStatsView(view, focusTab = false) {
           tabs.forEach((tab) => {
             const active = tab.dataset.statsView === view;
             tab.classList.toggle("is-active", active);
             tab.setAttribute("aria-selected", String(active));
+            tab.tabIndex = active ? 0 : -1;
+            if (active && focusTab) tab.focus();
           });
 
           panels.forEach((panel) => {
@@ -640,8 +670,18 @@
           if (view === "cost") scheduleCostChartResize();
         }
 
-        tabs.forEach((tab) => {
+        tabs.forEach((tab, index) => {
           tab.addEventListener("click", () => activateStatsView(tab.dataset.statsView));
+          tab.addEventListener("keydown", (event) => {
+            let next = null;
+            if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (index + 1) % tabs.length;
+            else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (index - 1 + tabs.length) % tabs.length;
+            else if (event.key === "Home") next = 0;
+            else if (event.key === "End") next = tabs.length - 1;
+            if (next === null) return;
+            event.preventDefault();
+            activateStatsView(tabs[next].dataset.statsView, true);
+          });
         });
 
         window.addEventListener("resize", scheduleCostChartResize);
@@ -917,6 +957,32 @@
           input.style.height = "auto";
           input.style.height = `${Math.min(input.scrollHeight, 190)}px`;
         }
+      })();
+    </script>
+    <script>
+      (() => {
+        const items = document.querySelectorAll("[data-reveal]");
+        if (!items.length) return;
+
+        const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        if (prefersReduced || !("IntersectionObserver" in window)) {
+          items.forEach((el) => el.classList.add("is-visible"));
+          return;
+        }
+
+        const observer = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add("is-visible");
+                observer.unobserve(entry.target);
+              }
+            });
+          },
+          { rootMargin: "0px 0px -10% 0px", threshold: 0.08 }
+        );
+
+        items.forEach((el) => observer.observe(el));
       })();
     </script>
   </body>
