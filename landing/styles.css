@@ -271,7 +271,7 @@ a {
 .button-primary {
   color: white;
   background: linear-gradient(135deg, var(--violet-strong), #7a72ff);
-  box-shadow: 0 18px 34px rgba(93, 82, 255, 0.22);
+  box-shadow: 0 8px 18px rgba(93, 82, 255, 0.16);
 }
 
 .hero-visual {
@@ -1862,10 +1862,8 @@ a {
   .button-primary {
     background: #5042e1;
     box-shadow:
-      0 120px 24px rgba(80, 66, 225, 0.02),
-      0 68px 20.5px rgba(80, 66, 225, 0.08),
-      0 30px 15px rgba(80, 66, 225, 0.14),
-      0 8px 8.5px rgba(80, 66, 225, 0.16);
+      0 12px 18px rgba(80, 66, 225, 0.1),
+      0 4px 6px rgba(80, 66, 225, 0.12);
   }
 
   .hero-visual {
