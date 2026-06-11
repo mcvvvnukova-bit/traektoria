@@ -5,6 +5,8 @@ name: Deploy to Beget
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'skills/**'        # изменения только в skills/ не деплоятся (папка не выкатывается на прод)
   workflow_dispatch: {}   # можно запускать вручную из вкладки Actions
 
 concurrency:
