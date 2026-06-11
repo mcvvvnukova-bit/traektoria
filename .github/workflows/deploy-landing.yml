@@ -1,21 +1,20 @@
-name: Deploy to Beget
+name: Deploy landing to Beget
 
-# Авто-деплой: при каждом push в main GitHub по SSH заходит на сервер Beget
-# и запускает deploy/remote-deploy.sh (git pull + npm install + restart сервиса).
+# Авто-деплой статического лендинга: при push в main с изменениями в landing/
+# GitHub по SSH заходит на сервер и публикует landing/ в веб-рут nginx.
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - 'skills/**'        # изменения только в skills/ не деплоятся (папка не выкатывается на прод)
-      - 'landing/**'       # лендинг деплоится отдельным workflow (deploy-landing.yml)
-  workflow_dispatch: {}   # можно запускать вручную из вкладки Actions
+    paths:
+      - 'landing/**'
+  workflow_dispatch: {}   # ручной запуск из вкладки Actions
 
 concurrency:
-  group: deploy-prod
+  group: deploy-prod      # общий с деплоем бота — чтобы не пересекаться на git-чекауте
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  deploy-landing:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,4 +32,4 @@ jobs:
           ssh -i ~/.ssh/id_deploy \
               -p "${{ secrets.BEGET_SSH_PORT || 22 }}" \
               "${{ secrets.BEGET_SSH_USER }}@${{ secrets.BEGET_SSH_HOST }}" \
-              'bash -s' < deploy/remote-deploy.sh
+              'bash -s' < deploy/remote-deploy-landing.sh
