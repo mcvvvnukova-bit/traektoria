@@ -47,6 +47,75 @@ a {
   text-decoration: none;
 }
 
+/* Доступность: видимый фокус для навигации с клавиатуры */
+:where(a, button, textarea, [role="tab"]):focus-visible {
+  outline: 2px solid var(--violet-strong);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+/* Появление hero при загрузке (staggered reveal) */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.hero-copy h1,
+.hero-copy p,
+.hero-actions {
+  animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+.hero-copy h1 {
+  animation-delay: 0.05s;
+}
+.hero-copy p {
+  animation-delay: 0.16s;
+}
+.hero-actions {
+  animation-delay: 0.27s;
+}
+.hero-visual {
+  animation: rise 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.18s both;
+}
+
+/* Reveal секций при скролле — только когда JS включён (иначе контент всегда виден) */
+.js [data-reveal] {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s ease, transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  will-change: opacity, transform;
+}
+.js [data-reveal].is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Уважение к системной настройке «уменьшить движение» */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .hero-copy h1,
+  .hero-copy p,
+  .hero-actions,
+  .hero-visual,
+  .js [data-reveal] {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
 .page {
   min-width: 0;
   overflow-x: clip;
@@ -73,26 +142,6 @@ a {
   gap: 14px;
   font-family: "Manrope", sans-serif;
   font-weight: 700;
-}
-
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-}
-
-.brand-mark-shape {
-  width: 16px;
-  height: 16px;
-  border-radius: 4px;
-  background: linear-gradient(135deg, #66d5ff, var(--violet));
-  transform: rotate(18deg);
-  box-shadow: 0 8px 22px rgba(93, 82, 255, 0.28);
-}
-
-.brand-name {
-  font-size: 15px;
 }
 
 .brand-logo {
@@ -179,6 +228,7 @@ a {
 .stats-header h2 {
   margin: 0;
   font-family: "Golos Text", sans-serif;
+  letter-spacing: -0.01em;
 }
 
 .hero-copy h1 {
@@ -224,12 +274,6 @@ a {
   box-shadow: 0 18px 34px rgba(93, 82, 255, 0.22);
 }
 
-.button-ghost {
-  color: var(--violet-strong);
-  border: 1px solid rgba(93, 82, 255, 0.14);
-  background: rgba(93, 82, 255, 0.05);
-}
-
 .hero-visual {
   position: relative;
   display: block;
@@ -239,7 +283,6 @@ a {
   align-self: end;
 }
 
-.hero-image,
 .hero-cap {
   display: block;
   height: auto;
@@ -869,24 +912,6 @@ a {
   gap: 16px;
 }
 
-.stats-tabs {
-  display: inline-flex;
-  gap: 12px;
-}
-
-.stats-tabs span {
-  padding: 10px 18px;
-  border-radius: 999px;
-  background: #f0eff8;
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.stats-tabs .is-active {
-  color: var(--violet-strong);
-  background: rgba(93, 82, 255, 0.08);
-}
-
 .stats-canvas {
   position: relative;
   height: 360px;
@@ -1267,29 +1292,6 @@ a {
   height: 48px;
 }
 
-@media (min-width: 1920px) {
-  .site-header,
-  .layout {
-    width: min(calc(100% - 180px), 1760px);
-  }
-
-  .hero-copy h1 {
-    font-size: 80px;
-  }
-
-  .trust-card {
-    min-height: 170px;
-  }
-
-  .trajectory-card {
-    min-height: 324px;
-  }
-
-  .segment-label {
-    font-size: 28px;
-  }
-}
-
 @media (max-width: 1280px) {
   .site-header {
     gap: 24px;
@@ -1301,10 +1303,6 @@ a {
 
   .hero-section {
     grid-template-columns: minmax(0, 1fr) minmax(280px, 0.78fr);
-  }
-
-  .hero-image {
-    max-width: 520px;
   }
 
   .segment-copy {
@@ -1355,10 +1353,6 @@ a {
 
   .hero-visual {
     align-self: center;
-  }
-
-  .hero-image {
-    width: min(82vw, 520px);
   }
 
   .trust-grid,
@@ -1627,10 +1621,6 @@ a {
     width: min(calc(100% - 28px), var(--layout-width));
   }
 
-  .brand-name {
-    font-size: 14px;
-  }
-
   .hero-section,
   .trust-band,
   .trajectory-panel,
@@ -1647,10 +1637,6 @@ a {
   .hero-copy p,
   .contact-block p {
     line-height: 1.52;
-  }
-
-  .hero-image {
-    width: min(100%, 360px);
   }
 
   .trust-header h2,
@@ -1783,7 +1769,7 @@ a {
   .main-nav {
     justify-content: center;
     gap: 20px;
-    color: rgba(22, 22, 22, 0.5);
+    color: rgba(22, 22, 22, 0.66);
     font-size: 16px;
     font-weight: 500;
     line-height: 48px;
@@ -2072,7 +2058,7 @@ a {
 
   .trajectory-card p {
     margin-top: 16px;
-    color: rgba(80, 66, 225, 0.6);
+    color: #4a3fd0;
     font-size: 20px;
     line-height: 26px;
   }
@@ -2250,7 +2236,7 @@ a {
     gap: 12px 28px;
     align-items: center;
     background: #f2f4fe;
-    color: rgba(22, 22, 22, 0.5);
+    color: rgba(22, 22, 22, 0.66);
     font-size: 16px;
     font-weight: 500;
     line-height: 24px;
