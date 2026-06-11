@@ -5,13 +5,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Пользователь, от которого работает бот (создайте: adduser --system --group botuser)
-User=botuser
-Group=botuser
+# Пользователь, от которого работает бот (на проде Beget — botsvc)
+User=botsvc
+Group=botsvc
 
 WorkingDirectory=/opt/telegram-bot
-# Путь к node уточните командой: which node  (часто /usr/bin/node)
-ExecStart=/usr/bin/node src/index.js
+# Путь к node уточните командой: which node  (на проде /usr/bin/node, v18)
+ExecStart=/usr/bin/node /opt/telegram-bot/src/index.js
 
 # Переменные берутся из .env (его читает сам код через src/load-env.js)
 Environment=NODE_ENV=production
