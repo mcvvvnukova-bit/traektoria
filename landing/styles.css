@@ -1186,13 +1186,18 @@ a {
   color: var(--text);
 }
 
-/* Десктоп: круги облаком — самый большой (dir-slot-1) в центре, остальные вокруг,
-   чтобы максимально заполнить блок. Слоты назначаются по рангу из JS. */
-@media (min-width: 1100px) {
+/* Десктоп (≥1440): круги облаком в контейнере фиксированной ширины — самый большой
+   (dir-slot-1) в центре, остальные вокруг. Позиции в px, поэтому раскладка одинакова
+   на всех десктопных ширинах. Слоты назначаются по рангу из JS.
+   Ниже 1440 остаётся безопасный flex-перенос (базовые стили). */
+@media (min-width: 1440px) {
   .directions-visual {
     display: block;
     position: relative;
-    height: 480px;
+    width: 1180px;
+    max-width: 100%;
+    height: 470px;
+    margin: 0 auto;
     padding: 0;
   }
 
@@ -1203,28 +1208,28 @@ a {
   }
 
   .dir-slot-1 {
-    left: 49%;
-    top: 50%;
+    left: 590px;
+    top: 215px;
   }
   .dir-slot-2 {
-    left: 15%;
-    top: 31%;
+    left: 175px;
+    top: 150px;
   }
   .dir-slot-3 {
-    left: 83%;
-    top: 30%;
+    left: 1000px;
+    top: 150px;
   }
   .dir-slot-4 {
-    left: 27%;
-    top: 80%;
+    left: 370px;
+    top: 352px;
   }
   .dir-slot-5 {
-    left: 71%;
-    top: 80%;
+    left: 770px;
+    top: 360px;
   }
   .dir-slot-6 {
-    left: 89%;
-    top: 60%;
+    left: 1075px;
+    top: 388px;
   }
 }
 
