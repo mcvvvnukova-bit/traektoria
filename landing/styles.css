@@ -1376,6 +1376,12 @@ a {
   overflow: hidden;
 }
 
+.site-footer > section {
+  display: block;
+  width: 100%;
+  flex: 0 0 auto;
+}
+
 .footer-inner {
   width: 100%;
   max-width: 1440px;
