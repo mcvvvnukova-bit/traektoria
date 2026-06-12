@@ -1,0 +1,14 @@
+{
+  "generatedAt": "2026-06-12T00:00:00Z",
+  "source": "pfdo_51_mirror",
+  "metric": "load_total_to_open_by_direction",
+  "rule": "Загруженность направленности = отношение общего числа программ к числу программ с открытой записью (enrollment = 1, «идёт приём»). Чем выше, тем меньше программ доступно для записи относительно общего числа.",
+  "directions": [
+    { "direction_id": 3, "label": "Художественная", "total": 1585, "open": 285, "ratio": 5.56 },
+    { "direction_id": 7, "label": "Физкультурно-спортивная", "total": 1176, "open": 233, "ratio": 5.05 },
+    { "direction_id": 5, "label": "Социально-гуманитарная", "total": 1179, "open": 285, "ratio": 4.14 },
+    { "direction_id": 4, "label": "Естественнонаучная", "total": 524, "open": 153, "ratio": 3.42 },
+    { "direction_id": 2, "label": "Техническая", "total": 985, "open": 292, "ratio": 3.37 },
+    { "direction_id": 6, "label": "Туристско-краеведческая", "total": 165, "open": 50, "ratio": 3.30 }
+  ]
+}

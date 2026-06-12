@@ -313,28 +313,12 @@
             </div>
 
             <div class="stats-view" data-stats-panel="load" role="tabpanel" id="stats-panel-load" aria-labelledby="stats-tab-load" tabindex="0" hidden>
-              <div class="load-visual">
-                <div class="load-card">
-                  <div class="load-card-head">
-                    <strong>Легкая загрузка</strong>
-                    <span>1–2 занятия в неделю</span>
-                  </div>
-                  <div class="load-bar"><i style="--w: 34%"></i></div>
-                </div>
-                <div class="load-card">
-                  <div class="load-card-head">
-                    <strong>Средняя загрузка</strong>
-                    <span>2–4 занятия в неделю</span>
-                  </div>
-                  <div class="load-bar"><i style="--w: 63%"></i></div>
-                </div>
-                <div class="load-card">
-                  <div class="load-card-head">
-                    <strong>Интенсивная загрузка</strong>
-                    <span>4+ занятий в неделю</span>
-                  </div>
-                  <div class="load-bar"><i style="--w: 88%"></i></div>
-                </div>
+              <div class="load-board">
+                <p class="load-caption">
+                  Сколько всего программ приходится на одну с открытой записью. Чем длиннее столбец,
+                  тем выше загруженность направленности.
+                </p>
+                <div class="load-visual" data-load></div>
               </div>
             </div>
           </div>
@@ -755,6 +739,83 @@
         }
 
         hydrateDirections();
+      })();
+    </script>
+    <script>
+      (() => {
+        const root = document.querySelector("[data-load]");
+        if (!root) return;
+
+        const fallbackLoad = [
+          { label: "Художественная", total: 1585, open: 285, ratio: 5.56 },
+          { label: "Физкультурно-спортивная", total: 1176, open: 233, ratio: 5.05 },
+          { label: "Социально-гуманитарная", total: 1179, open: 285, ratio: 4.14 },
+          { label: "Естественнонаучная", total: 524, open: 153, ratio: 3.42 },
+          { label: "Техническая", total: 985, open: 292, ratio: 3.37 },
+          { label: "Туристско-краеведческая", total: 165, open: 50, ratio: 3.30 }
+        ];
+
+        const nf = new Intl.NumberFormat("ru-RU");
+        const rf = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+        function renderLoad(directions) {
+          const items = directions
+            .map((d) => {
+              const total = Number(d.total) || 0;
+              const open = Number(d.open) || 0;
+              const ratio = Number(d.ratio) || (open ? total / open : 0);
+              return { label: String(d.label || ""), total, open, ratio };
+            })
+            .filter((d) => d.ratio > 0)
+            .sort((a, b) => b.ratio - a.ratio);
+
+          if (!items.length) return;
+          const maxRatio = Math.max(...items.map((d) => d.ratio));
+
+          root.replaceChildren();
+          items.forEach((d) => {
+            const row = document.createElement("div");
+            row.className = "load-row";
+
+            const name = document.createElement("span");
+            name.className = "load-name";
+            name.textContent = d.label;
+
+            const track = document.createElement("div");
+            track.className = "load-track";
+            const fill = document.createElement("i");
+            fill.className = "load-fill";
+            fill.style.width = `${Math.max(6, (d.ratio / maxRatio) * 100)}%`;
+            track.appendChild(fill);
+
+            const value = document.createElement("span");
+            value.className = "load-value";
+            const strong = document.createElement("strong");
+            strong.textContent = `×${rf.format(d.ratio)}`;
+            const sub = document.createElement("span");
+            sub.textContent = `${nf.format(d.total)} / ${nf.format(d.open)}`;
+            value.append(strong, sub);
+
+            row.append(name, track, value);
+            root.appendChild(row);
+          });
+        }
+
+        async function hydrateLoad() {
+          try {
+            const response = await fetch("./assets/load-stats.json", { cache: "no-store" });
+            if (!response.ok) throw new Error("load stats fetch failed");
+            const payload = await response.json();
+            const directions = Array.isArray(payload.directions) && payload.directions.length
+              ? payload.directions
+              : fallbackLoad;
+            renderLoad(directions);
+          } catch (error) {
+            renderLoad(fallbackLoad);
+          }
+        }
+
+        hydrateLoad();
       })();
     </script>
     <script>

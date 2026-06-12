@@ -1103,54 +1103,76 @@ a {
   padding: 20px 0;
 }
 
-.load-visual {
+.load-board {
   display: grid;
   align-content: center;
-  gap: 26px;
+  gap: 20px;
   width: 100%;
   min-height: 100%;
-  padding: 36px 8px 10px;
+  padding: 24px 4px;
 }
 
-.load-card {
-  padding: 28px 28px 24px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(93, 82, 255, 0.08);
-  box-shadow: var(--shadow-soft);
-}
-
-.load-card-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 20px;
-  margin-bottom: 18px;
-}
-
-.load-card-head strong {
-  font-family: "Manrope", sans-serif;
-  font-size: 26px;
-}
-
-.load-card-head span {
+.load-caption {
+  margin: 0;
+  max-width: 760px;
   color: var(--muted);
-  font-size: 16px;
+  font-size: 15px;
+  line-height: 1.45;
 }
 
-.load-bar {
-  height: 18px;
+.load-visual {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.load-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 240px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+}
+
+.load-name {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text);
+}
+
+.load-track {
+  height: 22px;
   border-radius: 999px;
   background: #eff1ff;
   overflow: hidden;
 }
 
-.load-bar i {
+.load-fill {
   display: block;
-  width: var(--w);
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, #5d52ff, #ada8ff);
+}
+
+.load-value {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 96px;
+  line-height: 1.05;
+}
+
+.load-value strong {
+  font-family: "Manrope", sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--violet-strong);
+}
+
+.load-value span {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .bubble-stat {
@@ -1415,7 +1437,7 @@ a {
     max-width: none;
   }
 
-  .load-visual {
+  .load-board {
     padding: 8px 0 0;
   }
 }
@@ -1578,18 +1600,32 @@ a {
     font-size: 15px;
   }
 
-  .load-card {
-    padding: 22px 18px;
+  .load-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "name name"
+      "track value";
+    gap: 8px 14px;
   }
 
-  .load-card-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
+  .load-name {
+    grid-area: name;
   }
 
-  .load-card-head strong {
-    font-size: 22px;
+  .load-track {
+    grid-area: track;
+  }
+
+  .load-value {
+    grid-area: value;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .load-value span {
+    margin-top: 0;
   }
 
 
