@@ -687,8 +687,8 @@
           { label: "Туристско-краеведческая", count: 165, color: "#E2DBF7" }
         ];
 
-        const MIN_DIAMETER = 64;
-        const MAX_DIAMETER = 150;
+        const MIN_DIAMETER = 96;
+        const MAX_DIAMETER = 260;
 
         function formatNumber(value) {
           return new Intl.NumberFormat("ru-RU").format(value);
@@ -706,18 +706,19 @@
 
           if (!items.length) return;
 
-          // Площадь круга пропорциональна количеству программ -> диаметр ∝ sqrt(count)
-          const sqrts = items.map((item) => Math.sqrt(item.count));
-          const minSqrt = Math.min(...sqrts);
-          const span = Math.max(...sqrts) - minSqrt || 1;
+          // Диаметр круга пропорционален количеству программ (линейно — чтобы разница была заметнее)
+          const counts = items.map((item) => item.count);
+          const minCount = Math.min(...counts);
+          const span = Math.max(...counts) - minCount || 1;
 
           root.replaceChildren();
-          items.forEach((item) => {
-            const ratio = (Math.sqrt(item.count) - minSqrt) / span;
+          items.forEach((item, index) => {
+            const ratio = (item.count - minCount) / span;
             const diameter = Math.round(MIN_DIAMETER + (MAX_DIAMETER - MIN_DIAMETER) * ratio);
 
+            // Слот по рангу: 1 — самый большой (центр), дальше по убыванию вокруг
             const tile = document.createElement("div");
-            tile.className = "bubble-stat";
+            tile.className = `bubble-stat dir-slot-${index + 1}`;
 
             const circle = document.createElement("div");
             circle.className = "bubble-circle";
@@ -726,13 +727,13 @@
             circle.style.background = item.color;
 
             const value = document.createElement("strong");
-            value.style.fontSize = `${Math.round(diameter * 0.33)}px`;
+            value.style.fontSize = `${Math.round(diameter * 0.28)}px`;
             value.textContent = formatNumber(item.count);
             circle.appendChild(value);
 
             const label = document.createElement("span");
             label.className = "bubble-label";
-            label.textContent = item.label;
+            label.textContent = `${item.label} направленность`;
 
             tile.append(circle, label);
             root.appendChild(tile);
