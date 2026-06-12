@@ -2054,6 +2054,11 @@ a {
     line-height: 34px;
   }
 
+  /* «Основная траектория» — в две строки, как у соседних карточек */
+  .trajectory-card-accent h3 .trajectory-line-break {
+    display: block;
+  }
+
   .trajectory-card p {
     margin-top: 16px;
     color: #4a3fd0;
