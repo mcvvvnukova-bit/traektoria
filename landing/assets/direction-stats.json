@@ -1,0 +1,14 @@
+{
+  "generatedAt": "2026-06-12T00:00:00Z",
+  "source": "pfdo_51_mirror",
+  "metric": "programs_by_direction",
+  "rule": "Количество программ по направленности (pfdo_programs.direction_id -> pfdo_program_directions). Учитываются все программы с указанной направленностью.",
+  "directions": [
+    { "direction_id": 3, "label": "Художественная", "count": 1585, "color": "#C9BCF5" },
+    { "direction_id": 5, "label": "Социально-гуманитарная", "count": 1179, "color": "#A7D2FF" },
+    { "direction_id": 7, "label": "Физкультурно-спортивная", "count": 1176, "color": "#9FE9C9" },
+    { "direction_id": 2, "label": "Техническая", "count": 985, "color": "#B9C2FF" },
+    { "direction_id": 4, "label": "Естественнонаучная", "count": 524, "color": "#BFE3F7" },
+    { "direction_id": 6, "label": "Туристско-краеведческая", "count": 165, "color": "#E2DBF7" }
+  ]
+}

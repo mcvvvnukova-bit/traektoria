@@ -309,32 +309,7 @@
             </div>
 
             <div class="stats-view" data-stats-panel="directions" role="tabpanel" id="stats-panel-directions" aria-labelledby="stats-tab-directions" tabindex="0" hidden>
-              <div class="directions-visual">
-                <div class="bubble-stat bubble-left-small">
-                  <strong>2000</strong>
-                  <span>спорт</span>
-                </div>
-                <div class="bubble-stat bubble-top-right">
-                  <strong>400</strong>
-                  <span>танцы</span>
-                </div>
-                <div class="bubble-stat bubble-center-large">
-                  <strong>5000</strong>
-                  <span>творчество</span>
-                </div>
-                <div class="bubble-stat bubble-right-large bubble-green">
-                  <strong>800</strong>
-                  <span>музыка</span>
-                </div>
-                <div class="bubble-stat bubble-mid bubble-blue">
-                  <strong>300</strong>
-                  <span>язык</span>
-                </div>
-                <div class="bubble-stat bubble-top-left bubble-green">
-                  <strong>1000</strong>
-                  <span>точные науки</span>
-                </div>
-              </div>
+              <div class="directions-visual" data-directions></div>
             </div>
 
             <div class="stats-view" data-stats-panel="load" role="tabpanel" id="stats-panel-load" aria-labelledby="stats-tab-load" tabindex="0" hidden>
@@ -696,6 +671,89 @@
         }
 
         hydrateCostDashboard();
+      })();
+    </script>
+    <script>
+      (() => {
+        const root = document.querySelector("[data-directions]");
+        if (!root) return;
+
+        const fallbackDirections = [
+          { label: "Художественная", count: 1585, color: "#C9BCF5" },
+          { label: "Социально-гуманитарная", count: 1179, color: "#A7D2FF" },
+          { label: "Физкультурно-спортивная", count: 1176, color: "#9FE9C9" },
+          { label: "Техническая", count: 985, color: "#B9C2FF" },
+          { label: "Естественнонаучная", count: 524, color: "#BFE3F7" },
+          { label: "Туристско-краеведческая", count: 165, color: "#E2DBF7" }
+        ];
+
+        const MIN_DIAMETER = 64;
+        const MAX_DIAMETER = 150;
+
+        function formatNumber(value) {
+          return new Intl.NumberFormat("ru-RU").format(value);
+        }
+
+        function renderDirections(directions) {
+          const items = directions
+            .map((item) => ({
+              label: String(item.label || ""),
+              count: Number(item.count) || 0,
+              color: item.color || "#D9D3FF"
+            }))
+            .filter((item) => item.count > 0)
+            .sort((a, b) => b.count - a.count);
+
+          if (!items.length) return;
+
+          // Площадь круга пропорциональна количеству программ -> диаметр ∝ sqrt(count)
+          const sqrts = items.map((item) => Math.sqrt(item.count));
+          const minSqrt = Math.min(...sqrts);
+          const span = Math.max(...sqrts) - minSqrt || 1;
+
+          root.replaceChildren();
+          items.forEach((item) => {
+            const ratio = (Math.sqrt(item.count) - minSqrt) / span;
+            const diameter = Math.round(MIN_DIAMETER + (MAX_DIAMETER - MIN_DIAMETER) * ratio);
+
+            const tile = document.createElement("div");
+            tile.className = "bubble-stat";
+
+            const circle = document.createElement("div");
+            circle.className = "bubble-circle";
+            circle.style.width = `${diameter}px`;
+            circle.style.height = `${diameter}px`;
+            circle.style.background = item.color;
+
+            const value = document.createElement("strong");
+            value.style.fontSize = `${Math.round(diameter * 0.33)}px`;
+            value.textContent = formatNumber(item.count);
+            circle.appendChild(value);
+
+            const label = document.createElement("span");
+            label.className = "bubble-label";
+            label.textContent = item.label;
+
+            tile.append(circle, label);
+            root.appendChild(tile);
+          });
+        }
+
+        async function hydrateDirections() {
+          try {
+            const response = await fetch("./assets/direction-stats.json", { cache: "no-store" });
+            if (!response.ok) throw new Error("direction stats fetch failed");
+            const payload = await response.json();
+            const directions = Array.isArray(payload.directions) && payload.directions.length
+              ? payload.directions
+              : fallbackDirections;
+            renderDirections(directions);
+          } catch (error) {
+            renderDirections(fallbackDirections);
+          }
+        }
+
+        hydrateDirections();
       })();
     </script>
     <script>
