@@ -921,6 +921,7 @@
           addMessage({ type: "message", role: "user", text: label });
           sendToChat("callback", { data });
         });
+        stream.addEventListener("wheel", handleStreamWheel, { passive: false });
 
         reset.addEventListener("click", () => {
           if (pending) return;
@@ -1035,6 +1036,36 @@
           root.classList.toggle("is-pending", pending);
           input.disabled = pending;
           render();
+        }
+
+        function handleStreamWheel(event) {
+          if (event.defaultPrevented || event.ctrlKey || event.deltaY === 0) return;
+
+          const scrollableDistance = stream.scrollHeight - stream.clientHeight;
+          if (scrollableDistance <= 0) return;
+
+          const boundaryOffset = 1;
+          const atTop = stream.scrollTop <= boundaryOffset;
+          const atBottom = stream.scrollTop >= scrollableDistance - boundaryOffset;
+          const shouldPassToPage = (event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom);
+
+          if (!shouldPassToPage) return;
+
+          event.preventDefault();
+          window.scrollBy({
+            top: normalizeWheelDelta(event),
+            behavior: "auto"
+          });
+        }
+
+        function normalizeWheelDelta(event) {
+          if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+            return event.deltaY * 16;
+          }
+          if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+            return event.deltaY * window.innerHeight;
+          }
+          return event.deltaY;
         }
 
         function render() {
