@@ -314,10 +314,6 @@
 
             <div class="stats-view" data-stats-panel="load" role="tabpanel" id="stats-panel-load" aria-labelledby="stats-tab-load" tabindex="0" hidden>
               <div class="load-board">
-                <p class="load-caption">
-                  Сколько всего программ приходится на одну с открытой записью. Чем длиннее столбец,
-                  тем выше загруженность направленности.
-                </p>
                 <div class="load-visual" data-load></div>
               </div>
             </div>
@@ -756,21 +752,27 @@
         ];
 
         const nf = new Intl.NumberFormat("ru-RU");
-        const rf = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+        function pluralPrograms(n) {
+          const mod100 = Math.abs(n) % 100;
+          const mod10 = mod100 % 10;
+          if (mod100 >= 11 && mod100 <= 14) return "программ";
+          if (mod10 === 1) return "программу";
+          if (mod10 >= 2 && mod10 <= 4) return "программы";
+          return "программ";
+        }
 
         function renderLoad(directions) {
           const items = directions
             .map((d) => {
               const total = Number(d.total) || 0;
-              const open = Number(d.open) || 0;
-              const ratio = Number(d.ratio) || (open ? total / open : 0);
-              return { label: String(d.label || ""), total, open, ratio };
+              const open = Math.min(Number(d.open) || 0, total);
+              return { label: String(d.label || ""), total, open, closed: Math.max(total - open, 0) };
             })
-            .filter((d) => d.ratio > 0)
-            .sort((a, b) => b.ratio - a.ratio);
+            .filter((d) => d.total > 0)
+            .sort((a, b) => b.closed / b.total - a.closed / a.total);
 
           if (!items.length) return;
-          const maxRatio = Math.max(...items.map((d) => d.ratio));
 
           root.replaceChildren();
           items.forEach((d) => {
@@ -783,20 +785,20 @@
 
             const track = document.createElement("div");
             track.className = "load-track";
-            const fill = document.createElement("i");
-            fill.className = "load-fill";
-            fill.style.width = `${Math.max(6, (d.ratio / maxRatio) * 100)}%`;
-            track.appendChild(fill);
 
-            const value = document.createElement("span");
-            value.className = "load-value";
-            const strong = document.createElement("strong");
-            strong.textContent = `×${rf.format(d.ratio)}`;
-            const sub = document.createElement("span");
-            sub.textContent = `${nf.format(d.total)} / ${nf.format(d.open)}`;
-            value.append(strong, sub);
+            // Длина части = доля закрытых/открытых программ от общего числа направленности
+            const closedSeg = document.createElement("div");
+            closedSeg.className = "load-seg load-seg-closed";
+            closedSeg.style.width = `${(d.closed / d.total) * 100}%`;
+            closedSeg.dataset.tip = `на ${nf.format(d.closed)} ${pluralPrograms(d.closed)} запись закрыта`;
 
-            row.append(name, track, value);
+            const openSeg = document.createElement("div");
+            openSeg.className = "load-seg load-seg-open";
+            openSeg.style.width = `${(d.open / d.total) * 100}%`;
+            openSeg.dataset.tip = `на ${nf.format(d.open)} ${pluralPrograms(d.open)} запись открыта`;
+
+            track.append(closedSeg, openSeg);
+            row.append(name, track);
             root.appendChild(row);
           });
         }

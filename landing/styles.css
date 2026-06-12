@@ -1112,23 +1112,15 @@ a {
   padding: 24px 4px;
 }
 
-.load-caption {
-  margin: 0;
-  max-width: 760px;
-  color: var(--muted);
-  font-size: 15px;
-  line-height: 1.45;
-}
-
 .load-visual {
   display: grid;
-  gap: 16px;
+  gap: 18px;
   width: 100%;
 }
 
 .load-row {
   display: grid;
-  grid-template-columns: minmax(150px, 240px) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(160px, 250px) minmax(0, 1fr);
   align-items: center;
   gap: 20px;
 }
@@ -1141,38 +1133,76 @@ a {
 }
 
 .load-track {
-  height: 22px;
+  display: flex;
+  height: 26px;
   border-radius: 999px;
   background: #eff1ff;
-  overflow: hidden;
 }
 
-.load-fill {
-  display: block;
+.load-seg {
+  position: relative;
   height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #5d52ff, #ada8ff);
+  transition: filter 160ms ease;
 }
 
-.load-value {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  min-width: 96px;
-  line-height: 1.05;
+.load-track > .load-seg:first-child {
+  border-top-left-radius: 999px;
+  border-bottom-left-radius: 999px;
 }
 
-.load-value strong {
-  font-family: "Manrope", sans-serif;
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--violet-strong);
+.load-track > .load-seg:last-child {
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
 }
 
-.load-value span {
-  margin-top: 3px;
+.load-seg-closed {
+  background: linear-gradient(90deg, #5d52ff, #6f63ff);
+}
+
+.load-seg-open {
+  background: #a7d7ff;
+}
+
+.load-seg:hover {
+  filter: brightness(1.05);
+}
+
+/* Всплывающая подсказка над сегментом */
+.load-seg::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(4px);
+  padding: 7px 11px;
+  border-radius: 10px;
+  background: #1d2240;
+  color: #ffffff;
   font-size: 13px;
-  color: var(--muted);
+  line-height: 1.2;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+  z-index: 6;
+}
+
+.load-seg:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* открытый сегмент — крайний справа: прижимаем подсказку к правому краю, чтобы не обрезалась */
+.load-seg-open::after {
+  left: auto;
+  right: 0;
+  transform: translateX(0) translateY(4px);
+}
+
+.load-seg-open:hover::after {
+  transform: translateX(0) translateY(0);
 }
 
 .bubble-stat {
@@ -1601,31 +1631,8 @@ a {
   }
 
   .load-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "name name"
-      "track value";
-    gap: 8px 14px;
-  }
-
-  .load-name {
-    grid-area: name;
-  }
-
-  .load-track {
-    grid-area: track;
-  }
-
-  .load-value {
-    grid-area: value;
-    flex-direction: row;
-    align-items: baseline;
+    grid-template-columns: 1fr;
     gap: 8px;
-    min-width: 0;
-  }
-
-  .load-value span {
-    margin-top: 0;
   }
 
 
