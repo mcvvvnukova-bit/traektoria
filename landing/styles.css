@@ -2173,7 +2173,7 @@ a {
     width: var(--desktop-content-width);
     min-height: 750px;
     margin: 0 auto;
-    grid-template-columns: minmax(0, 544px) minmax(440px, auto);
+    grid-template-columns: 544px 509px;
     gap: 48px;
     align-items: start;
     justify-content: space-between;
