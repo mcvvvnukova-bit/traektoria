@@ -1106,10 +1106,38 @@ a {
 .load-board {
   display: grid;
   align-content: center;
-  gap: 20px;
+  gap: 22px;
   width: 100%;
   min-height: 100%;
-  padding: 24px 4px;
+  padding: 20px 4px;
+}
+
+.load-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+}
+
+.load-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.load-legend-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+}
+
+.load-legend-closed {
+  background: linear-gradient(135deg, #5d52ff, #7a72ff);
+}
+
+.load-legend-open {
+  background: #68fdb6;
 }
 
 .load-visual {
@@ -1120,9 +1148,9 @@ a {
 
 .load-row {
   display: grid;
-  grid-template-columns: minmax(160px, 250px) minmax(0, 1fr);
+  grid-template-columns: minmax(150px, 230px) minmax(0, 1fr) auto;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
 }
 
 .load-name {
@@ -1130,11 +1158,38 @@ a {
   font-weight: 500;
   line-height: 1.25;
   color: var(--text);
+  transition: color 160ms ease;
 }
 
+.load-row:hover .load-name {
+  color: var(--violet-strong);
+}
+
+/* Трек = «рейка» до максимального направления */
 .load-track {
-  display: flex;
+  position: relative;
   height: 26px;
+  border-radius: 999px;
+  background: #eef0fb;
+}
+
+/* Столбец длиной = total / maxTotal */
+.load-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  display: flex;
+  transform-origin: left center;
+}
+
+.load-visual.js-anim .load-bar {
+  transform: scaleX(0);
+  transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.load-visual.js-anim.is-shown .load-bar {
+  transform: scaleX(1);
 }
 
 .load-seg {
@@ -1143,26 +1198,52 @@ a {
   transition: filter 160ms ease;
 }
 
-.load-track > .load-seg:first-child {
-  border-top-left-radius: 999px;
-  border-bottom-left-radius: 999px;
+.load-bar > .load-seg:first-child {
+  border-radius: 999px 0 0 999px;
 }
 
-.load-track > .load-seg:last-child {
-  border-top-right-radius: 999px;
-  border-bottom-right-radius: 999px;
+.load-bar > .load-seg:last-child {
+  border-radius: 0 999px 999px 0;
+}
+
+.load-bar > .load-seg:only-child {
+  border-radius: 999px;
 }
 
 .load-seg-closed {
   background: linear-gradient(90deg, #5d52ff, #7a72ff);
 }
 
+/* мятный сегмент + тонкий белый разделитель на стыке */
 .load-seg-open {
   background: #68fdb6;
+  box-shadow: inset 2px 0 0 #ffffff;
 }
 
 .load-seg:hover {
   filter: brightness(1.05);
+}
+
+.load-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 118px;
+  line-height: 1.15;
+}
+
+.load-meta strong {
+  font-family: "Manrope", sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.load-meta span {
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 /* Всплывающая подсказка над сегментом */
@@ -1629,8 +1710,25 @@ a {
   }
 
   .load-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "name meta"
+      "track track";
+    align-items: baseline;
+    gap: 8px 12px;
+  }
+
+  .load-name {
+    grid-area: name;
+  }
+
+  .load-meta {
+    grid-area: meta;
+    align-items: flex-end;
+  }
+
+  .load-track {
+    grid-area: track;
   }
 
 

@@ -314,6 +314,10 @@
 
             <div class="stats-view" data-stats-panel="load" role="tabpanel" id="stats-panel-load" aria-labelledby="stats-tab-load" tabindex="0" hidden>
               <div class="load-board">
+                <div class="load-legend">
+                  <span class="load-legend-item"><i class="load-legend-dot load-legend-closed"></i>запись закрыта</span>
+                  <span class="load-legend-item"><i class="load-legend-dot load-legend-open"></i>запись открыта</span>
+                </div>
                 <div class="load-visual" data-load></div>
               </div>
             </div>
@@ -762,6 +766,33 @@
           return "программ";
         }
 
+        function setupReveal() {
+          if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+          root.classList.add("js-anim");
+          const panel = document.querySelector('[data-stats-panel="load"]');
+          if (!panel) return;
+
+          let shown = false;
+          const show = () => {
+            if (shown) return;
+            shown = true;
+            requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add("is-shown")));
+          };
+
+          if (!panel.hidden) {
+            show();
+            return;
+          }
+          // Анимируем бары, когда вкладка «Загруженность» становится видимой
+          const observer = new MutationObserver(() => {
+            if (!panel.hidden) {
+              show();
+              observer.disconnect();
+            }
+          });
+          observer.observe(panel, { attributes: true, attributeFilter: ["hidden"] });
+        }
+
         function renderLoad(directions) {
           const items = directions
             .map((d) => {
@@ -778,7 +809,9 @@
           const maxTotal = Math.max(...items.map((d) => d.total));
 
           root.replaceChildren();
-          items.forEach((d) => {
+          items.forEach((d, index) => {
+            const openPct = Math.round((d.open / d.total) * 100);
+
             const row = document.createElement("div");
             row.className = "load-row";
 
@@ -789,20 +822,37 @@
             const track = document.createElement("div");
             track.className = "load-track";
 
+            const bar = document.createElement("div");
+            bar.className = "load-bar";
+            bar.style.width = `${(d.total / maxTotal) * 100}%`;
+            bar.style.transitionDelay = `${index * 60}ms`;
+
             const closedSeg = document.createElement("div");
             closedSeg.className = "load-seg load-seg-closed";
-            closedSeg.style.width = `${(d.closed / maxTotal) * 100}%`;
+            closedSeg.style.width = `${(d.closed / d.total) * 100}%`;
             closedSeg.dataset.tip = `на ${nf.format(d.closed)} ${pluralPrograms(d.closed)} запись закрыта`;
 
             const openSeg = document.createElement("div");
             openSeg.className = "load-seg load-seg-open";
-            openSeg.style.width = `${(d.open / maxTotal) * 100}%`;
+            openSeg.style.width = `${(d.open / d.total) * 100}%`;
             openSeg.dataset.tip = `на ${nf.format(d.open)} ${pluralPrograms(d.open)} запись открыта`;
 
-            track.append(closedSeg, openSeg);
-            row.append(name, track);
+            bar.append(closedSeg, openSeg);
+            track.appendChild(bar);
+
+            const meta = document.createElement("span");
+            meta.className = "load-meta";
+            const totalEl = document.createElement("strong");
+            totalEl.textContent = nf.format(d.total);
+            const subEl = document.createElement("span");
+            subEl.textContent = `открыто ${nf.format(d.open)} · ${openPct}%`;
+            meta.append(totalEl, subEl);
+
+            row.append(name, track, meta);
             root.appendChild(row);
           });
+
+          setupReveal();
         }
 
         async function hydrateLoad() {
