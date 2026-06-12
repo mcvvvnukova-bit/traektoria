@@ -770,9 +770,12 @@
               return { label: String(d.label || ""), total, open, closed: Math.max(total - open, 0) };
             })
             .filter((d) => d.total > 0)
-            .sort((a, b) => b.closed / b.total - a.closed / a.total);
+            .sort((a, b) => b.total - a.total);
 
           if (!items.length) return;
+          // Длина всего столбца = общее число программ направленности (относительно максимума);
+          // внутри столбец делится пропорционально закрытым/открытым программам.
+          const maxTotal = Math.max(...items.map((d) => d.total));
 
           root.replaceChildren();
           items.forEach((d) => {
@@ -786,15 +789,14 @@
             const track = document.createElement("div");
             track.className = "load-track";
 
-            // Длина части = доля закрытых/открытых программ от общего числа направленности
             const closedSeg = document.createElement("div");
             closedSeg.className = "load-seg load-seg-closed";
-            closedSeg.style.width = `${(d.closed / d.total) * 100}%`;
+            closedSeg.style.width = `${(d.closed / maxTotal) * 100}%`;
             closedSeg.dataset.tip = `на ${nf.format(d.closed)} ${pluralPrograms(d.closed)} запись закрыта`;
 
             const openSeg = document.createElement("div");
             openSeg.className = "load-seg load-seg-open";
-            openSeg.style.width = `${(d.open / d.total) * 100}%`;
+            openSeg.style.width = `${(d.open / maxTotal) * 100}%`;
             openSeg.dataset.tip = `на ${nf.format(d.open)} ${pluralPrograms(d.open)} запись открыта`;
 
             track.append(closedSeg, openSeg);

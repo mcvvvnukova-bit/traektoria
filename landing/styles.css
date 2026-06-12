@@ -1135,8 +1135,6 @@ a {
 .load-track {
   display: flex;
   height: 26px;
-  border-radius: 999px;
-  background: #eff1ff;
 }
 
 .load-seg {
@@ -1156,11 +1154,11 @@ a {
 }
 
 .load-seg-closed {
-  background: linear-gradient(90deg, #5d52ff, #6f63ff);
+  background: linear-gradient(90deg, #5d52ff, #7a72ff);
 }
 
 .load-seg-open {
-  background: #a7d7ff;
+  background: #68fdb6;
 }
 
 .load-seg:hover {
