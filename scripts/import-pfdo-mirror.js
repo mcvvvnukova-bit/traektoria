@@ -414,6 +414,7 @@ function renderProgram(operatorIdValue, searchItem, detail) {
   const program = detail.program || {};
   const direction = detail.direction || searchItem.direction || null;
   const programId = requiredNumber(searchItem.id, "program.id");
+  const municipalityId = searchItem.municipality_id ?? program.mun;
 
   return `
 INSERT INTO pfdo_programs (
@@ -426,7 +427,7 @@ INSERT INTO pfdo_programs (
 VALUES (
   ${programId},
   ${requiredNumber(operatorIdValue, "operator_id")},
-  ${nullableNumber(searchItem.municipality_id)},
+  ${nullableNumber(municipalityId)},
   ${textToSql(searchItem.name)},
   ${nullableText(program.full_name)},
   ${nullableText(program.short_name)},
