@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   createScenario3State,
+  createTopicProfile,
   mergeScenario3Links,
   parsePfdoProgramLinks,
   buildCompletedProgramsReviewMessage,
@@ -13,6 +14,7 @@ const {
   buildMunicipalityKeyboard,
   hasMeaningfulCompletedTopics,
   inferAgeRangeFromPrograms,
+  scoreCandidateForNewInterests,
 } = require("../src/deep-trajectory");
 
 test("parses PFDO program links and keeps link-to-program mapping", () => {
@@ -136,6 +138,57 @@ test("does not infer age range when completed program ages do not overlap", () =
   ]);
 
   assert.equal(ageRange, null);
+});
+
+test("scores new interests by excluding level 2 repeats and lowering level 1 overlaps", () => {
+  const profile = createTopicProfile([{
+    topics: [{
+      parentName: "Инженерное творчество",
+      categoryName: "Робототехника",
+    }],
+  }]);
+  const program = {
+    name: "Новая программа",
+    annotation: "",
+    task: "",
+    directionName: "",
+    keywords: [],
+  };
+
+  const repeated = scoreCandidateForNewInterests(
+    program,
+    [{ parentName: "Инженерное творчество", categoryName: "Робототехника" }],
+    profile,
+    10,
+  );
+  const sameParent = scoreCandidateForNewInterests(
+    program,
+    [{ parentName: "Инженерное творчество", categoryName: "Моделирование" }],
+    profile,
+    10,
+  );
+  const differentParent = scoreCandidateForNewInterests(
+    program,
+    [{ parentName: "Художественное творчество", categoryName: "Живопись" }],
+    profile,
+    10,
+  );
+  const generic = scoreCandidateForNewInterests(
+    program,
+    [{
+      parentCode: "other",
+      parentName: "Прочее",
+      categoryCode: "other",
+      categoryName: "Без категории",
+    }],
+    profile,
+    10,
+  );
+
+  assert.equal(repeated.score, 0);
+  assert.equal(generic.score, 0);
+  assert.ok(sameParent.score > 0);
+  assert.ok(differentParent.score > sameParent.score);
 });
 
 test("builds completed programs review with classifier hierarchy labels and program facts", () => {
@@ -301,6 +354,35 @@ test("uses booking clarification when recommended program price is unknown", () 
   assert.match(message, /Стоимость: Уточните при записи/);
 });
 
+test("builds new interests result without deep trajectory wording", () => {
+  const message = buildDeepTrajectoryResultMessage(
+    null,
+    { recommendationMode: "wide" },
+    {
+      recommendationMode: "wide",
+      items: [{
+        program: "Живопись",
+        relatedTopics: [],
+        newTopics: ["Художественное творчество / Живопись"],
+        noveltySignals: ["добавляет новый раздел тем"],
+        depthSignals: [],
+        venue: "Дом творчества",
+        address: "ул. Ленина, 1",
+        schedule: "Пн 16:00",
+        ageLabel: "10-12 лет",
+        price: "Бесплатно",
+        sourceUrl: "https://51.pfdo.ru/app/?program=2",
+      }],
+    },
+  );
+
+  assert.match(message, /Вот программы по новым направлениям:/);
+  assert.match(message, /Почему это новое направление:/);
+  assert.match(message, /новые темы: Художественное творчество \/ Живопись/);
+  assert.doesNotMatch(message, /углубляет/);
+  assert.doesNotMatch(message, /продолжает направления/);
+});
+
 test("builds deep trajectory empty result with criteria change suggestion", () => {
   const profile = {
     categoryLabels: ["Инженерное творчество / Робототехника"],
@@ -360,6 +442,23 @@ test("builds scenario 3 PDF answers with inferred age range", () => {
   const answers = buildScenario3PdfAnswers(state);
 
   assert.equal(answers.ageText, "9-11 лет");
+});
+
+test("builds scenario 4 PDF answers with new interests goal", () => {
+  const state = createScenario3State();
+  state.recommendationMode = "wide";
+  state.ageYears = 10;
+  state.municipalityName = "Мурманск";
+  state.completedTopicProfile = {
+    categoryLabels: ["Инженерное творчество / Робототехника"],
+    topicNames: [],
+    directions: [],
+  };
+
+  const answers = buildScenario3PdfAnswers(state);
+
+  assert.equal(answers.goal, "new_interests");
+  assert.equal(answers.goalLabel, "Найти новые интересы");
 });
 
 test("adapts scenario 3 recommendations to common PDF item fields", () => {

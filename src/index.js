@@ -6,7 +6,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
-const { FLOW, SCENARIO_1, SCENARIO_2, SCENARIO_3 } = require("./flow");
+const { FLOW, SCENARIO_1, SCENARIO_2, SCENARIO_3, SCENARIO_4 } = require("./flow");
 const { getRecommendations } = require("./recommendations");
 const { createSelectionPdf } = require("./pdf-selection");
 const { analyzeFreeText } = require("./llm-router");
@@ -532,14 +532,6 @@ async function showEntry(chatId) {
   await sendMessage(chatId, entryTextForTarget(chatId), FLOW.entry.keyboard, messageOptions);
 }
 
-async function selectScenario(chatId, scenario) {
-  const session = await getSession(chatId);
-  session.step = "scenarioSelected";
-  session.scenario = scenario;
-  await persistSession(chatId, session);
-  return sendMessage(chatId, `Вы выбрали сценарий: ${scenario.label}.`);
-}
-
 async function startScenario2(chatId) {
   const session = await getSession(chatId);
   session.step = "s2_age";
@@ -553,17 +545,49 @@ async function startScenario2(chatId) {
   return sendMessage(chatId, SCENARIO_2.age.text);
 }
 
-async function startScenario3(chatId) {
+function scenario3Flow(state) {
+  return state?.recommendationMode === "wide" ? SCENARIO_4 : SCENARIO_3;
+}
+
+function scenario3Label(mode) {
+  return mode === "wide" ? "Траектория новых интересов" : "Составить углубленную траекторию";
+}
+
+function scenario3Id(mode) {
+  return mode === "wide" ? "trajectory_new_interests" : "trajectory_deep";
+}
+
+function scenario3LogScenario(state) {
+  return state?.recommendationMode === "wide" ? "new_interests" : "deep_continuation";
+}
+
+function scenario3SearchMessage(state) {
+  return state?.recommendationMode === "wide"
+    ? "Ищу программы с новыми темами, которые не повторяют уже изученное..."
+    : "Ищу программы, которые могут быть углубленным продолжением...";
+}
+
+function scenario3PdfCaption(state) {
+  return state?.recommendationMode === "wide" ? "Подборка новых направлений" : "Подборка углубленных программ";
+}
+
+async function startScenario3(chatId, options = {}) {
+  const mode = options.mode === "wide" ? "wide" : "deep";
   const session = await getSession(chatId);
   session.step = "s3_collect_links";
   session.scenario = {
-    id: "trajectory_deep",
-    label: "Составить углубленную траекторию",
+    id: scenario3Id(mode),
+    label: scenario3Label(mode),
   };
   session.scenario3 = createScenario3State();
+  session.scenario3.recommendationMode = mode;
   session.scenario3.criteria = createDescriptionSelectionState();
   await persistSession(chatId, session);
-  return sendMessage(chatId, SCENARIO_3.intro);
+  return sendMessage(chatId, scenario3Flow(session.scenario3).intro);
+}
+
+async function startScenario4(chatId) {
+  return startScenario3(chatId, { mode: "wide" });
 }
 
 async function startScenarioFromCommand(chatId, command) {
@@ -600,20 +624,18 @@ async function startScenarioFromCommand(chatId, command) {
   }
 
   if (command === "wide") {
-    return selectScenario(chatId, {
-      id: "trajectory_new_interests",
-      label: "Траектория новых интересов",
-    });
+    return startScenario4(chatId);
   }
 
   return null;
 }
 
 async function handleScenario3Links(chatId, text, session) {
+  const flow = scenario3Flow(session.scenario3);
   const merge = mergeScenario3Links(session.scenario3, text);
   if (!merge.added.length && !session.scenario3.submittedProgramIds.length) {
     await persistSession(chatId, session);
-    return sendMessage(chatId, SCENARIO_3.noLinks);
+    return sendMessage(chatId, flow.noLinks);
   }
 
   await persistSession(chatId, session);
@@ -631,12 +653,13 @@ async function handleScenario3Links(chatId, text, session) {
   if (merge.ignoredBecauseLimit) lines.push("Лишние ссылки сверх 5 не добавляю.");
   if (merge.parsed.invalidLinks.length) lines.push("Сейчас поддерживаются только ссылки на программы 51.pfdo.ru.");
   lines.push("", "Можете прислать еще ссылки или продолжить.");
-  return sendMessage(chatId, lines.join("\n"), SCENARIO_3.linkCollection.keyboard);
+  return sendMessage(chatId, lines.join("\n"), flow.linkCollection.keyboard);
 }
 
 async function finalizeScenario3Links(chatId, session) {
+  const flow = scenario3Flow(session.scenario3);
   if (!session.scenario3.submittedProgramIds?.length) {
-    return sendMessage(chatId, SCENARIO_3.noLinks);
+    return sendMessage(chatId, flow.noLinks);
   }
 
   let analysis;
@@ -652,7 +675,7 @@ async function finalizeScenario3Links(chatId, session) {
   }
 
   if (!analysis.programIds.length) {
-    return sendMessage(chatId, SCENARIO_3.noLinks);
+    return sendMessage(chatId, flow.noLinks);
   }
 
   if (!analysis.programs.length) {
@@ -664,6 +687,7 @@ async function finalizeScenario3Links(chatId, session) {
 }
 
 async function showScenario3CompletedReview(chatId, session, analysis = null) {
+  const flow = scenario3Flow(session.scenario3);
   session.step = "s3_review_completed";
   await persistSession(chatId, session);
   const linkFormat = scenario3LinkFormat(chatId);
@@ -675,7 +699,7 @@ async function showScenario3CompletedReview(chatId, session, analysis = null) {
     await sendMessage(
       chatId,
       chunks[index],
-      index === chunks.length - 1 && hasMeaningfulTopics ? SCENARIO_3.completedTopics.keyboard : undefined,
+      index === chunks.length - 1 && hasMeaningfulTopics ? flow.completedTopics.keyboard : undefined,
       messageOptions,
     );
   }
@@ -684,18 +708,19 @@ async function showScenario3CompletedReview(chatId, session, analysis = null) {
 }
 
 async function continueScenario3AfterMunicipalitySelection(chatId, session) {
+  const flow = scenario3Flow(session.scenario3);
   if (!hasMeaningfulCompletedTopics(session.scenario3)) {
     if (!session.scenario3.criteria) {
       session.scenario3.criteria = createDescriptionSelectionState();
     }
     session.step = "s3_wait_criteria_text";
     await persistSession(chatId, session);
-    return sendMessage(chatId, SCENARIO_3.criteria.interestsFallbackText);
+    return sendMessage(chatId, flow.criteria.interestsFallbackText);
   }
 
   session.step = "s3_criteria_choice";
   await persistSession(chatId, session);
-  return sendMessage(chatId, SCENARIO_3.criteria.text, SCENARIO_3.criteria.keyboard);
+  return sendMessage(chatId, flow.criteria.text, flow.criteria.keyboard);
 }
 
 async function handleScenario3CriteriaText(chatId, text, session) {
@@ -711,7 +736,7 @@ async function handleScenario3CriteriaText(chatId, text, session) {
 async function askScenario3CustomMunicipality(chatId, session) {
   session.step = "s3_wait_municipality_text";
   await persistSession(chatId, session);
-  return sendMessage(chatId, SCENARIO_3.municipality.customText);
+  return sendMessage(chatId, scenario3Flow(session.scenario3).municipality.customText);
 }
 
 async function askScenario3Municipality(chatId, session) {
@@ -724,7 +749,7 @@ async function askScenario3Municipality(chatId, session) {
   await persistSession(chatId, session);
   return sendMessage(
     chatId,
-    SCENARIO_3.municipality.text,
+    scenario3Flow(session.scenario3).municipality.text,
     buildMunicipalityKeyboard(municipalityOptions),
   );
 }
@@ -774,7 +799,7 @@ async function showScenario3Results(chatId, session) {
 
   session.step = "s3_results";
   await persistSession(chatId, session);
-  await sendMessage(chatId, "Ищу программы, которые могут быть углубленным продолжением...");
+  await sendMessage(chatId, scenario3SearchMessage(session.scenario3));
 
   let result;
   try {
@@ -789,7 +814,7 @@ async function showScenario3Results(chatId, session) {
   const target = normalizeTarget(chatId);
   await logRecommendation(target.platform, target.id, {
     ...result,
-    scenario: "deep_continuation",
+    scenario: scenario3LogScenario(session.scenario3),
     answers: session.scenario3,
   });
 
@@ -804,7 +829,11 @@ async function showScenario3Results(chatId, session) {
   }
   session.step = "s3_pdf";
   await persistSession(chatId, session);
-  return sendMessage(chatId, SCENARIO_3.pdfDownload.text, SCENARIO_3.pdfDownload.keyboard);
+  return sendMessage(
+    chatId,
+    scenario3Flow(session.scenario3).pdfDownload.text,
+    scenario3Flow(session.scenario3).pdfDownload.keyboard,
+  );
 }
 
 async function askScenario2Interests(chatId, session) {
@@ -1076,6 +1105,10 @@ async function handleCallback(callbackQuery) {
     return startScenario3(chatId);
   }
 
+  if (data === "scenario:new_interests") {
+    return startScenario4(chatId);
+  }
+
   if (data === "s3:links:add") {
     session.step = "s3_collect_links";
     await persistSession(chatId, session);
@@ -1092,7 +1125,7 @@ async function handleCallback(callbackQuery) {
     }
     session.step = "s3_wait_criteria_text";
     await persistSession(chatId, session);
-    return sendMessage(chatId, SCENARIO_3.criteria.editText);
+    return sendMessage(chatId, scenario3Flow(session.scenario3).criteria.editText);
   }
 
   if (data === "s3:criteria:skip") {
@@ -1107,7 +1140,7 @@ async function handleCallback(callbackQuery) {
     if (!hasMeaningfulCompletedTopics(session.scenario3)) {
       session.step = "s3_wait_criteria_text";
       await persistSession(chatId, session);
-      return sendMessage(chatId, SCENARIO_3.criteria.interestsFallbackText);
+      return sendMessage(chatId, scenario3Flow(session.scenario3).criteria.interestsFallbackText);
     }
     const linkFormat = scenario3LinkFormat(chatId);
     const messageOptions = scenario3MessageOptions(linkFormat);
@@ -1118,7 +1151,11 @@ async function handleCallback(callbackQuery) {
     if (!session.scenario3.municipalityId) {
       return askScenario3Municipality(chatId, session);
     }
-    return sendMessage(chatId, SCENARIO_3.completedTopics.followupText, SCENARIO_3.criteria.keyboard);
+    return sendMessage(
+      chatId,
+      scenario3Flow(session.scenario3).completedTopics.followupText,
+      scenario3Flow(session.scenario3).criteria.keyboard,
+    );
   }
 
   if (data === "s3:pdf:yes") {
@@ -1131,17 +1168,6 @@ async function handleCallback(callbackQuery) {
     session.scenario3.pdfRequested = false;
     await persistSession(chatId, session);
     return sendMessage(chatId, "Готово. Новую подборку можно начать в любой момент через меню бота.");
-  }
-
-  const scenarios = {
-    "scenario:new_interests": {
-      id: "trajectory_new_interests",
-      label: "Траектория новых интересов",
-    },
-  };
-
-  if (scenarios[data]) {
-    return selectScenario(chatId, scenarios[data]);
   }
 
   if (data === "s3:municipality:custom") {
@@ -1343,7 +1369,7 @@ async function sendScenario3Pdf(chatId, session) {
     });
     session.scenario3.pdfPath = outputPath;
     await persistSession(chatId, session);
-    return sendDocument(chatId, outputPath, "Подборка углубленных программ");
+    return sendDocument(chatId, outputPath, scenario3PdfCaption(session.scenario3));
   } catch (error) {
     console.error("Scenario 3 PDF delivery failed:", error);
     return sendMessage(chatId, "Не удалось подготовить PDF-файл. Попробуйте нажать кнопку скачивания еще раз.");
@@ -1721,12 +1747,12 @@ function mattermostReplyMarkupForSession(session) {
   if (!session || session.step === "entry") return FLOW.entry.keyboard;
   if (session.step === "s1_confirm_summary") return SCENARIO_1.confirmation.keyboard;
   if (session.step === "s1_pdf") return SCENARIO_1.pdfDownload.keyboard;
-  if (session.step === "s3_collect_links") return SCENARIO_3.linkCollection.keyboard;
+  if (session.step === "s3_collect_links") return scenario3Flow(session.scenario3).linkCollection.keyboard;
   if (session.step === "s3_choose_municipality") {
     return buildMunicipalityKeyboard(session.scenario3?.municipalityOptions || []);
   }
-  if (session.step === "s3_criteria_choice") return SCENARIO_3.criteria.keyboard;
-  if (session.step === "s3_pdf") return SCENARIO_3.pdfDownload.keyboard;
+  if (session.step === "s3_criteria_choice") return scenario3Flow(session.scenario3).criteria.keyboard;
+  if (session.step === "s3_pdf") return scenario3Flow(session.scenario3).pdfDownload.keyboard;
   if (session.step === "s2_goal") {
     return multiSelectKeyboard("goal", SCENARIO_2.goal.options, session.scenario2?.goals || []);
   }

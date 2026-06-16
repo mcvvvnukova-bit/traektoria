@@ -34,6 +34,7 @@ function createScenario3State() {
     invalidLinks: [],
     completedPrograms: [],
     pendingTopicProgramIds: [],
+    recommendationMode: "deep",
     municipalityOptions: [],
     municipalityId: null,
     municipalityName: "",
@@ -188,6 +189,7 @@ function mergeScenario3Links(state, text) {
 
 async function getDeepTrajectoryRecommendations(state, options = {}) {
   const limit = options.limit || 10;
+  const recommendationMode = normalizeRecommendationMode(options.recommendationMode || state.recommendationMode);
   const criteria = normalizeSearchCriteria(options.criteria || state.criteria);
   const searchContext = await resolveSearchContext(state, criteria);
   const municipalityId = Number(searchContext.municipalityId);
@@ -216,6 +218,7 @@ async function getDeepTrajectoryRecommendations(state, options = {}) {
       reason: DEEP_TRAJECTORY_NO_RESULTS_MESSAGE,
       topicProfile,
       searchContext,
+      recommendationMode,
     };
   }
 
@@ -226,7 +229,7 @@ async function getDeepTrajectoryRecommendations(state, options = {}) {
       return {
         ...program,
         topics,
-        ...scoreCandidate(program, topics, topicProfile, ageYears, criteria),
+        ...scoreRecommendationCandidate(program, topics, topicProfile, ageYears, criteria, recommendationMode),
       };
     })
     .filter((program) => program.score > 0)
@@ -236,7 +239,7 @@ async function getDeepTrajectoryRecommendations(state, options = {}) {
   const detailed = [];
   for (const item of ranked) {
     const detail = await getProgramDetailSafe(item.id);
-    detailed.push(normalizeRecommendationItem(item, detail, criteria));
+    detailed.push(normalizeRecommendationItem(item, detail, criteria, { recommendationMode }));
   }
   detailed.sort((a, b) => b.score - a.score);
   const items = detailed.slice(0, limit);
@@ -248,6 +251,7 @@ async function getDeepTrajectoryRecommendations(state, options = {}) {
     reason: items.length ? "" : explainNoCandidates(candidates, topicProfile),
     topicProfile,
     searchContext,
+    recommendationMode,
   };
 }
 
@@ -476,7 +480,9 @@ function createTopicProfile(programs) {
   const topicNameHours = new Map();
   const categoryCounts = new Map();
   const categoryNames = new Map();
+  const categoryKeyCounts = new Map();
   const categoryLabelCounts = new Map();
+  const parentCategoryKeyCounts = new Map();
   const directionCounts = new Map();
   let hoursTotal = 0;
   let topicRows = 0;
@@ -497,6 +503,12 @@ function createTopicProfile(programs) {
         categoryCounts.set(topic.categoryCode, (categoryCounts.get(topic.categoryCode) || 0) + 1);
         categoryNames.set(topic.categoryCode, topic.categoryName || topic.categoryCode);
       }
+      for (const key of topicLevel2Keys(topic)) {
+        categoryKeyCounts.set(key, (categoryKeyCounts.get(key) || 0) + 1);
+      }
+      for (const key of topicLevel1Keys(topic)) {
+        parentCategoryKeyCounts.set(key, (parentCategoryKeyCounts.get(key) || 0) + 1);
+      }
       const categoryLabel = formatTopicClassifierPath(topic);
       if (categoryLabel) {
         categoryLabelCounts.set(categoryLabel, (categoryLabelCounts.get(categoryLabel) || 0) + 1);
@@ -512,6 +524,8 @@ function createTopicProfile(programs) {
       name: categoryNames.get(code) || code,
       count,
     })),
+    categoryKeys: topEntries(categoryKeyCounts, 24).map(([key]) => key),
+    parentCategoryKeys: topEntries(parentCategoryKeyCounts, 24).map(([key]) => key),
     categoryLabels: topEntries(categoryLabelCounts, 12).map(([name]) => name),
     directions: topEntries(directionCounts, 6).map(([name, count]) => ({ name, count })),
     hoursTotal,
@@ -537,6 +551,17 @@ function inferAgeRangeFromPrograms(programs) {
 
 function inferAgeFromPrograms(programs) {
   return midpointAgeYears(inferAgeRangeFromPrograms(programs));
+}
+
+function normalizeRecommendationMode(value) {
+  return value === "wide" ? "wide" : "deep";
+}
+
+function scoreRecommendationCandidate(program, topics, profile, ageYears, criteria = {}, mode = "deep") {
+  if (normalizeRecommendationMode(mode) === "wide") {
+    return scoreCandidateForNewInterests(program, topics, profile, ageYears, criteria);
+  }
+  return scoreCandidate(program, topics, profile, ageYears, criteria);
 }
 
 function scoreCandidate(program, topics, profile, ageYears, criteria = {}) {
@@ -574,6 +599,70 @@ function scoreCandidate(program, topics, profile, ageYears, criteria = {}) {
     categoryMatches,
     newRelatedTopics,
     depthSignals,
+  };
+}
+
+function scoreCandidateForNewInterests(program, topics, profile, ageYears, criteria = {}) {
+  const completedLevel2Keys = new Set(profile.categoryKeys || []);
+  for (const category of profile.categories || []) {
+    for (const key of topicClassifierKeys(category.code, category.name)) {
+      completedLevel2Keys.add(key);
+    }
+  }
+  const completedLevel1Keys = new Set(profile.parentCategoryKeys || []);
+  const meaningfulTopics = (topics || []).filter(hasMeaningfulClassifierTopic);
+  const repeatedLevel2Topics = meaningfulTopics.filter((topic) => topicMatchesAnyKey(topic, completedLevel2Keys, "level2"));
+  if (repeatedLevel2Topics.length) {
+    return {
+      score: 0,
+      topicKeyMatches: [],
+      categoryMatches: repeatedLevel2Topics,
+      newRelatedTopics: [],
+      depthSignals: [],
+      noveltySignals: [],
+    };
+  }
+
+  if (!meaningfulTopics.length) {
+    return {
+      score: 0,
+      topicKeyMatches: [],
+      categoryMatches: [],
+      newRelatedTopics: [],
+      depthSignals: [],
+      noveltySignals: [],
+    };
+  }
+
+  const sameLevel1Topics = meaningfulTopics.filter((topic) => topicMatchesAnyKey(topic, completedLevel1Keys, "level1"));
+  const differentLevel1Topics = meaningfulTopics.filter((topic) => !topicMatchesAnyKey(topic, completedLevel1Keys, "level1"));
+  const newRelatedTopics = uniqueBy(meaningfulTopics, (topic) => formatTopicClassifierPath(topic) || topic.name);
+  const noveltySignals = [];
+  if (differentLevel1Topics.length) {
+    noveltySignals.push("добавляет новый раздел тем");
+  }
+  if (!sameLevel1Topics.length) {
+    noveltySignals.push("не повторяет изученные темы по классификатору");
+  } else {
+    noveltySignals.push("не повторяет конкретные изученные темы");
+  }
+
+  const depthSignals = collectDepthSignals(program, topics, profile, ageYears);
+  let score = 0;
+  score += Math.min(differentLevel1Topics.length * 4, 16);
+  score += Math.min(sameLevel1Topics.length * 2, 6);
+  score += Math.min(meaningfulTopics.length, 6);
+  score += scoreCriteriaProgramMatch(program, criteria);
+  score += Math.min(depthSignals.length, 2);
+  if (sameLevel1Topics.length) score -= Math.min(sameLevel1Topics.length * 2, 8);
+
+  return {
+    score: Math.max(0, score),
+    topicKeyMatches: [],
+    categoryMatches: [],
+    newRelatedTopics,
+    depthSignals,
+    noveltySignals,
   };
 }
 
@@ -724,7 +813,8 @@ async function getProgramDetailSafe(programId) {
   }
 }
 
-function normalizeRecommendationItem(item, detail, criteria = {}) {
+function normalizeRecommendationItem(item, detail, criteria = {}, options = {}) {
+  const recommendationMode = normalizeRecommendationMode(options.recommendationMode);
   const hasDetail = Boolean(detail);
   const program = detail?.program || {};
   const groups = detail?.available_groups || [];
@@ -758,6 +848,8 @@ function normalizeRecommendationItem(item, detail, criteria = {}) {
     relatedTopics: relatedTopicNames,
     newTopics: newTopicNames,
     depthSignals: item.depthSignals,
+    noveltySignals: item.noveltySignals || [],
+    recommendationMode,
     score: item.score + criteriaScore,
   };
 }
@@ -765,8 +857,13 @@ function normalizeRecommendationItem(item, detail, criteria = {}) {
 function buildDeepTrajectoryResultMessage(analysis, state, result, options = {}) {
   const linkFormat = options.linkFormat || "plain";
   const display = (value) => formatDisplayText(value, linkFormat);
+  const recommendationMode = normalizeRecommendationMode(result.recommendationMode || state.recommendationMode);
   if (!result.items.length) {
     return DEEP_TRAJECTORY_NO_RESULTS_MESSAGE;
+  }
+
+  if (recommendationMode === "wide") {
+    return buildNewInterestsResultMessage(result, { linkFormat });
   }
 
   const lines = ["Вот программы, которые выглядят как следующий шаг:", ""];
@@ -781,6 +878,37 @@ function buildDeepTrajectoryResultMessage(analysis, state, result, options = {})
       "Почему это следующий шаг:",
       `продолжает направления: ${related}`,
       `углубляет за счет: ${deeper.length ? deeper.join(", ") : "более продвинутого тематического профиля"}`,
+      "",
+      `Где: ${display(item.venue)}, ${display(item.address)}`,
+      `Когда: ${display(item.schedule)}`,
+      `Возраст: ${display(item.ageLabel)}`,
+      `Стоимость: ${display(item.price || UNKNOWN_PRICE_LABEL)}`,
+      `Онлайн-запись: ${display(item.sourceUrl)}`,
+      "",
+    );
+  });
+
+  return lines.join("\n");
+}
+
+function buildNewInterestsResultMessage(result, options = {}) {
+  const linkFormat = options.linkFormat || "plain";
+  const display = (value) => formatDisplayText(value, linkFormat);
+  const lines = ["Вот программы по новым направлениям:", ""];
+
+  result.items.forEach((item, index) => {
+    const newTopics = item.newTopics.length
+      ? item.newTopics.slice(0, 5).map(display).join(", ")
+      : "темы не повторяют изученное по классификатору";
+    const novelty = item.noveltySignals?.length
+      ? item.noveltySignals.slice(0, 3).map(display).join(", ")
+      : "не пересекается с уже изученными темами";
+    lines.push(
+      formatProgramTitle(item, index, linkFormat),
+      "",
+      "Почему это новое направление:",
+      `новые темы: ${newTopics}`,
+      `отличие: ${novelty}`,
       "",
       `Где: ${display(item.venue)}, ${display(item.address)}`,
       `Когда: ${display(item.schedule)}`,
@@ -846,6 +974,7 @@ function buildCompletedProgramsTopicsMessage(state, analysis, options = {}) {
 
 function buildScenario3PdfAnswers(state) {
   const criteria = normalizeSearchCriteria(state.criteria);
+  const recommendationMode = normalizeRecommendationMode(state.recommendationMode);
   const profile = state.completedTopicProfile || createTopicProfile(state.completedPrograms || []);
   const interestLabels = profile.categoryLabels?.length
     ? profile.categoryLabels
@@ -863,8 +992,8 @@ function buildScenario3PdfAnswers(state) {
     age: "",
     interestsText: uniqueBy(interestLabels, (item) => normalizeText(item)).slice(0, 8).join(", "),
     interests: [],
-    goal: "strengths",
-    goalLabel: "Углубить пройденные темы",
+    goal: recommendationMode === "wide" ? "new_interests" : "strengths",
+    goalLabel: recommendationMode === "wide" ? "Найти новые интересы" : "Углубить пройденные темы",
     schedule: criteria.schedule || [],
     format: null,
     formatLabel: criteria.formatLabel || "Любой формат",
@@ -956,6 +1085,40 @@ function formatTopicClassifierPath(topic) {
   return categoryName || parentName;
 }
 
+function topicLevel2Keys(topic) {
+  return topicClassifierKeys(topic?.categoryCode, topic?.categoryName);
+}
+
+function topicLevel1Keys(topic) {
+  return topicClassifierKeys(topic?.parentCode, topic?.parentName);
+}
+
+function topicClassifierKeys(code, name) {
+  const keys = [];
+  const cleanCode = cleanClassifierLabel(code);
+  const cleanName = cleanClassifierLabel(name);
+  if (cleanName && isGenericClassifierLabel(cleanName)) {
+    return keys;
+  }
+  if (cleanCode && !isGenericClassifierLabel(cleanCode)) {
+    keys.push(`code:${normalizeText(cleanCode)}`);
+  }
+  if (cleanName && !isGenericClassifierLabel(cleanName)) {
+    keys.push(`name:${normalizeText(cleanName)}`);
+  }
+  return keys;
+}
+
+function hasMeaningfulClassifierTopic(topic) {
+  return topicLevel2Keys(topic).length > 0 || topicLevel1Keys(topic).length > 0;
+}
+
+function topicMatchesAnyKey(topic, keySet, level) {
+  if (!keySet?.size) return false;
+  const keys = level === "level1" ? topicLevel1Keys(topic) : topicLevel2Keys(topic);
+  return keys.some((key) => keySet.has(key));
+}
+
 function buildTopicClassifierGroups(topics) {
   const groups = new Map();
   for (const topic of topics || []) {
@@ -1017,6 +1180,7 @@ function isGenericClassifierLabel(value) {
   const normalized = normalizeText(value);
   return normalized === "предметные темы без категории" ||
     normalized === "предметная тема без категории" ||
+    normalized === "прочее" ||
     normalized === "без категории";
 }
 
@@ -1346,9 +1510,11 @@ module.exports = {
   buildScenario3PdfAnswers,
   buildScenario3PdfResult,
   buildMunicipalityKeyboard,
+  createTopicProfile,
   findMunicipalityByName,
   hasMeaningfulCompletedTopics,
   inferAgeRangeFromPrograms,
+  scoreCandidateForNewInterests,
   formatAgeRangeYears,
   parsePfdoProgramLinks,
 };

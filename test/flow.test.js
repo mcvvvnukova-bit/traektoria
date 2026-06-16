@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { FLOW, SCENARIO_3 } = require("../src/flow");
+const { FLOW, SCENARIO_3, SCENARIO_4 } = require("../src/flow");
 
 test("entry text has bold scenario titles in html variant only", () => {
   assert.match(FLOW.entry.text, /Подобрать по описанию/);
@@ -35,4 +35,12 @@ test("scenario 3 has a separate municipality prompt after completed program revi
     SCENARIO_3.municipality.customText,
     "Напишите населенный пункт, в котором хотите продолжить обучение",
   );
+});
+
+test("scenario 4 has new interests wording while reusing scenario 3 controls", () => {
+  assert.match(SCENARIO_4.intro, /новыми темами/);
+  assert.match(SCENARIO_4.criteria.text, /новых направлений/);
+  assert.match(SCENARIO_4.completedTopics.followupText, /новых направлений/);
+  assert.deepEqual(SCENARIO_4.criteria.keyboard, SCENARIO_3.criteria.keyboard);
+  assert.deepEqual(SCENARIO_4.pdfDownload.keyboard, SCENARIO_3.pdfDownload.keyboard);
 });
