@@ -2,6 +2,7 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { loadEnvFile } = require("../src/load-env");
 const { executeSql, executeSqlFile, jsonToSql, queryRows, textToSql } = require("../src/db");
+const { parseCsv } = require("../services/program-topic-extractor/src/csv");
 const {
   normalizeAndClassifyTopic,
   classifyNormalizedTopic,
@@ -22,10 +23,19 @@ const exportDir = path.resolve(__dirname, "..", "exports");
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  const counters = await runTopicAnalytics(options);
+  console.log(JSON.stringify(counters, null, 2));
+}
+
+async function runTopicAnalytics(options = {}) {
+  const normalizedOptions = normalizeOptions(options);
   await executeSqlFile(schemaPath, DATABASE_URL);
-  await clearAnalyticsTables();
+  const programIds = await resolveProgramIds(normalizedOptions);
+  await clearAnalyticsTables(programIds);
 
   const counters = {
+    scope: programIds.length ? "programs" : "all",
+    programIds: programIds.length ? programIds : [],
     sourceRows: 0,
     normalizations: 0,
     aggregates: 0,
@@ -36,7 +46,11 @@ async function main() {
 
   let lastId = 0;
   while (true) {
-    const rows = await loadTopicRows(lastId, options.limit ? options.limit - counters.sourceRows : null);
+    const rows = await loadTopicRows(
+      lastId,
+      normalizedOptions.limit ? normalizedOptions.limit - counters.sourceRows : null,
+      programIds,
+    );
     if (!rows.length) break;
 
     const normalizationRows = [];
@@ -51,7 +65,7 @@ async function main() {
     counters.sourceRows += rows.length;
     counters.normalizations += normalizationRows.length;
 
-    if (options.limit && counters.sourceRows >= options.limit) break;
+    if (normalizedOptions.limit && counters.sourceRows >= normalizedOptions.limit) break;
     if (counters.sourceRows % 10000 === 0) {
       console.log(JSON.stringify(counters));
     }
@@ -61,7 +75,7 @@ async function main() {
   await insertAggregates(aggregateRows);
   counters.aggregates = aggregateRows.length;
 
-  const persistedAggregates = await loadAggregates();
+  const persistedAggregates = await loadAggregates(programIds);
   const goldenLabels = await loadGoldenLabels();
   const classificationRows = persistedAggregates.map((aggregate) => ({
     aggregate,
@@ -75,13 +89,20 @@ async function main() {
   await insertReviewQueue(reviewRows);
   counters.reviewItems = reviewRows.length;
 
-  await writeTechnicalExports();
-  console.log(JSON.stringify(counters, null, 2));
+  if (!normalizedOptions.skipExports) {
+    await writeTechnicalExports();
+  }
+
+  return counters;
 }
 
 function parseArgs(argv) {
   const options = {
     limit: null,
+    programId: null,
+    programIdsPath: null,
+    programIds: [],
+    skipExports: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -94,13 +115,33 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (value === "--program-id") {
+      options.programId = Number(next);
+      index += 1;
+      continue;
+    }
+
+    if (value === "--program-ids") {
+      options.programIdsPath = next;
+      index += 1;
+      continue;
+    }
+
+    if (value === "--skip-exports") {
+      options.skipExports = true;
+      continue;
+    }
+
     if (value === "--help" || value === "-h") {
       console.log(`
 Usage:
   node scripts/build-pfdo-topic-analytics.js
 
 Options:
-  --limit 1000   Process only first N extracted topic rows.
+  --limit 1000        Process only first N extracted topic rows.
+  --program-id 364163 Rebuild analytics only for one program.
+  --program-ids file  Rebuild analytics for programs from CSV with a program_id column.
+  --skip-exports      Do not refresh CSV exports after analytics rebuild.
 `);
       process.exit(0);
     }
@@ -109,7 +150,78 @@ Options:
   return options;
 }
 
-async function clearAnalyticsTables() {
+function normalizeOptions(options) {
+  return {
+    limit: normalizeNullablePositiveInteger(options.limit, "limit"),
+    programId: normalizeNullablePositiveInteger(options.programId, "program-id"),
+    programIdsPath: options.programIdsPath || null,
+    programIds: normalizeProgramIds(options.programIds || []),
+    skipExports: Boolean(options.skipExports),
+  };
+}
+
+async function resolveProgramIds(options) {
+  const ids = [...options.programIds];
+  if (options.programId) ids.push(options.programId);
+
+  if (options.programIdsPath) {
+    const csvPath = path.resolve(options.programIdsPath);
+    const rows = parseCsv(await fs.readFile(csvPath, "utf-8"));
+    for (const row of rows) {
+      const rawValue = String(row.program_id || "").trim();
+      if (!rawValue) continue;
+      ids.push(normalizePositiveInteger(rawValue, `program_id in ${csvPath}`));
+    }
+  }
+
+  return normalizeProgramIds(ids);
+}
+
+function normalizeProgramIds(values) {
+  const ids = [];
+  const seen = new Set();
+  for (const value of values || []) {
+    const id = normalizePositiveInteger(value, "program id");
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+function normalizeNullablePositiveInteger(value, name) {
+  if (value == null || value === "") return null;
+  return normalizePositiveInteger(value, name);
+}
+
+function normalizePositiveInteger(value, name) {
+  const id = Number(value);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error(`Invalid ${name}: ${value}`);
+  }
+  return id;
+}
+
+function programIdFilterSql(alias, programIds) {
+  if (!programIds.length) return "";
+  return ` AND ${alias}.program_id IN (${programIds.map(Number).join(", ")})`;
+}
+
+async function clearAnalyticsTables(programIds = []) {
+  if (programIds.length) {
+    const ids = programIds.map(Number).join(", ");
+    await executeSql(
+      `
+DELETE FROM pfdo_program_topic_review_queue WHERE program_id IN (${ids});
+DELETE FROM pfdo_program_topic_classifications WHERE program_id IN (${ids});
+DELETE FROM pfdo_program_topic_aggregates WHERE program_id IN (${ids});
+DELETE FROM pfdo_program_topic_normalizations WHERE program_id IN (${ids});
+`,
+      DATABASE_URL,
+    );
+    return;
+  }
+
   await executeSql(
     `
 DELETE FROM pfdo_program_topic_review_queue;
@@ -121,9 +233,10 @@ DELETE FROM pfdo_program_topic_normalizations;
   );
 }
 
-async function loadTopicRows(lastId, remainingLimit) {
+async function loadTopicRows(lastId, remainingLimit, programIds = []) {
   if (remainingLimit != null && remainingLimit <= 0) return [];
   const limit = Math.min(5000, remainingLimit || 5000);
+  const programFilter = programIdFilterSql("t", programIds);
   const rows = await queryRows(
     `
 SELECT
@@ -144,6 +257,7 @@ FROM pfdo_program_calendar_topics t
 JOIN pfdo_programs p ON p.id = t.program_id
 LEFT JOIN pfdo_program_directions d ON d.id = p.direction_id
 WHERE t.id > ${Number(lastId)}
+${programFilter}
 ORDER BY t.id
 LIMIT ${Number(limit)};
 `,
@@ -319,9 +433,10 @@ ON CONFLICT (program_id, normalized_topic_key, record_type) DO UPDATE SET
   }
 }
 
-async function loadAggregates() {
+async function loadAggregates(programIds = []) {
   const output = [];
   let lastId = 0;
+  const programFilter = programIdFilterSql("a", programIds);
 
   while (true) {
     const rows = await queryRows(
@@ -342,6 +457,7 @@ FROM pfdo_program_topic_aggregates a
 JOIN pfdo_programs p ON p.id = a.program_id
 LEFT JOIN pfdo_program_directions d ON d.id = p.direction_id
 WHERE a.id > ${Number(lastId)}
+${programFilter}
 ORDER BY a.id
 LIMIT 5000;
 `,
@@ -776,7 +892,16 @@ function decodeBase64(value) {
   return Buffer.from(String(value || ""), "base64").toString("utf-8");
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  runTopicAnalytics,
+  parseArgs,
+  normalizeProgramIds,
+  programIdFilterSql,
+};
