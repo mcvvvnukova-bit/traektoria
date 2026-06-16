@@ -655,27 +655,7 @@ async function finalizeScenario3Links(chatId, session) {
     return sendMessage(chatId, "Не нашел эти программы в локальном каталоге PFDO. Проверьте ссылки и отправьте их еще раз.");
   }
 
-  if (!analysis.municipalities.length) {
-    return sendMessage(chatId, "Нашел программы, но не смог определить населенный пункт. Попробуйте другие ссылки или начните заново через /start.");
-  }
-
   applyScenario3Analysis(session.scenario3, analysis);
-  if (analysis.municipalities.length > 1) {
-    session.step = "s3_choose_municipality";
-    await persistSession(chatId, session);
-    return sendMessage(
-      chatId,
-      "Нашел программы из разных населенных пунктов. В каком населенном пункте искать продолжение?",
-      buildMunicipalityKeyboard(analysis.municipalities),
-    );
-  }
-
-  const municipality = analysis.municipalities[0];
-  if (municipality) {
-    session.scenario3.municipalityId = municipality.id;
-    session.scenario3.municipalityName = municipality.name;
-  }
-
   return showScenario3CompletedReview(chatId, session, analysis);
 }
 
@@ -695,7 +675,12 @@ async function showScenario3CompletedReview(chatId, session, analysis = null) {
       messageOptions,
     );
   }
-  if (!hasMeaningfulTopics) {
+
+  return askScenario3Municipality(chatId, session);
+}
+
+async function continueScenario3AfterMunicipalitySelection(chatId, session) {
+  if (!hasMeaningfulCompletedTopics(session.scenario3)) {
     if (!session.scenario3.criteria) {
       session.scenario3.criteria = createDescriptionSelectionState();
     }
@@ -703,6 +688,7 @@ async function showScenario3CompletedReview(chatId, session, analysis = null) {
     await persistSession(chatId, session);
     return sendMessage(chatId, SCENARIO_3.criteria.interestsFallbackText);
   }
+
   session.step = "s3_criteria_choice";
   await persistSession(chatId, session);
   return sendMessage(chatId, SCENARIO_3.criteria.text, SCENARIO_3.criteria.keyboard);
@@ -724,6 +710,21 @@ async function askScenario3CustomMunicipality(chatId, session) {
   return sendMessage(chatId, "Напишите населенный пункт, в котором искать продолжение. Например: Североморск.");
 }
 
+async function askScenario3Municipality(chatId, session) {
+  const municipalityOptions = session.scenario3?.municipalityOptions || [];
+  if (!municipalityOptions.length) {
+    return askScenario3CustomMunicipality(chatId, session);
+  }
+
+  session.step = "s3_choose_municipality";
+  await persistSession(chatId, session);
+  return sendMessage(
+    chatId,
+    SCENARIO_3.municipality.text,
+    buildMunicipalityKeyboard(municipalityOptions),
+  );
+}
+
 async function handleScenario3MunicipalityText(chatId, text, session) {
   const municipality = await findMunicipalityByName(text);
   if (!municipality) {
@@ -736,7 +737,7 @@ async function handleScenario3MunicipalityText(chatId, text, session) {
 
   session.scenario3.municipalityId = municipality.id;
   session.scenario3.municipalityName = municipality.name;
-  return showScenario3CompletedReview(chatId, session);
+  return continueScenario3AfterMunicipalitySelection(chatId, session);
 }
 
 async function enrichScenario3CriteriaWithLlm(session, text) {
@@ -956,6 +957,10 @@ async function handleText(message) {
     return handleScenario3CriteriaText(chatId, text, session);
   }
 
+  if (session.step === "s3_choose_municipality") {
+    return handleScenario3MunicipalityText(chatId, text, session);
+  }
+
   if (session.step === "s3_wait_municipality_text") {
     return handleScenario3MunicipalityText(chatId, text, session);
   }
@@ -1103,6 +1108,9 @@ async function handleCallback(callbackQuery) {
     for (const chunk of splitMessage(text)) {
       await sendMessage(chatId, chunk, undefined, messageOptions);
     }
+    if (!session.scenario3.municipalityId) {
+      return askScenario3Municipality(chatId, session);
+    }
     return sendMessage(chatId, SCENARIO_3.completedTopics.followupText, SCENARIO_3.criteria.keyboard);
   }
 
@@ -1141,7 +1149,7 @@ async function handleCallback(callbackQuery) {
     }
     session.scenario3.municipalityId = municipality.id;
     session.scenario3.municipalityName = municipality.name;
-    return showScenario3CompletedReview(chatId, session);
+    return continueScenario3AfterMunicipalitySelection(chatId, session);
   }
 
   if (data.startsWith("s2:goal:")) {

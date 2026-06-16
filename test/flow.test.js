@@ -15,3 +15,8 @@ test("scenario 3 asks for child interests when completed topics are not meaningf
   assert.match(SCENARIO_3.criteria.interestsFallbackText, /что интересно ребенку/);
   assert.match(SCENARIO_3.criteria.interestsFallbackText, /углубленное продолжение/);
 });
+
+test("scenario 3 has a separate municipality prompt after completed program review", () => {
+  assert.match(SCENARIO_3.municipality.text, /В каком населенном пункте/);
+  assert.match(SCENARIO_3.municipality.text, /продолжение/);
+});
