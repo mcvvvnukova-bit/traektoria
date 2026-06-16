@@ -1,7 +1,16 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { SCENARIO_3 } = require("../src/flow");
+const { FLOW, SCENARIO_3 } = require("../src/flow");
+
+test("entry text has bold scenario titles in html variant only", () => {
+  assert.match(FLOW.entry.text, /Подобрать по описанию/);
+  assert.doesNotMatch(FLOW.entry.text, /<b>/);
+  assert.match(FLOW.entry.htmlText, /<b>Подобрать по описанию<\/b>/);
+  assert.match(FLOW.entry.htmlText, /<b>Подобрать с AI агентом<\/b>/);
+  assert.match(FLOW.entry.htmlText, /<b>Составить углубленную траекторию<\/b>/);
+  assert.match(FLOW.entry.htmlText, /<b>Траектория новых интересов<\/b>/);
+});
 
 test("scenario 3 full topics follow-up reuses criteria continuation buttons", () => {
   assert.match(SCENARIO_3.completedTopics.followupText, /Продолжим подбор/);

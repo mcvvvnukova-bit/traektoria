@@ -1,9 +1,9 @@
 const TELEGRAM_BOT_COMMANDS = [
   { command: "start", description: "Главное меню" },
-  { command: "description", description: "Подобрать по описанию" },
-  { command: "agent", description: "Подобрать с AI агентом" },
+  { command: "text", description: "Подобрать по описанию" },
+  { command: "quiz", description: "Подобрать через вопросы" },
   { command: "deep", description: "Составить углубленную траекторию" },
-  { command: "new_interests", description: "Траектория новых интересов" },
+  { command: "wide", description: "Траектория новых интересов" },
   { command: "help", description: "Что умеет бот" },
 ];
 
@@ -22,15 +22,21 @@ function parseBotCommand(text) {
   return null;
 }
 
-function buildHelpText() {
+function formatScenarioTitle(title, format = "plain") {
+  if (format === "html") return `<b>${title}</b>`;
+  return title;
+}
+
+function buildHelpText(options = {}) {
+  const format = options.format || "plain";
   return [
     "Я помогу подобрать программы дополнительного образования и построить траекторию обучения.",
     "",
     "Доступные сценарии:",
-    "/description - подобрать по описанию",
-    "/agent - пройти пошаговый подбор",
-    "/deep - составить углубленную траекторию",
-    "/new_interests - найти новые направления",
+    `/text - ${formatScenarioTitle("Подобрать по описанию", format)}`,
+    `/quiz - ${formatScenarioTitle("Подобрать через вопросы", format)}`,
+    `/deep - ${formatScenarioTitle("Составить углубленную траекторию", format)}`,
+    `/wide - ${formatScenarioTitle("Траектория новых интересов", format)}`,
     "",
     "Команду можно выбрать в меню Telegram в любой момент.",
   ].join("\n");

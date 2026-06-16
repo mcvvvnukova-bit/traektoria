@@ -526,8 +526,10 @@ async function showEntry(chatId) {
   const session = await resetSession(chatId);
   session.step = "entry";
   await persistSession(chatId, session);
+  const textFormat = scenarioTextFormat(chatId);
+  const messageOptions = formattedTextMessageOptions(textFormat);
   await sendMessage(chatId, FLOW.entry.greetingText);
-  await sendMessage(chatId, FLOW.entry.text, FLOW.entry.keyboard);
+  await sendMessage(chatId, entryTextForTarget(chatId), FLOW.entry.keyboard, messageOptions);
 }
 
 async function selectScenario(chatId, scenario) {
@@ -573,12 +575,14 @@ async function startScenarioFromCommand(chatId, command) {
     const session = await resetSession(chatId);
     session.step = "entry";
     await persistSession(chatId, session);
-    await sendMessage(chatId, buildHelpText());
-    return sendMessage(chatId, FLOW.entry.text, FLOW.entry.keyboard);
+    const textFormat = scenarioTextFormat(chatId);
+    const messageOptions = formattedTextMessageOptions(textFormat);
+    await sendMessage(chatId, buildHelpText({ format: textFormat }), undefined, messageOptions);
+    return sendMessage(chatId, entryTextForTarget(chatId), FLOW.entry.keyboard, messageOptions);
   }
 
   const session = await resetSession(chatId);
-  if (command === "description") {
+  if (command === "text") {
     return startDescriptionFlow({
       target: chatId,
       session,
@@ -587,7 +591,7 @@ async function startScenarioFromCommand(chatId, command) {
     });
   }
 
-  if (command === "agent") {
+  if (command === "quiz") {
     return startScenario2(chatId);
   }
 
@@ -595,7 +599,7 @@ async function startScenarioFromCommand(chatId, command) {
     return startScenario3(chatId);
   }
 
-  if (command === "new_interests") {
+  if (command === "wide") {
     return selectScenario(chatId, {
       id: "trajectory_new_interests",
       label: "Траектория новых интересов",
@@ -796,7 +800,7 @@ async function showScenario3Results(chatId, session) {
     await sendMessage(chatId, chunk, undefined, messageOptions);
   }
   if (!result.items.length) {
-    return sendMessage(chatId, "Чтобы построить новую траекторию, нажмите /start.");
+    return sendMessage(chatId, "Готово. Новую подборку можно начать в любой момент через меню бота.");
   }
   session.step = "s3_pdf";
   await persistSession(chatId, session);
@@ -1126,7 +1130,7 @@ async function handleCallback(callbackQuery) {
   if (data === "s3:pdf:no") {
     session.scenario3.pdfRequested = false;
     await persistSession(chatId, session);
-    return sendMessage(chatId, "Хорошо. Чтобы построить новую траекторию, нажмите /start.");
+    return sendMessage(chatId, "Готово. Новую подборку можно начать в любой момент через меню бота.");
   }
 
   const scenarios = {
@@ -1564,6 +1568,18 @@ function scenario3LinkFormat(target) {
 
 function scenario3MessageOptions(linkFormat) {
   return linkFormat === "html" ? { parseMode: "HTML" } : {};
+}
+
+function scenarioTextFormat(target) {
+  return normalizeTarget(target).platform === "telegram" ? "html" : "plain";
+}
+
+function formattedTextMessageOptions(format) {
+  return format === "html" ? { parseMode: "HTML" } : {};
+}
+
+function entryTextForTarget(target) {
+  return scenarioTextFormat(target) === "html" ? FLOW.entry.htmlText : FLOW.entry.text;
 }
 
 function detectAgeBucket(text) {
