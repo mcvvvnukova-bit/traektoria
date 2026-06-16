@@ -49,7 +49,7 @@ const {
 const { initializeDatabase } = require("./database-init");
 const { makeTarget, normalizeTarget, targetKey, targetFilePart, targetMetadata } = require("./target");
 const { createMattermostTransport, replyMarkupOptions } = require("./mattermost-transport");
-const { TELEGRAM_BOT_COMMANDS, parseBotCommand, buildHelpText } = require("./telegram-menu");
+const { TELEGRAM_BOT_COMMANDS, MAX_BOT_COMMANDS, parseBotCommand, buildHelpText } = require("./telegram-menu");
 
 const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED !== "false";
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -2087,6 +2087,13 @@ async function configureTelegramBotMenu() {
   });
 }
 
+async function configureMaxBotMenu() {
+  await maxApi("/me", {
+    method: "PATCH",
+    body: { commands: MAX_BOT_COMMANDS },
+  });
+}
+
 async function configureTelegramWebhookMode() {
   if (!WEBHOOK_PUBLIC_URL && WEBHOOK_REGISTER) {
     throw new Error("Missing TELEGRAM_WEBHOOK_URL for webhook mode");
@@ -2340,6 +2347,11 @@ async function bootstrap() {
   }
 
   if (MAX_ENABLED) {
+    try {
+      await configureMaxBotMenu();
+    } catch (error) {
+      console.warn("MAX bot menu configuration skipped:", error.message);
+    }
     await configureMaxWebhookMode();
   }
 

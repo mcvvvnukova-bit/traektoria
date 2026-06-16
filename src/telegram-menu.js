@@ -7,6 +7,11 @@ const TELEGRAM_BOT_COMMANDS = [
   { command: "help", description: "Что умеет бот" },
 ];
 
+const MAX_BOT_COMMANDS = TELEGRAM_BOT_COMMANDS.map(({ command, description }) => ({
+  name: command,
+  description,
+}));
+
 const COMMAND_ALIASES = new Map([
   ["menu", "start"],
 ]);
@@ -44,6 +49,7 @@ function buildHelpText(options = {}) {
 
 module.exports = {
   TELEGRAM_BOT_COMMANDS,
+  MAX_BOT_COMMANDS,
   parseBotCommand,
   buildHelpText,
 };

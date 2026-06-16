@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   TELEGRAM_BOT_COMMANDS,
+  MAX_BOT_COMMANDS,
   parseBotCommand,
   buildHelpText,
 } = require("../src/telegram-menu");
@@ -13,6 +14,17 @@ test("defines Telegram menu commands for available scenarios", () => {
     ["start", "text", "quiz", "deep", "wide", "help"],
   );
   assert.ok(TELEGRAM_BOT_COMMANDS.every((item) => item.description && item.description.length <= 256));
+});
+
+test("defines MAX menu commands with MAX Bot API field names", () => {
+  assert.deepEqual(
+    MAX_BOT_COMMANDS,
+    TELEGRAM_BOT_COMMANDS.map(({ command, description }) => ({
+      name: command,
+      description,
+    })),
+  );
+  assert.ok(MAX_BOT_COMMANDS.every((item) => !("command" in item)));
 });
 
 test("parses Telegram bot commands with bot username and arguments", () => {
