@@ -30,6 +30,7 @@ const {
   mergeScenario3Links,
   getDeepTrajectoryRecommendations,
   buildCompletedProgramsReviewMessage,
+  buildCompletedProgramsTopicsMessage,
   buildDeepTrajectoryResultMessage,
   buildScenario3PdfAnswers,
   buildScenario3PdfResult,
@@ -239,7 +240,7 @@ async function maxApi(pathname, options = {}) {
   return data;
 }
 
-async function sendMessage(target, text, replyMarkup) {
+async function sendMessage(target, text, replyMarkup, options = {}) {
   const normalized = normalizeTarget(target);
   if (normalized.platform === "web") {
     return enqueueWebMessage(normalized, toWebMessage(text, replyMarkup));
@@ -258,6 +259,9 @@ async function sendMessage(target, text, replyMarkup) {
     text,
     disable_web_page_preview: true,
   };
+  if (options.parseMode) {
+    payload.parse_mode = options.parseMode;
+  }
   if (replyMarkup) {
     payload.reply_markup = replyMarkup;
   }
@@ -296,7 +300,7 @@ async function sendDocument(target, filePath, caption) {
   return data.result;
 }
 
-async function editMessage(target, messageId, text, replyMarkup) {
+async function editMessage(target, messageId, text, replyMarkup, options = {}) {
   const normalized = normalizeTarget(target);
   if (normalized.platform === "web") {
     return sendMessage(normalized, text, replyMarkup);
@@ -316,6 +320,9 @@ async function editMessage(target, messageId, text, replyMarkup) {
     text,
     disable_web_page_preview: true,
   };
+  if (options.parseMode) {
+    payload.parse_mode = options.parseMode;
+  }
   if (replyMarkup) {
     payload.reply_markup = replyMarkup;
   }
@@ -631,9 +638,17 @@ async function finalizeScenario3Links(chatId, session) {
 async function showScenario3CompletedReview(chatId, session, analysis = null) {
   session.step = "s3_review_completed";
   await persistSession(chatId, session);
-  const text = buildCompletedProgramsReviewMessage(session.scenario3, analysis);
-  for (const chunk of splitMessage(text)) {
-    await sendMessage(chatId, chunk);
+  const linkFormat = scenario3LinkFormat(chatId);
+  const messageOptions = scenario3MessageOptions(linkFormat);
+  const text = buildCompletedProgramsReviewMessage(session.scenario3, analysis, { linkFormat });
+  const chunks = splitMessage(text);
+  for (let index = 0; index < chunks.length; index += 1) {
+    await sendMessage(
+      chatId,
+      chunks[index],
+      index === chunks.length - 1 ? SCENARIO_3.completedTopics.keyboard : undefined,
+      messageOptions,
+    );
   }
   session.step = "s3_criteria_choice";
   await persistSession(chatId, session);
@@ -697,9 +712,11 @@ async function showScenario3Results(chatId, session) {
     answers: session.scenario3,
   });
 
-  const text = buildDeepTrajectoryResultMessage(null, session.scenario3, result);
+  const linkFormat = scenario3LinkFormat(chatId);
+  const messageOptions = scenario3MessageOptions(linkFormat);
+  const text = buildDeepTrajectoryResultMessage(null, session.scenario3, result, { linkFormat });
   for (const chunk of splitMessage(text)) {
-    await sendMessage(chatId, chunk);
+    await sendMessage(chatId, chunk, undefined, messageOptions);
   }
   if (!result.items.length) {
     return sendMessage(chatId, "Чтобы построить новую траекторию, нажмите /start.");
@@ -986,6 +1003,20 @@ async function handleCallback(callbackQuery) {
 
   if (data === "s3:criteria:skip") {
     return showScenario3Results(chatId, session);
+  }
+
+  if (data === "s3:topics:all") {
+    const programs = session.scenario3.completedPrograms || [];
+    if (!programs.length) {
+      return sendMessage(chatId, "Не нашел сохраненный список пройденных программ. Начните заново через /start.");
+    }
+    const linkFormat = scenario3LinkFormat(chatId);
+    const messageOptions = scenario3MessageOptions(linkFormat);
+    const text = buildCompletedProgramsTopicsMessage(session.scenario3, null, { linkFormat });
+    for (const chunk of splitMessage(text)) {
+      await sendMessage(chatId, chunk, undefined, messageOptions);
+    }
+    return null;
   }
 
   if (data === "s3:pdf:yes") {
@@ -1413,6 +1444,17 @@ function splitMessage(text, limit = 3500) {
   }
   if (current) chunks.push(current);
   return chunks;
+}
+
+function scenario3LinkFormat(target) {
+  const platform = normalizeTarget(target).platform;
+  if (platform === "telegram") return "html";
+  if (platform === "max" || platform === "mattermost") return "markdown";
+  return "plain";
+}
+
+function scenario3MessageOptions(linkFormat) {
+  return linkFormat === "html" ? { parseMode: "HTML" } : {};
 }
 
 function detectAgeBucket(text) {

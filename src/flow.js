@@ -49,6 +49,13 @@ const SCENARIO_3 = {
     editText:
       "Напишите, что нужно изменить. Например: \"искать в Североморске, ребенку 11 лет, бесплатно, по выходным\".",
   },
+  completedTopics: {
+    keyboard: {
+      inline_keyboard: [
+        [button("Показать все темы", "s3:topics:all")],
+      ],
+    },
+  },
   pdfDownload: {
     text: "Хотите скачать подборку PDF-файлом?",
     keyboard: {

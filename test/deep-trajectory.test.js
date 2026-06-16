@@ -6,6 +6,7 @@ const {
   mergeScenario3Links,
   parsePfdoProgramLinks,
   buildCompletedProgramsReviewMessage,
+  buildCompletedProgramsTopicsMessage,
   buildDeepTrajectoryResultMessage,
   buildScenario3PdfAnswers,
   buildScenario3PdfResult,
@@ -62,6 +63,7 @@ test("builds completed programs review with classifier hierarchy labels and prog
     municipalityName: "Мурманск",
     ageLabel: "10-12 лет",
     price: "Бесплатно",
+    sourceUrl: "https://51.pfdo.ru/app/?program=101",
     topics: [
       {
         name: "Конструирование робота",
@@ -73,17 +75,65 @@ test("builds completed programs review with classifier hierarchy labels and prog
         parentName: "Информационные технологии",
         categoryName: "Программирование",
       },
+      {
+        name: "Основы моделирования",
+        parentName: "Инженерное творчество",
+        categoryName: "Моделирование",
+      },
     ],
   }];
 
-  const message = buildCompletedProgramsReviewMessage(state);
+  const message = buildCompletedProgramsReviewMessage(state, null, { linkFormat: "html" });
 
-  assert.match(message, /Робототехника/);
-  assert.match(message, /Классификатор тем \(уровень 1\/2\): Инженерное творчество \/ Робототехника, Информационные технологии \/ Программирование/);
+  assert.match(message, /1\. <a href="https:\/\/51\.pfdo\.ru\/app\/\?program=101">Робототехника<\/a>/);
+  assert.match(message, /Что ребенок уже проходил:/);
+  assert.match(message, /Инженерное творчество\n• Робототехника\n• Моделирование/);
+  assert.match(message, /Информационные технологии\n• Программирование/);
   assert.doesNotMatch(message, /Конструирование робота/);
   assert.doesNotMatch(message, /Программирование датчиков/);
   assert.match(message, /Населенный пункт: Мурманск/);
   assert.match(message, /Стоимость: Бесплатно/);
+});
+
+test("builds full completed topics message without summary limits", () => {
+  const state = createScenario3State();
+  state.completedPrograms = [{
+    id: 101,
+    name: "Маршрут построен",
+    topics: [
+      { parentName: "Туристская подготовка", categoryName: "Походы, маршруты, техника и тактика" },
+      { parentName: "Туристская подготовка", categoryName: "Безопасность и выживание в природной среде" },
+      { parentName: "Туристская подготовка", categoryName: "Снаряжение и туристские узлы" },
+      { parentName: "Ориентирование и топография", categoryName: "Карты, компас и топография" },
+      { parentName: "Ориентирование и топография", categoryName: "Спортивное ориентирование" },
+    ],
+  }];
+
+  const message = buildCompletedProgramsTopicsMessage(state);
+
+  assert.match(message, /Все темы по пройденным программам:/);
+  assert.match(message, /1\. Маршрут построен/);
+  assert.match(message, /Туристская подготовка\n• Походы, маршруты, техника и тактика\n• Безопасность и выживание в природной среде\n• Снаряжение и туристские узлы/);
+  assert.match(message, /Ориентирование и топография\n• Карты, компас и топография\n• Спортивное ориентирование/);
+  assert.doesNotMatch(message, /не показано/);
+});
+
+test("uses booking clarification when completed program price is unknown", () => {
+  const state = createScenario3State();
+  state.completedPrograms = [{
+    name: "Робототехника",
+    municipalityName: "Мурманск",
+    ageLabel: "10-12 лет",
+    topics: [{
+      parentName: "Инженерное творчество",
+      categoryName: "Робототехника",
+    }],
+  }];
+
+  const message = buildCompletedProgramsReviewMessage(state);
+
+  assert.match(message, /Стоимость: Уточните при записи/);
+  assert.doesNotMatch(message, /Стоимость уточняется на карточке программы/);
 });
 
 test("builds deep trajectory result with classifier hierarchy labels instead of raw topics", () => {
@@ -117,6 +167,34 @@ test("builds deep trajectory result with classifier hierarchy labels instead of 
   assert.match(message, /продолжает направления: Инженерное творчество \/ Робототехника/);
   assert.match(message, /углубляет за счет: Информационные технологии \/ Программирование, проектная работа/);
   assert.doesNotMatch(message, /Конструирование робота/);
+});
+
+test("uses booking clarification when recommended program price is unknown", () => {
+  const profile = {
+    categoryLabels: ["Инженерное творчество / Робототехника"],
+  };
+  const message = buildDeepTrajectoryResultMessage(
+    { topicProfile: profile },
+    { municipalityName: "Мурманск", ageYears: 10 },
+    {
+      topicProfile: profile,
+      searchContext: { municipalityName: "Мурманск", ageYears: 10 },
+      items: [{
+        program: "Инженерный проект",
+        relatedTopics: ["Инженерное творчество / Робототехника"],
+        newTopics: [],
+        depthSignals: [],
+        venue: "Кванториум",
+        address: "ул. Ленина, 1",
+        schedule: "Пн 16:00",
+        ageLabel: "10-14 лет",
+        price: "",
+        sourceUrl: "https://51.pfdo.ru/app/?program=1",
+      }],
+    },
+  );
+
+  assert.match(message, /Стоимость: Уточните при записи/);
 });
 
 test("builds scenario 3 PDF answers from classifier hierarchy labels", () => {

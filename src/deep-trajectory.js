@@ -4,6 +4,9 @@ const { getProgramUrl } = require("./pfdo-config");
 
 const MAX_COMPLETED_LINKS = 5;
 const UNKNOWN_SCHEDULE_LABEL = "Уточните при записи";
+const UNKNOWN_PRICE_LABEL = "Уточните при записи";
+const TOPIC_SUMMARY_GROUP_LIMIT = 4;
+const TOPIC_SUMMARY_CATEGORY_LIMIT = 3;
 const ADVANCED_TOPIC_PATTERNS = [
   /углуб/i,
   /проект/i,
@@ -701,10 +704,12 @@ function normalizeRecommendationItem(item, detail, criteria = {}) {
   };
 }
 
-function buildDeepTrajectoryResultMessage(analysis, state, result) {
+function buildDeepTrajectoryResultMessage(analysis, state, result, options = {}) {
+  const linkFormat = options.linkFormat || "plain";
+  const display = (value) => formatDisplayText(value, linkFormat);
   const profile = result.topicProfile || state.completedTopicProfile || analysis?.topicProfile || createTopicProfile([]);
   const topicSummary = profile.categoryLabels?.length
-    ? profile.categoryLabels.slice(0, 8).join(", ")
+    ? profile.categoryLabels.slice(0, 8).map(display).join(", ")
     : "категории тем не удалось надежно определить";
   const searchContext = result.searchContext || {};
   const municipalityName = searchContext.municipalityName || state.municipalityName;
@@ -713,8 +718,8 @@ function buildDeepTrajectoryResultMessage(analysis, state, result) {
     "Я нашел пройденные программы и определил основные направления тем по классификатору:",
     topicSummary,
     "",
-    `Буду искать продолжение в населенном пункте: ${municipalityName}.`,
-    `Возраст: ${ageYears} лет.`,
+    `Буду искать продолжение в населенном пункте: ${display(municipalityName)}.`,
+    `Возраст: ${display(ageYears)} лет.`,
     "",
   ];
 
@@ -734,21 +739,21 @@ function buildDeepTrajectoryResultMessage(analysis, state, result) {
   lines.push("Вот программы, которые выглядят как следующий шаг:", "");
   result.items.forEach((item, index) => {
     const related = item.relatedTopics.length
-      ? item.relatedTopics.join(", ")
+      ? item.relatedTopics.map(display).join(", ")
       : "похожа по направлению и описанию программы";
-    const deeper = [...item.newTopics, ...item.depthSignals].slice(0, 5);
+    const deeper = [...item.newTopics, ...item.depthSignals].slice(0, 5).map(display);
     lines.push(
-      `${index + 1}. ${item.program}`,
+      formatProgramTitle(item, index, linkFormat),
       "",
       "Почему это следующий шаг:",
       `продолжает направления: ${related}`,
       `углубляет за счет: ${deeper.length ? deeper.join(", ") : "более продвинутого тематического профиля"}`,
       "",
-      `Где: ${item.venue}, ${item.address}`,
-      `Когда: ${item.schedule}`,
-      `Возраст: ${item.ageLabel}`,
-      `Стоимость: ${item.price}`,
-      `Онлайн-запись: ${item.sourceUrl}`,
+      `Где: ${display(item.venue)}, ${display(item.address)}`,
+      `Когда: ${display(item.schedule)}`,
+      `Возраст: ${display(item.ageLabel)}`,
+      `Стоимость: ${display(item.price || UNKNOWN_PRICE_LABEL)}`,
+      `Онлайн-запись: ${display(item.sourceUrl)}`,
       "",
     );
   });
@@ -756,26 +761,48 @@ function buildDeepTrajectoryResultMessage(analysis, state, result) {
   return lines.join("\n");
 }
 
-function buildCompletedProgramsReviewMessage(state, analysis) {
+function buildCompletedProgramsReviewMessage(state, analysis, options = {}) {
+  const linkFormat = options.linkFormat || "plain";
+  const display = (value) => formatDisplayText(value, linkFormat);
   const programs = state.completedPrograms || analysis?.programs || [];
   const lines = ["Я собрал информацию по пройденным программам:", ""];
 
   if (state.missingProgramIds?.length) {
-    lines.push(`Не нашел в локальном каталоге программы: ${state.missingProgramIds.join(", ")}.`, "");
+    lines.push(`Не нашел в локальном каталоге программы: ${state.missingProgramIds.map(display).join(", ")}.`, "");
   }
 
   programs.forEach((program, index) => {
     lines.push(
-      `${index + 1}. ${program.name}`,
-      `Классификатор тем (уровень 1/2): ${formatProgramTopicClassifications(program.topics)}`,
-      `Населенный пункт: ${program.municipalityName || "не указан"}`,
-      `Возраст: ${program.ageLabel || formatAgeRange(program.ageMinMonths, program.ageMaxMonths)}`,
-      `Стоимость: ${program.price || "Стоимость уточняется на карточке программы"}`,
+      formatProgramTitle(program, index, linkFormat),
+      "",
+      "Что ребенок уже проходил:",
+      formatProgramTopicClassifications(program.topics, { linkFormat }),
+      "",
+      `Населенный пункт: ${display(program.municipalityName || "не указан")}`,
+      `Возраст: ${display(program.ageLabel || formatAgeRange(program.ageMinMonths, program.ageMaxMonths))}`,
+      `Стоимость: ${display(program.price || UNKNOWN_PRICE_LABEL)}`,
       "",
     );
   });
 
   return lines.join("\n");
+}
+
+function buildCompletedProgramsTopicsMessage(state, analysis, options = {}) {
+  const linkFormat = options.linkFormat || "plain";
+  const programs = state.completedPrograms || analysis?.programs || [];
+  const lines = ["Все темы по пройденным программам:", ""];
+
+  programs.forEach((program, index) => {
+    lines.push(
+      formatProgramTitle(program, index, linkFormat),
+      "",
+      formatProgramTopicClassifications(program.topics, { full: true, linkFormat }),
+      "",
+    );
+  });
+
+  return lines.join("\n").trim();
 }
 
 function buildScenario3PdfAnswers(state) {
@@ -823,15 +850,37 @@ function buildScenario3PdfResult(result) {
   };
 }
 
-function formatProgramTopicClassifications(topics) {
-  const names = uniqueBy(
-    (topics || []).map(formatTopicClassifierPath).filter(Boolean),
-    (name) => normalizeText(name),
-  );
-  if (!names.length) return "категории тем не удалось надежно определить";
-  const visible = names.slice(0, 8);
-  const suffix = names.length > visible.length ? ` и еще ${names.length - visible.length}` : "";
-  return `${visible.join(", ")}${suffix}`;
+function formatProgramTopicClassifications(topics, options = {}) {
+  const groups = buildTopicClassifierGroups(topics);
+  const linkFormat = options.linkFormat || "plain";
+  const display = (value) => formatDisplayText(value, linkFormat);
+  if (!groups.length) return "категории тем не удалось надежно определить";
+
+  const full = Boolean(options.full);
+  const visibleGroups = full ? groups : groups.slice(0, TOPIC_SUMMARY_GROUP_LIMIT);
+  const lines = [];
+  let hiddenCount = groups
+    .slice(visibleGroups.length)
+    .reduce((sum, group) => sum + group.children.length, 0);
+
+  for (const group of visibleGroups) {
+    lines.push(display(group.parentName));
+    const visibleChildren = full ? group.children : group.children.slice(0, TOPIC_SUMMARY_CATEGORY_LIMIT);
+    hiddenCount += full ? 0 : Math.max(0, group.children.length - visibleChildren.length);
+    for (const child of visibleChildren) {
+      lines.push(`• ${display(child)}`);
+    }
+    if (!full && group.children.length > visibleChildren.length) {
+      lines.push(`• еще ${group.children.length - visibleChildren.length}`);
+    }
+    lines.push("");
+  }
+
+  if (!full && hiddenCount > 0) {
+    lines.push(`Еще ${hiddenCount} категорий не показано. Нажмите «Показать все темы», чтобы увидеть полный список.`);
+  }
+
+  return lines.join("\n").trim();
 }
 
 function formatTopicClassifierPath(topic) {
@@ -844,11 +893,88 @@ function formatTopicClassifierPath(topic) {
   return categoryName || parentName;
 }
 
+function buildTopicClassifierGroups(topics) {
+  const groups = new Map();
+  for (const topic of topics || []) {
+    const rawParentName = cleanClassifierLabel(topic.parentName);
+    const rawCategoryName = cleanClassifierLabel(topic.categoryName);
+    if (!rawParentName && !rawCategoryName) continue;
+
+    const parentGeneric = isGenericClassifierLabel(rawParentName);
+    const categoryGeneric = isGenericClassifierLabel(rawCategoryName);
+    const parentName = parentGeneric || !rawParentName ? "Прочее" : rawParentName;
+    const categoryName = categoryGeneric || !rawCategoryName ? "Без категории" : rawCategoryName;
+    const generic = parentGeneric || parentName === "Прочее";
+    const key = normalizeText(parentName);
+
+    if (!groups.has(key)) {
+      groups.set(key, {
+        parentName,
+        generic,
+        children: [],
+        childKeys: new Set(),
+      });
+    }
+
+    const group = groups.get(key);
+    const childKey = normalizeText(categoryName);
+    if (!group.childKeys.has(childKey)) {
+      group.childKeys.add(childKey);
+      group.children.push(categoryName);
+    }
+  }
+
+  return [...groups.values()]
+    .sort((left, right) => Number(left.generic) - Number(right.generic))
+    .map(({ childKeys, ...group }) => group);
+}
+
+function formatProgramTitle(program, index, linkFormat = "plain") {
+  const name = program.program || program.name || "Программа";
+  const url = program.sourceUrl || (program.id ? getProgramUrl(Number(program.id)) : "");
+  const number = `${index + 1}.`;
+  if (!url) return `${number} ${formatDisplayText(name, linkFormat)}`;
+  if (linkFormat === "html") {
+    return `${number} <a href="${escapeHtmlAttribute(url)}">${escapeHtml(name)}</a>`;
+  }
+  if (linkFormat === "markdown") {
+    return `${number} [${escapeMarkdownLinkText(name)}](${url})`;
+  }
+  return `${number} ${name}`;
+}
+
 function cleanClassifierLabel(value) {
   const text = String(value || "").replace(/\s+/g, " ").trim();
   const normalized = normalizeText(text);
   if (!text || normalized === "unknown" || normalized === "unknown_content") return "";
   return text;
+}
+
+function isGenericClassifierLabel(value) {
+  const normalized = normalizeText(value);
+  return normalized === "предметные темы без категории" ||
+    normalized === "предметная тема без категории" ||
+    normalized === "без категории";
+}
+
+function formatDisplayText(value, linkFormat = "plain") {
+  const text = String(value ?? "");
+  return linkFormat === "html" ? escapeHtml(text) : text;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function escapeHtmlAttribute(value) {
+  return escapeHtml(value).replace(/"/g, "&quot;");
+}
+
+function escapeMarkdownLinkText(value) {
+  return String(value ?? "").replace(/[[\]\\]/g, "\\$&");
 }
 
 function buildMunicipalityKeyboard(municipalities) {
@@ -1000,8 +1126,7 @@ function summarizePrice(program, group) {
     if (amount === 0) return "Бесплатно";
     return `${formatPrice(group.period_price)} за период`;
   }
-  if (program?.directory_program_document_id) return "Смотрите условия на карточке PFDO";
-  return "Стоимость уточняется на карточке программы";
+  return UNKNOWN_PRICE_LABEL;
 }
 
 function topEntries(map, limit) {
@@ -1124,6 +1249,7 @@ module.exports = {
   mergeScenario3Links,
   getDeepTrajectoryRecommendations,
   buildCompletedProgramsReviewMessage,
+  buildCompletedProgramsTopicsMessage,
   buildDeepTrajectoryResultMessage,
   buildScenario3PdfAnswers,
   buildScenario3PdfResult,
