@@ -1062,7 +1062,7 @@ async function handleCallback(callbackQuery) {
     for (const chunk of splitMessage(text)) {
       await sendMessage(chatId, chunk, undefined, messageOptions);
     }
-    return null;
+    return sendMessage(chatId, SCENARIO_3.completedTopics.followupText, SCENARIO_3.criteria.keyboard);
   }
 
   if (data === "s3:pdf:yes") {
