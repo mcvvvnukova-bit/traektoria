@@ -13,7 +13,7 @@
 | сопровождаете работающий сервис | [Руководство оператора](operator-guide.md), затем [Deploy Runbook](deploy-runbook.md) |
 | настраиваете окружение | [Справочник конфигурации](configuration-reference.md) |
 | меняете подбор программ | [Архитектура](architecture-overview.md), сценарии и `src/recommendations.js` |
-| работаете с данными PFDO | [PFDO-пайплайн данных](pfdo-data-pipeline.md), [Схема PFDO-зеркала](pfdo-database-schema.md), [Program Topic Extractor](../services/program-topic-extractor/README.md) |
+| работаете с данными PFDO | [PFDO-пайплайн данных](pfdo-data-pipeline.md), [Схема PFDO-зеркала](pfdo-database-schema.md), [Program Topic Extractor](../services/program-topic-extractor/README.md), [Классификация тем](program-topic-classification.md) |
 
 ## Документы пакета
 
@@ -52,6 +52,7 @@
 - [PFDO OpenAPI Import Notes](pfdo-public-api.import.md) — заметки по импорту OpenAPI-описания.
 - [PFDO OpenAPI Swagger](pfdo-public-api.swagger.json) — локальная копия Swagger-описания.
 - [Program Topic Extractor](../services/program-topic-extractor/README.md) — извлечение, нормализация и классификация тем программ.
+- [Классификация тем программ](program-topic-classification.md) — таксономии, правила, экспорты и ручная проверка тем.
 - [Схема потока рекомендаций](recommendation-data-flow.svg) — визуальная схема data flow.
 
 ## Карта читательских ролей
@@ -87,8 +88,9 @@
 1. [PFDO-пайплайн данных](pfdo-data-pipeline.md)
 2. [Схема PFDO-зеркала](pfdo-database-schema.md)
 3. [Program Topic Extractor](../services/program-topic-extractor/README.md)
-4. [Руководство оператора](operator-guide.md#обновление-данных-pfdo)
-5. `scripts/import-pfdo-mirror.js`, `scripts/download-pfdo-program-documents.js`, `scripts/import-pfdo-calendar-topics.js`, `scripts/build-pfdo-topic-analytics.js`
+4. [Классификация тем программ](program-topic-classification.md)
+5. [Руководство оператора](operator-guide.md#обновление-данных-pfdo)
+6. `scripts/import-pfdo-mirror.js`, `scripts/download-pfdo-program-documents.js`, `scripts/import-pfdo-calendar-topics.js`, `scripts/build-pfdo-topic-analytics.js`
 
 ## Термины
 

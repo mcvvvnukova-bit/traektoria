@@ -51,6 +51,8 @@ Documents without a recognizable planning structure produce no topic rows.
 
 ## Topic normalization and classification
 
+Detailed reference: [Program topic classification](../../docs/program-topic-classification.md).
+
 The repository-level importer refreshes this layer automatically after it writes
 calendar-topic rows. For a scoped import, only the affected program analytics is
 rebuilt; for an unscoped import, the full analytics layer is rebuilt. Use
@@ -79,23 +81,7 @@ Current record types:
 - `service` — assessment, schedule, method, equipment, or other learning-process metadata;
 - `noise` — OCR/table fragments and unusable rows.
 
-The current classifier version is `technical-hierarchical-taxonomy-v3`. It improves the pipeline in five places:
-
-- stronger normalization for control prefixes, bibliography fragments, equipment, schedule rows, and common technical synonyms;
-- context-aware scoring that uses `topic + program + section` rather than the topic string alone;
-- a hierarchy `record_type -> domain -> category`, for example `content -> engineering -> robotics`;
-- quality reporting against `pfdo_topic_classifier_golden_labels`;
-- feedback overrides from manually reviewed golden labels before rule scoring.
-
-Technical-direction exports:
-
-- `exports/классификатор тем технической направленности.csv`
-- `exports/сводка классификатора тем технической направленности.csv`
-- `exports/очередь ручной проверки тем технической направленности.csv`
-- `exports/качество классификатора тем технической направленности.json`
-- `exports/ошибки классификатора тем технической направленности.csv`
-
-`unknown_content` stays a content category rather than mixing uncertain subject topics with extraction noise, so these rows can feed manual review and later embedding-based classification.
+The current classifier version is `directional-hierarchical-taxonomy-v4`. It uses direction-aware rule profiles for technical and tourist/local-history programs, writes CSV exports to `exports/`, and keeps `unknown_content` as a content category for manual review.
 
 ## Parser auto-updater
 
@@ -240,3 +226,230 @@ If `pypdf` is unavailable, PDF extraction fails with a clear error message.
 - This service is optimized for local, offline processing.
 - It prefers raw recall over aggressive cleanup.
 - If a file is scanned and has no readable text layer, the service may return zero topics and a warning.
+
+---
+
+# Program Topic Extractor: русская версия
+
+Офлайн-сервис на `Node.js` для извлечения сырых списков тем из локальных файлов программ.
+
+## Что делает сервис
+
+- Читает локальный манифест, который связывает метаданные программ с локальными файлами.
+- Извлекает текст из `pdf`, `doc`, `docx`, `txt`, `md`, `html` и `rtf`.
+- Ищет в извлеченном тексте разделы, похожие на списки тем, например:
+  - `Учебно-тематический план`
+  - `Содержание программы`
+  - `Перечень изучаемых разделов`
+  - `Тема 1`
+  - `1.1 ...`
+- Записывает плоский экспорт сырых тем в `CSV` и `JSON`.
+
+Сервис **не** нормализует и не классифицирует темы.
+
+## Импорт календарных тем в PostgreSQL
+
+Для локального зеркала PFDO используйте импортёр верхнего уровня:
+
+```bash
+node scripts/import-pfdo-calendar-topics.js --concurrency 4
+```
+
+Он читает локальные пути к документам из `pfdo_programs.program_document_local_path`, извлекает строки календарных тем из явных таблиц планирования и записывает нормализованные строки в `pfdo_program_calendar_topics`.
+
+Целевая таблица включает поля:
+
+- `program_id`
+- `topic_order`
+- `section_title`
+- `topic_name`
+- `hours_theory`
+- `hours_practice`
+- `hours_total`
+- `activity_type`
+- `control_form`
+- `source_excerpt`
+- `document_path`
+- `confidence`
+
+Парсер календарных тем ориентируется на разделы вроде `учебно-тематический план`, `календарно-тематический план`, а также на таблицы с колонками `теория / практика / всего`. Он также обрабатывает:
+
+- структурированные таблицы `.docx`, извлеченные напрямую из Word XML, включая таблицы, где часы разделены как `Всего / Теория / Практика`;
+- вертикальные календарные графики, где `month`, `activity type`, `hours`, `topic`, `place` и `control form` извлекаются отдельными строками;
+- годовые планы спортивной подготовки, где строки вроде `Общая физическая подготовка` содержат часы по этапам подготовки.
+
+Документы без распознаваемой структуры планирования не дают строк тем.
+
+## Нормализация и классификация тем
+
+Подробное описание: [Program topic classification](../../docs/program-topic-classification.md).
+
+Импортёр верхнего уровня автоматически обновляет этот слой после записи календарных тем. Для точечного импорта пересобирается аналитика только затронутых программ. Для полного импорта пересобирается весь аналитический слой. Используйте `--skip-analytics` только если нужно намеренно обновить сырые строки без обновления производных таблиц.
+
+Ручная пересборка также доступна:
+
+```bash
+node scripts/build-pfdo-topic-analytics.js
+node scripts/build-pfdo-topic-analytics.js --program-id 364163
+node scripts/build-pfdo-topic-analytics.js --program-ids exports/program_ids.csv
+```
+
+Скрипт создает версионированный производный слой:
+
+- `pfdo_program_topic_normalizations` — одна нормализованная запись для каждой извлеченной строки темы;
+- `pfdo_program_topic_aggregates` — часы, агрегированные по `program_id + normalized_topic_key + record_type`;
+- `pfdo_program_topic_classifications` — иерархическая rule-based классификация;
+- `pfdo_program_topic_review_queue` — темы с низкой уверенностью или неизвестной категорией для ручной проверки;
+- `pfdo_topic_classifier_golden_labels` — хранилище вручную проверенных меток для будущей оценки и обучения.
+
+Текущие типы записей:
+
+- `content` — предметное содержание, которое изучают обучающиеся;
+- `service` — аттестация, расписание, методика, оборудование и другие служебные сведения об учебном процессе;
+- `noise` — OCR-фрагменты, обрывки таблиц и непригодные строки.
+
+Текущая версия классификатора — `directional-hierarchical-taxonomy-v4`. Она использует профили правил с учетом направленности для технических и туристско-краеведческих программ, записывает CSV-экспорты в `exports/` и оставляет `unknown_content` как предметную категорию для ручной проверки.
+
+## Автообновление парсера
+
+Модуль автообновления парсера проверяет выбранные программы через OpenAI, локально обновляет устаревшие строки `pfdo_program_calendar_topics`, если свежий результат парсера уже совпадает с документом, и создает структурированный план исправления, если нужно менять сам парсер.
+
+OpenAI не разрешено генерировать или применять кодовые патчи в активном сценарии обновления. При несовпадениях парсера модель возвращает строгий JSON с диагнозом, целевыми файлами и функциями парсера, планом изменений, действием для базы данных, планом проверки и уровнем риска. Локальные изменения кода затем выполняет разработчик или coding agent, после чего они проверяются тестами и регрессией перед повторной загрузкой строк в базу.
+
+Планы исправления могут затрагивать только реализацию парсера и extractor-ов:
+
+- `services/program-topic-extractor/src/parsers/*.js`
+- `services/program-topic-extractor/src/extractors/*.js`
+- `services/program-topic-extractor/src/python/*.py`
+- `services/program-topic-extractor/src/swift/*.swift`
+
+Начинайте с режима dry-run:
+
+```bash
+node scripts/update-pfdo-program-parser.js \
+  --program-ids exports/parser_update_programs.csv \
+  --limit 1
+```
+
+Режим применения должен быть включен явно:
+
+```bash
+node scripts/update-pfdo-program-parser.js \
+  --program-ids exports/parser_update_programs.csv \
+  --apply
+```
+
+Обязательное окружение:
+
+- `OPENAI_API_KEY`
+- `PFDO_MIRROR_DATABASE_URL`, если локальный адрес по умолчанию `postgresql://localhost:5432/pfdo_51_mirror` не подходит
+
+Необязательные флаги:
+
+- `--model <model>` переопределяет модель OpenAI.
+- `--out-dir <path>` меняет директорию артефактов с `tmp/parser-updater` на указанную.
+- `--limit <n>` обрабатывает только первые N идентификаторов программ.
+- `--no-db-refresh` запрещает apply-режиму перезаписывать `pfdo_program_calendar_topics` и поэтому пропускает analytics refresh, который запускает импортёр.
+- `--max-attempts <n>` сохранен для совместимости; исправления парсера теперь формируют один план ремонта вместо итеративных GPT-патчей.
+
+Результаты:
+
+- `exports/parser-updater-report.csv`
+- `exports/parser-updater-report.json`
+- `tmp/parser-updater/<program_id>/` с результатами парсинга, ответами оценки, артефактами локального обновления БД, планами исправления, снимками и сводками проверки
+
+Правила безопасности:
+
+- dry-run используется по умолчанию;
+- планы исправления от OpenAI — это рекомендательный JSON, а не исполняемые патчи;
+- OpenAI не может менять структуру базы данных или код доступа к базе через updater;
+- перед обновлением строки тем сохраняются в snapshot, а при неудачной проверке текущей программы или регрессии snapshot базы восстанавливается;
+- регрессионная проверка использует `services/program-topic-extractor/regression/checked-programs.csv`.
+
+## Входной манифест
+
+Поддерживаемые форматы:
+
+- `CSV`
+- `JSON`
+
+Обязательные поля для каждой программы:
+
+- `program_id`
+- `program_name`
+- `program_portal_url`
+- `document_path`
+
+Необязательные поля:
+
+- `document_format`
+- `program_document_url`
+
+Пример CSV:
+
+```csv
+program_id,program_name,program_portal_url,document_path,document_format,program_document_url
+364163,Школа программирования,https://51.pfdo.ru/app/public/program/364163,/absolute/path/to/364163.pdf,pdf,https://docs.pfdo.ru/uploads/programs/example.pdf
+```
+
+## Использование
+
+```bash
+node services/program-topic-extractor/index.js \
+  --manifest /absolute/path/to/manifest.csv \
+  --out-dir /absolute/path/to/output
+```
+
+Необязательные флаги:
+
+- `--csv-name topics.csv`
+- `--json-name topics.json`
+
+## Выходные файлы
+
+### CSV
+
+Плоский экспорт, где одна строка соответствует одной сырой теме.
+
+Колонки:
+
+- `program_id`
+- `program_name`
+- `program_portal_url`
+- `program_document_url`
+- `document_path`
+- `document_format`
+- `topic_order`
+- `topic_raw`
+- `source_section`
+- `source_excerpt`
+- `extraction_method`
+- `extractor_warnings`
+
+### JSON
+
+Структурированный экспорт с метаданными по каждой программе, предупреждениями и извлеченными темами.
+
+## Детали извлечения
+
+### DOC / DOCX / RTF
+
+Использует macOS `textutil`, если он доступен.
+
+Для `.docx` extractor также читает `word/document.xml` напрямую и добавляет структурированные строки таблиц к извлеченному тексту. Это сохраняет ячейки таблиц раздельными для парсинга календарных тем и уменьшает число пропусков, которые возникают из-за того, что `textutil` сглаживает табличную структуру.
+
+### PDF
+
+Использует небольшой вспомогательный скрипт с `pypdf`. Сервис проверяет варианты в таком порядке:
+
+1. `TOPIC_EXTRACTOR_PYTHON_BIN`
+2. Встроенный Python из Codex runtime
+3. `python3`
+
+Если `pypdf` недоступен, извлечение PDF завершается понятной ошибкой.
+
+## Примечания
+
+- Сервис оптимизирован для локальной офлайн-обработки.
+- Он предпочитает полноту сырых результатов агрессивной очистке.
+- Если файл является сканом и не содержит читаемого текстового слоя, сервис может вернуть ноль тем и предупреждение.
