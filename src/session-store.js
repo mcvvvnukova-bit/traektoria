@@ -13,13 +13,20 @@ async function loadSession(platform, chatId) {
   return decodeJsonCell(rows[0][0]);
 }
 
-async function saveSession(platform, chatId, payload) {
+async function saveSession(platform, chatId, payload, metadata = {}) {
   await executeSql(`
-    INSERT INTO bot_sessions (platform, chat_id, payload, updated_at)
-    VALUES (${textToSql(normalizePlatform(platform))}, ${textToSql(normalizeChatId(chatId))}, ${jsonToSql(payload)}, NOW())
+    INSERT INTO bot_sessions (platform, chat_id, payload, metadata, updated_at)
+    VALUES (
+      ${textToSql(normalizePlatform(platform))},
+      ${textToSql(normalizeChatId(chatId))},
+      ${jsonToSql(payload)},
+      ${jsonToSql(normalizeMetadata(metadata))},
+      NOW()
+    )
     ON CONFLICT (platform, chat_id)
     DO UPDATE SET
       payload = EXCLUDED.payload,
+      metadata = bot_sessions.metadata || EXCLUDED.metadata,
       updated_at = NOW();
   `);
 }
@@ -55,15 +62,16 @@ async function loadRuntimeState(key) {
   return decodeJsonCell(rows[0][0]);
 }
 
-async function logRecommendation(platform, chatId, result) {
+async function logRecommendation(platform, chatId, result, metadata = {}) {
   await executeSql(`
-    INSERT INTO recommendation_history (platform, chat_id, source, confidence, payload)
+    INSERT INTO recommendation_history (platform, chat_id, source, confidence, payload, metadata)
     VALUES (
       ${textToSql(normalizePlatform(platform))},
       ${textToSql(normalizeChatId(chatId))},
       ${textToSql(result.source || "unknown")},
       ${textToSql(result.confidence || "unknown")},
-      ${jsonToSql(result)}
+      ${jsonToSql(result)},
+      ${jsonToSql(normalizeMetadata(metadata))}
     );
   `);
 }
@@ -77,6 +85,13 @@ function normalizeChatId(chatId) {
     throw new Error("Missing chat id");
   }
   return String(chatId);
+}
+
+function normalizeMetadata(metadata) {
+  if (!metadata || typeof metadata !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(metadata).filter(([, value]) => value !== undefined),
+  );
 }
 
 module.exports = {

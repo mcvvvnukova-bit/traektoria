@@ -3,6 +3,7 @@ const path = require("node:path");
 
 const DEFAULT_RECONNECT_MIN_MS = 1000;
 const DEFAULT_RECONNECT_MAX_MS = 30000;
+const USER_METADATA_CACHE_TTL_MS = 5 * 60 * 1000;
 
 class MattermostTransport {
   constructor(config, handlers) {
@@ -19,6 +20,7 @@ class MattermostTransport {
     this.reconnectTimer = null;
     this.wsSeq = 1;
     this.WebSocket = null;
+    this.userMetadataCache = new Map();
   }
 
   async start() {
@@ -143,11 +145,42 @@ class MattermostTransport {
     });
     if (!incoming) return;
 
+    const metadata = await this.getUserMetadata(incoming.target.userId);
     await this.handlers.onText({
       platform: "mattermost",
-      chat: incoming.target,
+      chat: { ...incoming.target, ...metadata },
       text: incoming.text,
     });
+  }
+
+  async getUserMetadata(userId) {
+    if (!userId) return { username: null };
+    const cacheKey = String(userId);
+    const cached = this.userMetadataCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.metadata;
+    }
+
+    let metadata;
+    try {
+      const { data } = await this.request(`/api/v4/users/${encodeURIComponent(cacheKey)}`);
+      metadata = {
+        userId: cacheKey,
+        username: data?.username || null,
+      };
+    } catch (error) {
+      this.lastError = error.message;
+      metadata = {
+        userId: cacheKey,
+        username: null,
+      };
+    }
+
+    this.userMetadataCache.set(cacheKey, {
+      metadata,
+      expiresAt: Date.now() + USER_METADATA_CACHE_TTL_MS,
+    });
+    return metadata;
   }
 
   scheduleReconnect() {

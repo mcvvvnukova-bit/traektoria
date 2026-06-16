@@ -2,11 +2,15 @@ CREATE TABLE IF NOT EXISTS bot_sessions (
   platform TEXT NOT NULL DEFAULT 'telegram',
   chat_id TEXT PRIMARY KEY,
   payload JSONB NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE bot_sessions
   ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'telegram';
+
+ALTER TABLE bot_sessions
+  ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 DO $$
 BEGIN
@@ -57,11 +61,15 @@ CREATE TABLE IF NOT EXISTS recommendation_history (
   source TEXT,
   confidence TEXT,
   payload JSONB NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 ALTER TABLE recommendation_history
   ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'telegram';
+
+ALTER TABLE recommendation_history
+  ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 DO $$
 BEGIN

@@ -47,7 +47,7 @@ const {
   logRecommendation,
 } = require("./session-store");
 const { initializeDatabase } = require("./database-init");
-const { makeTarget, normalizeTarget, targetKey, targetFilePart } = require("./target");
+const { makeTarget, normalizeTarget, targetKey, targetFilePart, targetMetadata } = require("./target");
 const { createMattermostTransport, replyMarkupOptions } = require("./mattermost-transport");
 const { TELEGRAM_BOT_COMMANDS, parseBotCommand, buildHelpText } = require("./telegram-menu");
 
@@ -191,7 +191,7 @@ async function getSession(target) {
 async function persistSession(target, session) {
   const normalized = normalizeTarget(target);
   sessions.set(targetKey(normalized), session);
-  await saveSession(normalized.platform, normalized.id, session);
+  await saveSession(normalized.platform, normalized.id, session, targetMetadata(normalized));
 }
 
 async function resetSession(target) {
@@ -199,7 +199,7 @@ async function resetSession(target) {
   const session = createSession();
   sessions.set(targetKey(normalized), session);
   await deleteSession(normalized.platform, normalized.id);
-  await saveSession(normalized.platform, normalized.id, session);
+  await saveSession(normalized.platform, normalized.id, session, targetMetadata(normalized));
   return session;
 }
 
@@ -816,7 +816,7 @@ async function showScenario3Results(chatId, session) {
     ...result,
     scenario: scenario3LogScenario(session.scenario3),
     answers: session.scenario3,
-  });
+  }, targetMetadata(target));
 
   const linkFormat = scenario3LinkFormat(chatId);
   const messageOptions = scenario3MessageOptions(linkFormat);
@@ -944,7 +944,7 @@ async function showScenario2Results(chatId, session) {
     ...result,
     scenario: "agent_selection",
     answers: session.scenario2,
-  });
+  }, targetMetadata(target));
 
   const text = buildScenario2ResultMessage(result);
   for (const chunk of splitMessage(text)) {
@@ -1378,7 +1378,10 @@ async function sendScenario3Pdf(chatId, session) {
 
 function incomingMessageTarget(message) {
   const chat = message.chat || {};
-  return makeTarget(message.platform || "telegram", chat.id ?? message.chat_id, chat);
+  return makeTarget(message.platform || "telegram", chat.id ?? message.chat_id, {
+    ...chat,
+    ...incomingUserMetadata(message),
+  });
 }
 
 function incomingCallbackTarget(callbackQuery) {
@@ -1386,8 +1389,38 @@ function incomingCallbackTarget(callbackQuery) {
   return makeTarget(
     callbackQuery.platform || callbackQuery.message?.platform || "telegram",
     chat.id ?? callbackQuery.chat_id,
-    chat,
+    {
+      ...chat,
+      ...incomingUserMetadata(callbackQuery),
+    },
   );
+}
+
+function incomingUserMetadata(message) {
+  const user = firstObject(message.from, message.sender, message.user);
+  const userId = firstDefined(message.userId, message.user_id, user?.id, user?.user_id);
+  const metadata = {};
+
+  if (userId !== undefined) {
+    metadata.userId = userId;
+  }
+
+  const username = firstDefined(message.username, user?.username);
+  if (username !== undefined) {
+    metadata.username = username || null;
+  } else if (user && userId !== undefined) {
+    metadata.username = null;
+  }
+
+  return metadata;
+}
+
+function firstObject(...values) {
+  return values.find((value) => value && typeof value === "object") || null;
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined);
 }
 
 function inlineKeyboard(options, columns = 1) {
@@ -1654,7 +1687,11 @@ async function processMaxUpdate(update) {
   if (updateType === "bot_started") {
     const chatId = getMaxChatId(update);
     if (chatId != null) {
-      await handleText({ platform: "max", chat: { id: chatId }, text: "/start" });
+      await handleText({
+        platform: "max",
+        chat: { id: chatId, ...getMaxUserMetadata(update) },
+        text: "/start",
+      });
     }
     return;
   }
@@ -1663,7 +1700,11 @@ async function processMaxUpdate(update) {
     const chatId = getMaxChatId(update);
     const text = getMaxMessageText(update);
     if (chatId != null && text) {
-      await handleText({ platform: "max", chat: { id: chatId }, text });
+      await handleText({
+        platform: "max",
+        chat: { id: chatId, ...getMaxUserMetadata(update) },
+        text,
+      });
     }
     return;
   }
@@ -1679,7 +1720,7 @@ async function processMaxUpdate(update) {
         data,
         message: {
           platform: "max",
-          chat: { id: chatId },
+          chat: { id: chatId, ...getMaxUserMetadata(update) },
           message_id: callback.message?.message_id || callback.message_id || update.message?.message_id,
         },
       });
@@ -1699,6 +1740,28 @@ function getMaxMessageText(update) {
     update.text ||
     ""
   ).trim();
+}
+
+function getMaxUserMetadata(update) {
+  const callback = update.callback || update.message_callback || {};
+  const user = firstObject(
+    update.message?.sender,
+    update.message?.from,
+    update.sender,
+    update.from,
+    update.user,
+    callback.sender,
+    callback.user,
+    callback.message?.sender,
+    callback.message?.from,
+  );
+  if (!user) return {};
+
+  const metadata = {};
+  const userId = firstDefined(user.user_id, user.id, update.user_id, update.sender_id);
+  if (userId !== undefined) metadata.userId = userId;
+  metadata.username = firstDefined(user.username, update.username) || null;
+  return metadata;
 }
 
 async function processMattermostText(target, text) {

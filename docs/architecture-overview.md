@@ -107,9 +107,9 @@ flowchart LR
 
 | Таблица | Назначение |
 | --- | --- |
-| `bot_sessions` | Текущее состояние диалога по `(platform, chat_id)`. |
+| `bot_sessions` | Текущее состояние диалога по `(platform, chat_id)` и transport metadata пользователя. |
 | `bot_runtime_state` | Runtime-состояние, например Telegram update offset. |
-| `recommendation_history` | История рекомендаций, источник, confidence и payload результата. |
+| `recommendation_history` | История рекомендаций, источник, confidence, payload результата и transport metadata пользователя. |
 
 ### `pfdo_51_mirror`
 

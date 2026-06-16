@@ -2,6 +2,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { SCENARIO_1 } = require("./flow");
+const { targetMetadata } = require("./target");
 const {
   createDescriptionSelectionState,
   ensureDescriptionSelectionState,
@@ -154,7 +155,7 @@ async function showDescriptionResults(context) {
     ...result,
     scenario: "description_selection",
     answers: buildHistoryPayload(state),
-  });
+  }, targetMetadata(target));
 
   const text = buildDescriptionResultMessage(state, result);
   for (const chunk of splitMessage(text)) {
