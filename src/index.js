@@ -35,6 +35,7 @@ const {
   buildScenario3PdfAnswers,
   buildScenario3PdfResult,
   buildMunicipalityKeyboard,
+  findMunicipalityByName,
 } = require("./deep-trajectory");
 const {
   loadSession,
@@ -707,6 +708,27 @@ async function handleScenario3CriteriaText(chatId, text, session) {
   return showScenario3Results(chatId, session);
 }
 
+async function askScenario3CustomMunicipality(chatId, session) {
+  session.step = "s3_wait_municipality_text";
+  await persistSession(chatId, session);
+  return sendMessage(chatId, "Напишите населенный пункт, в котором искать продолжение. Например: Североморск.");
+}
+
+async function handleScenario3MunicipalityText(chatId, text, session) {
+  const municipality = await findMunicipalityByName(text);
+  if (!municipality) {
+    return sendMessage(
+      chatId,
+      "Не нашел такой населенный пункт в каталоге PFDO. Напишите иначе или выберите один из найденных вариантов.",
+      buildMunicipalityKeyboard(session.scenario3?.municipalityOptions || []),
+    );
+  }
+
+  session.scenario3.municipalityId = municipality.id;
+  session.scenario3.municipalityName = municipality.name;
+  return showScenario3CompletedReview(chatId, session);
+}
+
 async function enrichScenario3CriteriaWithLlm(session, text) {
   if (!analyzeFreeText) return;
   try {
@@ -924,6 +946,10 @@ async function handleText(message) {
     return handleScenario3CriteriaText(chatId, text, session);
   }
 
+  if (session.step === "s3_wait_municipality_text") {
+    return handleScenario3MunicipalityText(chatId, text, session);
+  }
+
   if (session.step === "s3_wait_age") {
     const ageMatch = text.match(/(\d{1,2})/);
     const age = ageMatch ? Number(ageMatch[1]) : null;
@@ -1086,6 +1112,10 @@ async function handleCallback(callbackQuery) {
 
   if (scenarios[data]) {
     return selectScenario(chatId, scenarios[data]);
+  }
+
+  if (data === "s3:municipality:custom") {
+    return askScenario3CustomMunicipality(chatId, session);
   }
 
   if (data.startsWith("s3:municipality:")) {

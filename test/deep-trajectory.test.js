@@ -10,6 +10,7 @@ const {
   buildDeepTrajectoryResultMessage,
   buildScenario3PdfAnswers,
   buildScenario3PdfResult,
+  buildMunicipalityKeyboard,
 } = require("../src/deep-trajectory");
 
 test("parses PFDO program links and keeps link-to-program mapping", () => {
@@ -54,6 +55,20 @@ test("caps accumulated scenario 3 links at five programs", () => {
   );
 
   assert.deepEqual(state.submittedProgramIds, [1, 2, 3, 4, 5]);
+});
+
+test("adds custom municipality option to scenario 3 municipality keyboard", () => {
+  const keyboard = buildMunicipalityKeyboard([
+    { id: 10, name: "Мурманск" },
+    { id: 20, name: "ЗАТО Североморск" },
+  ]);
+
+  assert.deepEqual(keyboard.inline_keyboard.at(-1), [
+    { text: "Другой населенный пункт", callback_data: "s3:municipality:custom" },
+  ]);
+  assert.deepEqual(keyboard.inline_keyboard[0], [
+    { text: "Мурманск", callback_data: "s3:municipality:10" },
+  ]);
 });
 
 test("builds completed programs review with classifier hierarchy labels and program facts", () => {

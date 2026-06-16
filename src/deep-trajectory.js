@@ -1023,9 +1023,12 @@ function escapeMarkdownLinkText(value) {
 
 function buildMunicipalityKeyboard(municipalities) {
   return {
-    inline_keyboard: municipalities.map((item) => [
-      { text: item.name, callback_data: `s3:municipality:${item.id}` },
-    ]),
+    inline_keyboard: [
+      ...municipalities.map((item) => [
+        { text: item.name, callback_data: `s3:municipality:${item.id}` },
+      ]),
+      [{ text: "Другой населенный пункт", callback_data: "s3:municipality:custom" }],
+    ],
   };
 }
 
@@ -1298,5 +1301,6 @@ module.exports = {
   buildScenario3PdfAnswers,
   buildScenario3PdfResult,
   buildMunicipalityKeyboard,
+  findMunicipalityByName,
   parsePfdoProgramLinks,
 };
