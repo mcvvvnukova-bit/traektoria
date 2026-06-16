@@ -894,6 +894,19 @@ function shouldShowPendingTopics(program) {
   return !program?.topics?.length && program?.topicsStatus && program.topicsStatus !== "ready";
 }
 
+function hasMeaningfulCompletedTopics(state, analysis = null) {
+  const programs = state?.completedPrograms || analysis?.programs || [];
+  return programs.some((program) => hasMeaningfulTopicClassifications(program.topics || []));
+}
+
+function hasMeaningfulTopicClassifications(topics) {
+  return buildTopicClassifierGroups(topics).some((group) => !isGenericTopicGroup(group));
+}
+
+function isGenericTopicGroup(group) {
+  return Boolean(group?.generic) || normalizeText(group?.parentName) === "прочее";
+}
+
 function formatProgramTopicClassifications(topics, options = {}) {
   const groups = buildTopicClassifierGroups(topics);
   const linkFormat = options.linkFormat || "plain";
@@ -1302,5 +1315,6 @@ module.exports = {
   buildScenario3PdfResult,
   buildMunicipalityKeyboard,
   findMunicipalityByName,
+  hasMeaningfulCompletedTopics,
   parsePfdoProgramLinks,
 };

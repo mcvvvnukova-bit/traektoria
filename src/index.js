@@ -36,6 +36,7 @@ const {
   buildScenario3PdfResult,
   buildMunicipalityKeyboard,
   findMunicipalityByName,
+  hasMeaningfulCompletedTopics,
 } = require("./deep-trajectory");
 const {
   loadSession,
@@ -685,13 +686,22 @@ async function showScenario3CompletedReview(chatId, session, analysis = null) {
   const messageOptions = scenario3MessageOptions(linkFormat);
   const text = buildCompletedProgramsReviewMessage(session.scenario3, analysis, { linkFormat });
   const chunks = splitMessage(text);
+  const hasMeaningfulTopics = hasMeaningfulCompletedTopics(session.scenario3, analysis);
   for (let index = 0; index < chunks.length; index += 1) {
     await sendMessage(
       chatId,
       chunks[index],
-      index === chunks.length - 1 ? SCENARIO_3.completedTopics.keyboard : undefined,
+      index === chunks.length - 1 && hasMeaningfulTopics ? SCENARIO_3.completedTopics.keyboard : undefined,
       messageOptions,
     );
+  }
+  if (!hasMeaningfulTopics) {
+    if (!session.scenario3.criteria) {
+      session.scenario3.criteria = createDescriptionSelectionState();
+    }
+    session.step = "s3_wait_criteria_text";
+    await persistSession(chatId, session);
+    return sendMessage(chatId, SCENARIO_3.criteria.interestsFallbackText);
   }
   session.step = "s3_criteria_choice";
   await persistSession(chatId, session);
@@ -1081,6 +1091,11 @@ async function handleCallback(callbackQuery) {
     const programs = session.scenario3.completedPrograms || [];
     if (!programs.length) {
       return sendMessage(chatId, "Не нашел сохраненный список пройденных программ. Начните заново через /start.");
+    }
+    if (!hasMeaningfulCompletedTopics(session.scenario3)) {
+      session.step = "s3_wait_criteria_text";
+      await persistSession(chatId, session);
+      return sendMessage(chatId, SCENARIO_3.criteria.interestsFallbackText);
     }
     const linkFormat = scenario3LinkFormat(chatId);
     const messageOptions = scenario3MessageOptions(linkFormat);

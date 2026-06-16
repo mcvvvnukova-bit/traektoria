@@ -11,6 +11,7 @@ const {
   buildScenario3PdfAnswers,
   buildScenario3PdfResult,
   buildMunicipalityKeyboard,
+  hasMeaningfulCompletedTopics,
 } = require("../src/deep-trajectory");
 
 test("parses PFDO program links and keeps link-to-program mapping", () => {
@@ -69,6 +70,53 @@ test("adds custom municipality option to scenario 3 municipality keyboard", () =
   assert.deepEqual(keyboard.inline_keyboard[0], [
     { text: "Мурманск", callback_data: "s3:municipality:10" },
   ]);
+});
+
+test("detects missing or generic completed topics as not meaningful", () => {
+  const state = createScenario3State();
+  state.completedPrograms = [
+    {
+      name: "Без тем",
+      topics: [],
+    },
+    {
+      name: "Прочее",
+      topics: [
+        {
+          parentName: "Предметные темы без категории",
+          categoryName: "Предметная тема без категории",
+        },
+      ],
+    },
+  ];
+
+  assert.equal(hasMeaningfulCompletedTopics(state), false);
+});
+
+test("detects at least one classifier category as meaningful completed topics", () => {
+  const state = createScenario3State();
+  state.completedPrograms = [
+    {
+      name: "Прочее",
+      topics: [
+        {
+          parentName: "Предметные темы без категории",
+          categoryName: "Предметная тема без категории",
+        },
+      ],
+    },
+    {
+      name: "Робототехника",
+      topics: [
+        {
+          parentName: "Инженерное творчество",
+          categoryName: "Робототехника",
+        },
+      ],
+    },
+  ];
+
+  assert.equal(hasMeaningfulCompletedTopics(state), true);
 });
 
 test("builds completed programs review with classifier hierarchy labels and program facts", () => {
