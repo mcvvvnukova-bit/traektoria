@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Traektoria51 PFDO mirror sync nightly
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+RandomizedDelaySec=30m
+Persistent=true
+Unit=traektoria51-pfdo-sync.service
+
+[Install]
+WantedBy=timers.target

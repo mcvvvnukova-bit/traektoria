@@ -1,6 +1,8 @@
 const { queryRows, decodeJsonCell } = require("./db");
 const { getMirrorDatabaseUrl, getMunicipalities, getProgramDetail } = require("./pfdo-mirror");
 const { getProgramUrl } = require("./pfdo-config");
+const { ensurePfdoProgramsImported } = require("./pfdo-program-sync");
+const { loadProgramSyncStates } = require("./pfdo-sync-state");
 
 const MAX_COMPLETED_LINKS = 5;
 const UNKNOWN_SCHEDULE_LABEL = "Уточните при записи";
@@ -30,6 +32,7 @@ function createScenario3State() {
     missingProgramIds: [],
     invalidLinks: [],
     completedPrograms: [],
+    pendingTopicProgramIds: [],
     municipalityOptions: [],
     municipalityId: null,
     municipalityName: "",
@@ -71,18 +74,35 @@ async function analyzeCompletedProgramsFromIds(programIds, options = {}) {
     };
   }
 
-  const programs = await loadProgramsByIds(parsed.programIds);
+  let programs = await loadProgramsByIds(parsed.programIds);
   const foundIds = new Set(programs.map((program) => Number(program.id)));
-  const missingProgramIds = parsed.programIds.filter((id) => !foundIds.has(Number(id)));
+  let missingProgramIds = parsed.programIds.filter((id) => !foundIds.has(Number(id)));
+  let importResults = [];
+  if (missingProgramIds.length && options.importMissing !== false) {
+    const syncResult = await ensurePfdoProgramsImported(missingProgramIds, {
+      triggerSource: options.triggerSource || "scenario3",
+    });
+    importResults = syncResult.results || [];
+    if (importResults.some((result) => result.status === "imported")) {
+      programs = await loadProgramsByIds(parsed.programIds);
+      const refreshedFoundIds = new Set(programs.map((program) => Number(program.id)));
+      missingProgramIds = parsed.programIds.filter((id) => !refreshedFoundIds.has(Number(id)));
+    }
+  }
   const topicMap = await loadTopicsForPrograms(programs.map((program) => program.id));
+  const syncStateMap = await safeLoadProgramSyncStates(programs.map((program) => program.id));
   const programsWithTopics = await Promise.all(programs.map(async (program) => {
     const topics = topicMap.get(Number(program.id)) || [];
     const detail = await getProgramDetailSafe(program.id);
     const groups = detail?.available_groups || [];
     const bestGroup = chooseBestGroup(groups);
+    const syncState = syncStateMap.get(Number(program.id)) || null;
     return {
       ...program,
       topics,
+      syncState,
+      documentStatus: syncState?.documentStatus || "",
+      topicsStatus: syncState?.topicsStatus || (topics.length ? "ready" : ""),
       price: summarizePrice(detail?.program || {}, bestGroup),
       schedule: summarizeSchedule(bestGroup),
       ageLabel: formatAgeRange(program.ageMinMonths, program.ageMaxMonths),
@@ -102,11 +122,16 @@ async function analyzeCompletedProgramsFromIds(programIds, options = {}) {
     (item) => item.id,
   );
   const inferredAge = inferAgeFromPrograms(programsWithTopics);
+  const pendingTopicProgramIds = programsWithTopics
+    .filter((program) => !program.topics.length && program.topicsStatus && program.topicsStatus !== "ready")
+    .map((program) => Number(program.id));
 
   return {
     ...parsed,
     programs: programsWithTopics,
     missingProgramIds,
+    importResults,
+    pendingTopicProgramIds,
     municipalities,
     topicProfile: createTopicProfile(programsWithTopics),
     inferredAge,
@@ -395,6 +420,15 @@ async function loadTopicsForPrograms(programIds) {
   }
 
   return topicMap;
+}
+
+async function safeLoadProgramSyncStates(programIds) {
+  try {
+    return await loadProgramSyncStates(programIds);
+  } catch (error) {
+    console.warn("PFDO sync state unavailable:", error.message);
+    return new Map();
+  }
 }
 
 function rowToProgram(row) {
@@ -772,11 +806,14 @@ function buildCompletedProgramsReviewMessage(state, analysis, options = {}) {
   }
 
   programs.forEach((program, index) => {
+    const topicSummary = shouldShowPendingTopics(program)
+      ? "классификация тем еще готовится. Я уже нашел карточку программы в PFDO, темы появятся после обработки документа программы."
+      : formatProgramTopicClassifications(program.topics, { linkFormat });
     lines.push(
       formatProgramTitle(program, index, linkFormat),
       "",
       "Что ребенок уже проходил:",
-      formatProgramTopicClassifications(program.topics, { linkFormat }),
+      topicSummary,
       "",
       `Населенный пункт: ${display(program.municipalityName || "не указан")}`,
       `Возраст: ${display(program.ageLabel || formatAgeRange(program.ageMinMonths, program.ageMaxMonths))}`,
@@ -794,10 +831,13 @@ function buildCompletedProgramsTopicsMessage(state, analysis, options = {}) {
   const lines = ["Все темы по пройденным программам:", ""];
 
   programs.forEach((program, index) => {
+    const topicsText = shouldShowPendingTopics(program)
+      ? "Классификация тем еще готовится. Полный список появится после обработки документа программы."
+      : formatProgramTopicClassifications(program.topics, { full: true, linkFormat });
     lines.push(
       formatProgramTitle(program, index, linkFormat),
       "",
-      formatProgramTopicClassifications(program.topics, { full: true, linkFormat }),
+      topicsText,
       "",
     );
   });
@@ -848,6 +888,10 @@ function buildScenario3PdfResult(result) {
       enrollment: item.enrollment,
     })),
   };
+}
+
+function shouldShowPendingTopics(program) {
+  return !program?.topics?.length && program?.topicsStatus && program.topicsStatus !== "ready";
 }
 
 function formatProgramTopicClassifications(topics, options = {}) {

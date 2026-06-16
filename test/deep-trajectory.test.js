@@ -136,6 +136,25 @@ test("uses booking clarification when completed program price is unknown", () =>
   assert.doesNotMatch(message, /Стоимость уточняется на карточке программы/);
 });
 
+test("explains pending topic processing for on-demand imported programs", () => {
+  const state = createScenario3State();
+  state.completedPrograms = [{
+    name: "Маленькие следопыты",
+    municipalityName: "Североморск",
+    ageLabel: "6-7 лет",
+    price: "Уточните при записи",
+    topicsStatus: "pending",
+    topics: [],
+  }];
+
+  const reviewMessage = buildCompletedProgramsReviewMessage(state);
+  const allTopicsMessage = buildCompletedProgramsTopicsMessage(state);
+
+  assert.match(reviewMessage, /классификация тем еще готовится/);
+  assert.match(allTopicsMessage, /Полный список появится после обработки документа программы/);
+  assert.doesNotMatch(reviewMessage, /категории тем не удалось надежно определить/);
+});
+
 test("builds deep trajectory result with classifier hierarchy labels instead of raw topics", () => {
   const profile = {
     categoryLabels: ["Инженерное творчество / Робототехника"],

@@ -441,6 +441,50 @@ END $$;
 CREATE INDEX IF NOT EXISTS pfdo_programs_municipality_idx
   ON pfdo_programs (municipality_id);
 
+CREATE TABLE IF NOT EXISTS pfdo_sync_runs (
+  id BIGSERIAL PRIMARY KEY,
+  run_type TEXT NOT NULL,
+  trigger_source TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'running',
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  finished_at TIMESTAMPTZ,
+  counters JSONB NOT NULL DEFAULT '{}'::jsonb,
+  error_text TEXT
+);
+
+CREATE INDEX IF NOT EXISTS pfdo_sync_runs_status_idx
+  ON pfdo_sync_runs (status, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS pfdo_sync_runs_type_idx
+  ON pfdo_sync_runs (run_type, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS pfdo_program_sync_state (
+  program_id BIGINT PRIMARY KEY,
+  catalog_status TEXT NOT NULL DEFAULT 'active',
+  first_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at TIMESTAMPTZ,
+  last_catalog_missing_at TIMESTAMPTZ,
+  last_detail_imported_at TIMESTAMPTZ,
+  last_document_processed_at TIMESTAMPTZ,
+  last_topics_processed_at TIMESTAMPTZ,
+  search_payload_hash TEXT,
+  detail_payload_hash TEXT,
+  document_status TEXT NOT NULL DEFAULT 'pending',
+  topics_status TEXT NOT NULL DEFAULT 'pending',
+  last_sync_run_id BIGINT,
+  last_error TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS pfdo_program_sync_state_catalog_idx
+  ON pfdo_program_sync_state (catalog_status, last_seen_at DESC);
+
+CREATE INDEX IF NOT EXISTS pfdo_program_sync_state_processing_idx
+  ON pfdo_program_sync_state (document_status, topics_status, updated_at DESC);
+
+CREATE INDEX IF NOT EXISTS pfdo_program_sync_state_run_idx
+  ON pfdo_program_sync_state (last_sync_run_id);
+
 CREATE TABLE IF NOT EXISTS pfdo_program_activity_links (
   program_id BIGINT NOT NULL,
   activity_id INTEGER NOT NULL,

@@ -1364,6 +1364,7 @@ function applyScenario3Analysis(state, analysis) {
   state.invalidLinks = analysis.invalidLinks;
   state.completedProgramIds = analysis.programs.map((program) => Number(program.id));
   state.missingProgramIds = analysis.missingProgramIds;
+  state.pendingTopicProgramIds = analysis.pendingTopicProgramIds || [];
   state.completedPrograms = analysis.programs.map((program) => ({
     id: program.id,
     name: program.name,
@@ -1380,6 +1381,8 @@ function applyScenario3Analysis(state, analysis) {
     availablePlaces: program.availablePlaces,
     enrollment: program.enrollment,
     sourceUrl: program.sourceUrl,
+    documentStatus: program.documentStatus,
+    topicsStatus: program.topicsStatus,
     topics: program.topics || [],
   }));
   state.municipalityOptions = analysis.municipalities;

@@ -4,6 +4,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
+    "pfdo:sync": "node scripts/sync-pfdo-programs.js",
     "test": "node --test test/*.test.js"
   },
   "dependencies": {
