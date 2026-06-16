@@ -50,6 +50,12 @@ const { initializeDatabase } = require("./database-init");
 const { makeTarget, normalizeTarget, targetKey, targetFilePart, targetMetadata } = require("./target");
 const { createMattermostTransport, replyMarkupOptions } = require("./mattermost-transport");
 const { TELEGRAM_BOT_COMMANDS, MAX_BOT_COMMANDS, parseBotCommand, buildHelpText } = require("./telegram-menu");
+const {
+  getMaxCallbackId,
+  getMaxCallbackMessageId,
+  getMaxCallbackPayload,
+  getMaxChatId,
+} = require("./max-update");
 
 const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED !== "false";
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -1710,26 +1716,21 @@ async function processMaxUpdate(update) {
   }
 
   if (updateType === "message_callback") {
-    const callback = update.callback || update.message_callback || {};
     const chatId = getMaxChatId(update);
-    const data = callback.payload || callback.callback_data || callback.data || update.payload;
+    const data = getMaxCallbackPayload(update);
     if (chatId != null && data) {
       await handleCallback({
         platform: "max",
-        id: callback.callback_id || update.callback_id,
+        id: getMaxCallbackId(update),
         data,
         message: {
           platform: "max",
           chat: { id: chatId, ...getMaxUserMetadata(update) },
-          message_id: callback.message?.message_id || callback.message_id || update.message?.message_id,
+          message_id: getMaxCallbackMessageId(update),
         },
       });
     }
   }
-}
-
-function getMaxChatId(update) {
-  return update.chat_id || update.message?.chat_id || update.message?.recipient?.chat_id || update.callback?.chat_id;
 }
 
 function getMaxMessageText(update) {
