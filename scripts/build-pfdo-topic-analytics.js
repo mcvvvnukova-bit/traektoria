@@ -7,6 +7,8 @@ const {
   normalizeAndClassifyTopic,
   classifyNormalizedTopic,
   classificationFromGoldenLabel,
+  domainNameForCode,
+  classifierScopeForDirection,
   normalizeKey,
   NORMALIZER_VERSION,
   CLASSIFIER_VERSION,
@@ -20,6 +22,10 @@ const DATABASE_URL =
 const schemaPath = path.resolve(__dirname, "..", "db", "pfdo-mirror-schema.sql");
 const batchSize = Math.max(100, Number(process.env.PFDO_TOPIC_ANALYTICS_BATCH_SIZE || 500));
 const exportDir = path.resolve(__dirname, "..", "exports");
+const topicExportDirections = [
+  { directionName: "Техническая", fileSuffix: "технической направленности" },
+  { directionName: "Туристско-краеведческая", fileSuffix: "туристско-краеведческой направленности" },
+];
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
@@ -527,7 +533,8 @@ GROUP BY normalized_topic_name, record_type, category_code, category_name, sourc
 }
 
 function classifyAggregate(aggregate, goldenLabels) {
-  const golden = goldenLabels.get(aggregate.normalizedTopicKey);
+  const classifierScope = classifierScopeForDirection(aggregate.directionName);
+  const golden = classifierScope === "technical" ? goldenLabels.get(aggregate.normalizedTopicKey) : null;
   if (golden) {
     return classificationFromGoldenLabel({
       normalizedTopicName: aggregate.normalizedTopicName,
@@ -544,6 +551,7 @@ function classifyAggregate(aggregate, goldenLabels) {
     normalizedTopicKey: aggregate.normalizedTopicKey,
     programName: aggregate.programName,
     sectionTitle: "",
+    directionName: aggregate.directionName,
     recordTypeHint: aggregate.recordType,
     noiseReason: aggregate.recordType === "noise" ? "unknown" : "",
   });
@@ -683,6 +691,12 @@ function reviewReason(aggregate, classification) {
 }
 
 async function writeTechnicalExports() {
+  for (const direction of topicExportDirections) {
+    await writeDirectionExports(direction);
+  }
+}
+
+async function writeDirectionExports({ directionName, fileSuffix }) {
   const rows = await queryRows(
     `
 SELECT
@@ -700,7 +714,7 @@ FROM pfdo_program_topic_aggregates a
 JOIN pfdo_program_topic_classifications c ON c.aggregate_id = a.id
 JOIN pfdo_programs p ON p.id = a.program_id
 JOIN pfdo_program_directions d ON d.id = p.direction_id
-WHERE d.name = 'Техническая'
+WHERE d.name = ${textToSql(directionName)}
 ORDER BY p.search_name, p.id, c.record_type, c.category_code, a.first_topic_order;
 `,
     DATABASE_URL,
@@ -723,7 +737,7 @@ ORDER BY p.search_name, p.id, c.record_type, c.category_code, a.first_topic_orde
 
   await fs.mkdir(exportDir, { recursive: true });
   await writeCsv(
-    path.join(exportDir, "классификатор тем технической направленности.csv"),
+    path.join(exportDir, `классификатор тем ${fileSuffix}.csv`),
     detailRows,
     ["program_name", "portal_url", "normalized_topic_name", "topic_rows", "hours_total", "record_type", "domain_code", "domain_name", "category_code", "category_name", "taxonomy_path", "confidence"],
   );
@@ -763,15 +777,15 @@ ORDER BY p.search_name, p.id, c.record_type, c.category_code, a.first_topic_orde
     .sort((left, right) => recordTypeOrder(left.record_type) - recordTypeOrder(right.record_type) || right.program_count - left.program_count);
 
   await writeCsv(
-    path.join(exportDir, "сводка классификатора тем технической направленности.csv"),
+    path.join(exportDir, `сводка классификатора тем ${fileSuffix}.csv`),
     summaryRows,
     ["record_type", "domain_code", "domain_name", "category_code", "category_name", "aggregate_topics", "program_count", "hours_total"],
   );
 
-  await writeTechnicalReviewQueueExport();
+  await writeDirectionReviewQueueExport({ directionName, fileSuffix });
 }
 
-async function writeTechnicalReviewQueueExport() {
+async function writeDirectionReviewQueueExport({ directionName, fileSuffix }) {
   const rows = await queryRows(
     `
 SELECT
@@ -787,7 +801,7 @@ SELECT
 FROM pfdo_program_topic_review_queue q
 JOIN pfdo_programs p ON p.id = q.program_id
 JOIN pfdo_program_directions d ON d.id = p.direction_id
-WHERE d.name = 'Техническая'
+WHERE d.name = ${textToSql(directionName)}
 ORDER BY
   CASE q.reason WHEN 'unknown_content' THEN 1 WHEN 'low_confidence' THEN 2 ELSE 3 END,
   q.confidence ASC,
@@ -813,7 +827,7 @@ ORDER BY
   }));
 
   await writeCsv(
-    path.join(exportDir, "очередь ручной проверки тем технической направленности.csv"),
+    path.join(exportDir, `очередь ручной проверки тем ${fileSuffix}.csv`),
     exportRows,
     [
       "program_name",
@@ -859,17 +873,7 @@ function recordTypeOrder(value) {
 }
 
 function domainName(code) {
-  return {
-    it: "IT и программирование",
-    engineering: "Инженерия и робототехника",
-    media_design: "Медиа и дизайн",
-    transport: "Транспорт и безопасность",
-    project: "Проектная деятельность",
-    service: "Служебные темы",
-    noise: "Шум и нераспознанные темы",
-    unknown_content: "Предметные темы без категории",
-    content: "Предметные темы",
-  }[code] || code;
+  return domainNameForCode(code);
 }
 
 function nullableText(value) {

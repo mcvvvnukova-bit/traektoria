@@ -19,6 +19,7 @@ __pycache__/
 tmp/
 exports/
 .cache/
+.obsidian/
 .DS_Store
 *.log
 npm-debug.log*

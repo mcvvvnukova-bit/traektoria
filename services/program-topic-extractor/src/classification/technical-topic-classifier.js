@@ -1,5 +1,5 @@
 const NORMALIZER_VERSION = "topic-normalizer-v3";
-const CLASSIFIER_VERSION = "technical-hierarchical-taxonomy-v3";
+const CLASSIFIER_VERSION = "directional-hierarchical-taxonomy-v4";
 const AGGREGATION_VERSION = "program-topic-aggregate-v1";
 
 const SERVICE_CATEGORY_BY_CODE = {
@@ -24,6 +24,12 @@ const DOMAIN_BY_CODE = {
   media_design: "Медиа и дизайн",
   transport: "Транспорт и безопасность",
   project: "Проектная деятельность",
+  tourism_skills: "Туристская подготовка",
+  orientation: "Ориентирование и топография",
+  local_history: "Краеведение и региональная история",
+  museum_excursion: "Музейное и экскурсионное дело",
+  sport_training: "Физическая и соревновательная подготовка",
+  civic_patriotic: "Патриотическая и гражданско-спортивная подготовка",
   service: "Служебные темы",
   noise: "Шум и нераспознанные темы",
   unknown_content: "Предметные темы без категории",
@@ -46,6 +52,24 @@ const CONTENT_CATEGORY_BY_CODE = {
   engineering_science: "Инженерные и естественнонаучные основы",
   transport_safety: "ПДД, транспорт и первая помощь",
   project_research: "Проектная и исследовательская деятельность",
+  tourism_basics: "Основы туризма и туристский быт",
+  tourism_equipment_knots: "Снаряжение и туристские узлы",
+  hiking_routes_technique: "Походы, маршруты, техника и тактика",
+  safety_survival: "Безопасность и выживание в природной среде",
+  first_aid: "Первая помощь и походная медицина",
+  orientation_topography: "Карты, компас и топография",
+  sport_orienteering: "Спортивное ориентирование",
+  regional_studies: "Краеведение и история родного края",
+  nature_geography: "Природа, география и экология края",
+  ethnography_culture: "Этнография, культура и традиции",
+  military_history: "Военная история и память",
+  museum_studies: "Музейное дело, фонды и экспозиции",
+  excursion_guiding: "Экскурсоведение и работа экскурсовода",
+  excursion_routes: "Экскурсионные маршруты и путеводители",
+  tourism_competitions: "Туристские соревнования и техника туризма",
+  physical_training: "Общая и специальная физическая подготовка",
+  patriotic_civic: "Юнармия и гражданско-патриотическая подготовка",
+  drill_civil_defense: "Строевая подготовка, ГО и спасательные работы",
 };
 const CONTENT_DOMAIN_BY_CATEGORY = {
   programming: "it",
@@ -64,9 +88,27 @@ const CONTENT_DOMAIN_BY_CATEGORY = {
   media_animation: "media_design",
   transport_safety: "transport",
   project_research: "project",
+  tourism_basics: "tourism_skills",
+  tourism_equipment_knots: "tourism_skills",
+  hiking_routes_technique: "tourism_skills",
+  safety_survival: "tourism_skills",
+  first_aid: "tourism_skills",
+  orientation_topography: "orientation",
+  sport_orienteering: "orientation",
+  regional_studies: "local_history",
+  nature_geography: "local_history",
+  ethnography_culture: "local_history",
+  military_history: "local_history",
+  museum_studies: "museum_excursion",
+  excursion_guiding: "museum_excursion",
+  excursion_routes: "museum_excursion",
+  tourism_competitions: "sport_training",
+  physical_training: "sport_training",
+  patriotic_civic: "civic_patriotic",
+  drill_civil_defense: "civic_patriotic",
 };
 
-const CONTENT_RULES = [
+const TECHNICAL_CONTENT_RULES = [
   rule("programming", "Программирование и алгоритмы", "it", "IT и программирование", [
     "программир",
     "алгоритм",
@@ -315,9 +357,284 @@ const CONTENT_RULES = [
   ], ["защита проекта", "проектная деятельность", "подготовка к защите", "участие в соревнованиях"]),
 ];
 
+const TOURISM_CONTENT_RULES = [
+  rule("excursion_guiding", "Экскурсоведение и работа экскурсовода", "museum_excursion", "Музейное и экскурсионное дело", [
+    "экскурсов",
+    "экскурсионн",
+    "экскурс",
+    "показ",
+    "рассказ",
+    "речь экскурсов",
+    "профессиональные качества экскурсовода",
+    "методика подготовки экскурсии",
+    "методика проведения экскурсии",
+    "экскурсионный метод",
+    "экскурсионная речь",
+  ], ["основы экскурсоведения", "методика подготовки экскурсии", "методика проведения экскурсии", "построение экскурсионного рассказа", "школа юного экскурсовода"]),
+  rule("museum_studies", "Музейное дело, фонды и экспозиции", "museum_excursion", "Музейное и экскурсионное дело", [
+    "музе",
+    "музейн",
+    "музеевед",
+    "экспозиц",
+    "экспонат",
+    "выставк",
+    "фонд",
+    "музейный предмет",
+    "источники и материалы",
+    "учет",
+    "учёт",
+    "описание музейных",
+    "стенд",
+  ], ["основы музейных знаний", "структура и организация музея", "источники и материалы для музейной работы", "фонды школьного музея", "музейная экспозиция"]),
+  rule("excursion_routes", "Экскурсионные маршруты и путеводители", "museum_excursion", "Музейное и экскурсионное дело", [
+    "экскурсионн маршрут",
+    "путевод",
+    "буклет",
+    "маршрут экскурсии",
+    "пешеходная экскурсия",
+    "автобусная экскурсия",
+    "экологическая тропа",
+    "тропа",
+    "геокешинг",
+    "терренкур",
+  ], ["построение и защита экскурсионного маршрута", "разработка тематических экскурсий", "создание буклета-путеводителя"]),
+  rule("orientation_topography", "Карты, компас и топография", "orientation", "Ориентирование и топография", [
+    "топограф",
+    "карта",
+    "картограф",
+    "компас",
+    "азимут",
+    "масштаб",
+    "условные знаки",
+    "план местности",
+    "план учебного кабинета",
+    "стороны горизонта",
+    "горизонтал",
+    "легенда карты",
+  ], ["ориентирование и топография", "топографическая подготовка", "ориентирование на местности"]),
+  rule("sport_orienteering", "Спортивное ориентирование", "orientation", "Ориентирование и топография", [
+    "спортивное ориентирование",
+    "ориентирован",
+    "контрольный пункт",
+    "дистанц",
+    "техника ориентирования",
+    "тактика ориентирования",
+    "кп",
+    "легенды кп",
+    "отметк",
+  ], ["спортивное ориентирование", "техника ориентирования", "тактика ориентирования", "краткий обзор развития спортивного ориентирования"]),
+  rule("tourism_basics", "Основы туризма и туристский быт", "tourism_skills", "Туристская подготовка", [
+    "знакомство с туризмом",
+    "основы туризма",
+    "история развития туризма",
+    "туристские путешествия",
+    "виды туризма",
+    "юный турист",
+    "туристята",
+  ], ["знакомство с туризмом", "основы туризма", "туристские путешествия история развития туризма"]),
+  rule("tourism_equipment_knots", "Снаряжение и туристские узлы", "tourism_skills", "Туристская подготовка", [
+    "снаряж",
+    "туристские узлы",
+    "узлы",
+    "узел",
+    "верев",
+    "верёв",
+    "рюкзак",
+    "палатк",
+    "тент",
+    "карабин",
+    "личное и групповое",
+    "личное и общественное",
+  ], ["специальное туристское снаряжение", "личное и групповое снаряжение", "личное и общественное туристское снаряжение", "узлы применяемые в туризме"]),
+  rule("tourism_competitions", "Туристские соревнования и техника туризма", "sport_training", "Физическая и соревновательная подготовка", [
+    "соревн",
+    "слет",
+    "слёт",
+    "тпт",
+    "тлт",
+    "кпт",
+    "полоса препятств",
+    "командная техника",
+    "техника пешеходного туризма",
+    "техника лыжного туризма",
+    "спортивно-турист",
+    "туристские норматив",
+  ], ["соревнования по технике пешеходного туризма", "соревнования по технике лыжного туризма", "спортивно-туристическое мероприятие по тпт"]),
+  rule("hiking_routes_technique", "Походы, маршруты, техника и тактика", "tourism_skills", "Туристская подготовка", [
+    "поход",
+    "маршрут",
+    "пешеходн",
+    "лыжн",
+    "водн",
+    "учебно-тренировочный поход",
+    "утпвд",
+    "марш-бросок",
+    "привал",
+    "ночлег",
+    "бивак",
+    "питание",
+    "питьевой режим",
+    "туристский быт",
+    "походные должности",
+    "туристск",
+    "туризм",
+    "препятств",
+  ], ["основы туризма", "основы туристской подготовки", "организация туристского быта", "техника и тактика в пешем походе", "техника и тактика в лыжном походе", "подготовка к пешему походу", "подготовка к лыжному походу"]),
+  rule("safety_survival", "Безопасность и выживание в природной среде", "tourism_skills", "Туристская подготовка", [
+    "безопасн",
+    "техника безопасности",
+    "инструктаж",
+    "опасност",
+    "опасности на маршруте",
+    "опасности зимнего маршрута",
+    "выжив",
+    "сигнал бедствия",
+    "экстремальн",
+    "природной среде",
+    "заготовка дров",
+    "костер",
+    "костёр",
+    "пожар",
+    "противопожар",
+  ], ["выживание в природной среде", "способы подачи сигналов бедствия", "опасности на маршруте", "опасности зимнего маршрута"]),
+  rule("first_aid", "Первая помощь и походная медицина", "tourism_skills", "Туристская подготовка", [
+    "первая помощь",
+    "доврачеб",
+    "медицин",
+    "аптечк",
+    "травм",
+    "походный травматизм",
+    "бинт",
+    "жгут",
+    "кровотеч",
+    "ожог",
+    "неотложн",
+    "самоконтроль",
+    "гигиен",
+    "здоров",
+  ], ["оказание первой помощи", "составление медицинской аптечки", "первая помощь при неотложных состояниях", "гигиена туриста-путешественника"]),
+  rule("regional_studies", "Краеведение и история родного края", "local_history", "Краеведение и региональная история", [
+    "краевед",
+    "родной край",
+    "малая родина",
+    "мой край",
+    "история области",
+    "история с",
+    "история города",
+    "история улиц",
+    "земляк",
+    "достопримеч",
+    "памятник",
+    "символ",
+    "герб",
+    "флаг",
+    "поселени",
+    "населенн",
+    "населённ",
+    "кольский край",
+    "мурманск",
+    "алакуртт",
+    "кандалакш",
+  ], ["введение в краеведение", "моя малая родина", "краеведение кольского края", "родной край его природные особенности история мурманской области"]),
+  rule("nature_geography", "Природа, география и экология края", "local_history", "Краеведение и региональная история", [
+    "географ",
+    "рельеф",
+    "климат",
+    "природ",
+    "эколог",
+    "ископаем",
+    "минерал",
+    "геолог",
+    "животн",
+    "раститель",
+    "водные",
+    "водопад",
+    "сопк",
+    "полуостров",
+    "тундр",
+    "заповед",
+  ], ["география мурманской области", "природные ископаемые кольского полуострова", "климатические условия", "животный и растительный мир", "тропинка в природу"]),
+  rule("ethnography_culture", "Этнография, культура и традиции", "local_history", "Краеведение и региональная история", [
+    "этнограф",
+    "традиц",
+    "культур",
+    "фольклор",
+    "народ",
+    "саам",
+    "помор",
+    "обыча",
+    "ремесл",
+  ], ["этнография кольского края"]),
+  rule("military_history", "Военная история и память", "local_history", "Краеведение и региональная история", [
+    "вов",
+    "великая отечественная",
+    "война",
+    "герои",
+    "полковод",
+    "вооруженных сил",
+    "вооружённых сил",
+    "локальных конфликт",
+    "сво",
+    "память",
+    "мужеств",
+    "доблест",
+    "слава",
+  ], ["основные сражения вов", "юные герои вов", "великие полководцы россии", "земляки-участники и герои великой отечественной войны"]),
+  rule("patriotic_civic", "Юнармия и гражданско-патриотическая подготовка", "civic_patriotic", "Патриотическая и гражданско-спортивная подготовка", [
+    "юнарм",
+    "юнармеец",
+    "юнармейц",
+    "кодекс юнармейца",
+    "патриот",
+    "гражданск",
+    "присяга",
+    "символы юнарм",
+  ], ["юнармия история символы стиль кодекс юнармейца"]),
+  rule("drill_civil_defense", "Строевая подготовка, ГО и спасательные работы", "civic_patriotic", "Патриотическая и гражданско-спортивная подготовка", [
+    "строев",
+    "гражданская оборона",
+    "огневая",
+    "радиацион",
+    "химическ",
+    "биологическ",
+    "средства связи",
+    "спасательн",
+    "спасательные работы",
+    "противопожар",
+    "самообор",
+    "военно-приклад",
+  ], ["основы строевой подготовки", "строевые приемы и движения", "спасательные работы", "средства связи"]),
+  rule("physical_training", "Общая и специальная физическая подготовка", "sport_training", "Физическая и соревновательная подготовка", [
+    "общая физическая",
+    "специальная физическая",
+    "офп",
+    "сфп",
+    "технико-тактическая подготовка",
+    "бег",
+    "эстафет",
+    "спортивные игры",
+    "подвижные игры",
+    "тренировка",
+    "физическая подготовка",
+  ], ["общая физическая подготовка", "специальная физическая подготовка", "технико-тактическая подготовка"]),
+  rule("project_research", "Проектная и исследовательская деятельность", "project", "Проектная деятельность", [
+    "проект",
+    "исслед",
+    "защита",
+    "презентац",
+    "творческ",
+    "фотовыставк",
+    "буклет",
+    "веб-квест",
+    "квест",
+  ], ["проектная деятельность", "защита проектной работы", "презентация творческих работ"]),
+];
+
+const CONTENT_RULES = TECHNICAL_CONTENT_RULES;
+
 const SERVICE_RULES = [
   serviceRule("assessment", ["диагност", "контроль", "тест", "аттеста", "зачет", "зачёт", "опрос", "экзамен", "викторин", "провероч", "норматив"]),
-  serviceRule("intro_final", ["вводн", "повтор", "заключ", "итогов", "подведение итогов", "обобщение", "рефлексия"]),
+  serviceRule("intro_final", ["вводн", "инструктаж", "повтор", "заключ", "итогов", "подведение итогов", "обобщение", "рефлексия"]),
   serviceRule("schedule", ["режим", "расписан", "продолжительность", "учебн недел", "академическ", "год обуч", "срок осво", "срок реализации", "объем программы", "наполняемость", "периодичность"]),
   serviceRule("materials_equipment", ["кабинет", "оборудован", "материал", "литератур", "пособие", "энциклопед", "издатель", "ноутбук", "стул", "стол", "накопитель", "ssd"]),
   serviceRule("methods", ["практическая работа", "практическая", "практические", "беседа", "демонстрац", "наблюдение", "самостоятельная", "лекция", "группов", "индивидуальн"]),
@@ -484,6 +801,8 @@ const MANUAL_BATCH1_RULES = [
   manualRule("content", "engineering_graphics", [/линейка металлическая/u]),
 ];
 
+const MANUAL_RULES = MANUAL_BATCH1_RULES;
+
 const SYNONYMS = [
   [/\b3д\b/giu, "3D"],
   [/\bтр[её]хмерн\w*/giu, "3D"],
@@ -494,13 +813,26 @@ const SYNONYMS = [
   [/\bскретч\b/giu, "Scratch"],
 ];
 
+function classifierScopeForDirection(directionName) {
+  const key = normalizeKey(directionName);
+  if (/турист|краевед/u.test(key)) return "tourism";
+  return "technical";
+}
+
+function contentRulesForScope(classifierScope) {
+  if (classifierScope === "tourism") return TOURISM_CONTENT_RULES;
+  return TECHNICAL_CONTENT_RULES;
+}
+
 function normalizeAndClassifyTopic(row) {
-  const normalized = normalizeTopic(row);
+  const classifierScope = classifierScopeForDirection(row.directionName);
+  const normalized = normalizeTopic(row, classifierScope);
   const classification = classifyNormalizedTopic({
     normalizedTopicName: normalized.normalizedTopicName,
     normalizedTopicKey: normalized.normalizedTopicKey,
     programName: row.programName,
     sectionTitle: row.sectionTitle,
+    directionName: row.directionName,
     recordTypeHint: normalized.recordType,
     noiseReason: normalized.noiseReason,
   });
@@ -511,14 +843,15 @@ function normalizeAndClassifyTopic(row) {
   };
 }
 
-function normalizeTopic(row) {
+function normalizeTopic(row, classifierScope = classifierScopeForDirection(row.directionName)) {
   const rawTopicName = String(row.topicName || "").trim();
   const activityType = normalizeActivityType(row.activityType, rawTopicName);
   const cleaned = cleanTopicName(rawTopicName);
   const key = normalizeKey(cleaned);
   const noiseReason = detectNoiseReason(rawTopicName, cleaned, key);
-  const manualRuleMatch = !noiseReason ? detectManualBatch1Rule(key) : null;
-  const serviceCode = !noiseReason && !manualRuleMatch ? detectServiceCode(key) : "";
+  const contentRules = contentRulesForScope(classifierScope);
+  const manualRuleMatch = !noiseReason ? detectManualBatch1Rule(key, classifierScope) : null;
+  const serviceCode = !noiseReason && !manualRuleMatch ? detectServiceCode(key, contentRules) : "";
   const recordType = noiseReason ? "noise" : manualRuleMatch ? manualRuleMatch.recordType : serviceCode ? "service" : "content";
   const confidence = estimateNormalizationConfidence(rawTopicName, cleaned, noiseReason, serviceCode);
 
@@ -543,7 +876,10 @@ function normalizeTopic(row) {
   };
 }
 
-function classifyNormalizedTopic({ normalizedTopicName, normalizedTopicKey, programName, sectionTitle, recordTypeHint, noiseReason }) {
+function classifyNormalizedTopic({ normalizedTopicName, normalizedTopicKey, programName, sectionTitle, directionName, recordTypeHint, noiseReason }) {
+  const classifierScope = classifierScopeForDirection(directionName);
+  const contentRules = contentRulesForScope(classifierScope);
+
   if (recordTypeHint === "noise") {
     const code = noiseReason || "unknown";
     return buildClassification({
@@ -559,7 +895,7 @@ function classifyNormalizedTopic({ normalizedTopicName, normalizedTopicKey, prog
     });
   }
 
-  const manualRuleMatch = detectManualBatch1Rule(normalizedTopicKey);
+  const manualRuleMatch = detectManualBatch1Rule(normalizedTopicKey, classifierScope);
   if (manualRuleMatch) {
     return buildManualBatch1Classification(
       manualRuleMatch,
@@ -567,7 +903,7 @@ function classifyNormalizedTopic({ normalizedTopicName, normalizedTopicKey, prog
     );
   }
 
-  const serviceCode = detectServiceCode(normalizedTopicKey);
+  const serviceCode = detectServiceCode(normalizedTopicKey, contentRules);
   if (recordTypeHint === "service" || serviceCode) {
     const code = serviceCode || "methods";
     return buildClassification({
@@ -586,7 +922,7 @@ function classifyNormalizedTopic({ normalizedTopicName, normalizedTopicKey, prog
   const inputText = buildInputText(normalizedTopicName, programName, sectionTitle);
   const topicKey = normalizeKey(normalizedTopicName);
   const contextKey = normalizeKey(`${sectionTitle || ""} ${programName || ""}`);
-  const scored = scoreContentRules(topicKey, contextKey);
+  const scored = scoreContentRules(topicKey, contextKey, contentRules);
   const best = scored[0];
 
   if (!best || best.score <= 0 || (!best.topicMatches.length && !best.phraseMatches.length)) {
@@ -712,18 +1048,22 @@ function detectNoiseReason(raw, cleaned, key) {
   return "";
 }
 
-function detectServiceCode(key) {
+function detectServiceCode(key, contentRules = CONTENT_RULES) {
   const exactAssessment = /^(промежуточн\w*|предварительн\w*|текущий|устный|практическое задание)\.?$/iu;
   if (exactAssessment.test(key)) return "assessment";
   for (const item of SERVICE_RULES) {
-    if (item.code === "methods" && looksContentLike(key)) continue;
+    if (
+      (item.code === "methods" || item.code === "intro_final" || item.code === "assessment" || item.code === "materials_equipment") &&
+      looksContentLike(key, contentRules)
+    ) continue;
     if (item.needles.some((needle) => key.includes(needle))) return item.code;
   }
   return "";
 }
 
-function detectManualBatch1Rule(key) {
-  for (const item of MANUAL_BATCH1_RULES) {
+function detectManualBatch1Rule(key, classifierScope = "technical") {
+  for (const item of MANUAL_RULES) {
+    if (item.scope !== "all" && item.scope !== classifierScope) continue;
     if (item.patterns.some((pattern) => pattern.test(key))) {
       return item;
     }
@@ -796,14 +1136,18 @@ function categoryNameFor(recordType, categoryCode) {
   return CONTENT_CATEGORY_BY_CODE[categoryCode] || categoryCode;
 }
 
-function looksContentLike(key) {
-  return CONTENT_RULES.some(
+function domainNameForCode(code) {
+  return DOMAIN_BY_CODE[code] || code;
+}
+
+function looksContentLike(key, contentRules = CONTENT_RULES) {
+  return contentRules.some(
     (item) => item.phrases.some((phrase) => key.includes(phrase)) || item.needles.some((needle) => key.includes(needle)),
   );
 }
 
-function scoreContentRules(topicKey, contextKey) {
-  return CONTENT_RULES.map((item) => {
+function scoreContentRules(topicKey, contextKey, contentRules = CONTENT_RULES) {
+  return contentRules.map((item) => {
     const phraseMatches = item.phrases
       .filter((phrase) => topicKey.includes(phrase))
       .map((value) => ({ kind: "phrase", value, weight: 3 }));
@@ -907,11 +1251,12 @@ function serviceRule(code, needles) {
   };
 }
 
-function manualRule(recordType, categoryCode, patterns) {
+function manualRule(recordType, categoryCode, patterns, scope = "technical") {
   return {
     recordType,
     categoryCode,
     patterns,
+    scope,
     ruleId: `manual_batch1:${recordType}:${categoryCode}`,
   };
 }
@@ -921,6 +1266,8 @@ module.exports = {
   classifyNormalizedTopic,
   classificationFromGoldenLabel,
   normalizeKey,
+  domainNameForCode,
+  classifierScopeForDirection,
   NORMALIZER_VERSION,
   CLASSIFIER_VERSION,
   AGGREGATION_VERSION,
