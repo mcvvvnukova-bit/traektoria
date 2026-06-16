@@ -55,11 +55,21 @@
 
 - `MATTERMOST_ENABLED=true`
 - `MATTERMOST_URL=https://mattermost.example.ru`
-- `MATTERMOST_USERNAME=botnumber2`
-- `MATTERMOST_PASSWORD=...` — только в `.env` или переменных окружения, не коммитить
-- `MATTERMOST_TOKEN=...` — опционально; если задан, используется вместо логина и пароля
+- `MATTERMOST_TOKEN=...` — token Mattermost Bot Account, только в `.env` или переменных окружения, не коммитить
+- `MATTERMOST_USERNAME=botnumber2` и `MATTERMOST_PASSWORD=...` — запасной вариант, если token-based авторизация недоступна
 - `MATTERMOST_MODE=mentions` — личные сообщения и сообщения в канале только при упоминании бота
 - `MATTERMOST_REPLY_MODE=thread` — ответы в канале отправляются в тред к сообщению пользователя
+- `MATTERMOST_ACTION_SECRET=...` — случайный секрет для проверки интерактивных кнопок Mattermost
+- `MATTERMOST_SLASH_TOKEN=...` — token кастомной slash-команды `/traektoria` из Mattermost
+- `MATTERMOST_ACTION_PATH=/mattermost/actions`
+- `MATTERMOST_SLASH_PATH=/mattermost/slash`
+
+Для меню Mattermost создайте custom slash command:
+
+- trigger word: `traektoria`
+- request URL: `https://bot.traektoria51.ru/mattermost/slash`
+- request method: `POST`
+- autocomplete: включить, hint `[text|quiz|deep|wide|help]`
 
 5. Запустить бота:
 

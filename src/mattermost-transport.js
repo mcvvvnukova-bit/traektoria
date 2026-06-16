@@ -205,11 +205,24 @@ class MattermostTransport {
 
   async sendMessage(target, text, replyMarkup) {
     assertChannelTarget(target);
-    const message = formatMattermostMessage(text, replyMarkup);
-    return this.createPost({
-      channel_id: target.channelId,
-      message,
-      ...(target.rootId ? { root_id: target.rootId } : {}),
+    return this.createPost(buildMattermostPost({
+      target,
+      text,
+      replyMarkup,
+      actionUrl: this.config.actionUrl,
+      actionSecret: this.config.actionSecret,
+      botUsername: this.user?.username || this.config.username,
+    }));
+  }
+
+  buildPost(target, text, replyMarkup) {
+    return buildMattermostPost({
+      target,
+      text,
+      replyMarkup,
+      actionUrl: this.config.actionUrl,
+      actionSecret: this.config.actionSecret,
+      botUsername: this.user?.username || this.config.username,
     });
   }
 
@@ -309,6 +322,8 @@ function normalizeConfig(config) {
     password: String(config.password || ""),
     mode: config.mode || "mentions",
     replyMode: config.replyMode || "thread",
+    actionUrl: String(config.actionUrl || "").trim(),
+    actionSecret: String(config.actionSecret || "").trim(),
   };
 }
 
@@ -406,6 +421,73 @@ function replyMarkupOptions(replyMarkup) {
     .filter((button) => button.label && button.data);
 }
 
+function buildMattermostPost({ target, text, replyMarkup, actionUrl = "", actionSecret = "", botUsername = "" }) {
+  assertChannelTarget(target);
+  const post = {
+    channel_id: target.channelId,
+    message: formatMattermostMessage(text, replyMarkup),
+    ...(target.rootId ? { root_id: target.rootId } : {}),
+  };
+
+  const attachments = buildMattermostAttachments({
+    target,
+    replyMarkup,
+    actionUrl,
+    actionSecret,
+    botUsername,
+  });
+  if (attachments.length) {
+    post.props = { attachments };
+  }
+  return post;
+}
+
+function buildMattermostAttachments({ target, replyMarkup, actionUrl, actionSecret, botUsername }) {
+  if (!actionUrl || !actionSecret || !replyMarkup?.inline_keyboard?.length) return [];
+
+  return replyMarkup.inline_keyboard
+    .map((row, rowIndex) => {
+      const actions = row
+        .map((button, columnIndex) => buildMattermostAction({
+          target,
+          button,
+          actionUrl,
+          actionSecret,
+          botUsername,
+          index: `${rowIndex}${columnIndex}`,
+        }))
+        .filter(Boolean);
+      return actions.length ? { actions } : null;
+    })
+    .filter(Boolean);
+}
+
+function buildMattermostAction({ target, button, actionUrl, actionSecret, botUsername, index }) {
+  const label = String(button?.text || "").replace(/^✓\s*/, "");
+  const callbackData = String(button?.callback_data || "");
+  if (!label || !callbackData) return null;
+
+  return {
+    id: `a${index}`,
+    type: "button",
+    name: label,
+    integration: {
+      url: actionUrl,
+      context: {
+        token: actionSecret,
+        callback_data: callbackData,
+        user_id: String(target.userId || ""),
+        username: String(target.username || ""),
+        channel_id: String(target.channelId || ""),
+        channel_type: String(target.channelType || ""),
+        root_id: String(target.rootId || ""),
+        post_id: String(target.postId || ""),
+        bot_username: String(botUsername || ""),
+      },
+    },
+  };
+}
+
 function toWebSocketUrl(baseUrl) {
   const url = new URL("/api/v4/websocket", baseUrl);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
@@ -447,6 +529,7 @@ function escapeRegex(value) {
 }
 
 module.exports = {
+  buildMattermostPost,
   createMattermostTransport,
   createMattermostTarget,
   formatMattermostMessage,

@@ -85,6 +85,18 @@ curl -sS "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
 curl -sS "https://platform-api.max.ru/me" -H "Authorization: <MAX_BOT_TOKEN>"
 ```
 
+Создать custom slash command Mattermost:
+
+- trigger word: `traektoria`
+- request URL: `https://bot.traektoria51.ru/mattermost/slash`
+- request method: `POST`
+- autocomplete: включить
+- autocomplete hint: `[text|quiz|deep|wide|help]`
+- autocomplete description: `Открыть меню бота «Траектория талантов»`
+
+После сохранения скопируйте выданный token в `/opt/telegram-bot/.env` как `MATTERMOST_SLASH_TOKEN`.
+Интерактивные кнопки используют отдельный наш секрет `MATTERMOST_ACTION_SECRET`.
+
 Зарегистрировать webhook MAX вручную, если `MAX_WEBHOOK_REGISTER=false`:
 ```bash
 curl -sS -X POST "https://platform-api.max.ru/subscriptions" \

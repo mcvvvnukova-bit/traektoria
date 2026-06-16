@@ -49,6 +49,11 @@ const {
 const { initializeDatabase } = require("./database-init");
 const { makeTarget, normalizeTarget, targetKey, targetFilePart, targetMetadata } = require("./target");
 const { createMattermostTransport, replyMarkupOptions } = require("./mattermost-transport");
+const {
+  buildMattermostSlashHelpText,
+  parseMattermostActionPayload,
+  parseMattermostSlashPayload,
+} = require("./mattermost-integration");
 const { TELEGRAM_BOT_COMMANDS, MAX_BOT_COMMANDS, parseBotCommand, buildHelpText } = require("./telegram-menu");
 const {
   getMaxCallbackId,
@@ -110,6 +115,19 @@ const MATTERMOST_USERNAME = process.env.MATTERMOST_USERNAME || "";
 const MATTERMOST_PASSWORD = process.env.MATTERMOST_PASSWORD || "";
 const MATTERMOST_MODE = process.env.MATTERMOST_MODE || "mentions";
 const MATTERMOST_REPLY_MODE = process.env.MATTERMOST_REPLY_MODE || "thread";
+const MATTERMOST_ACTION_PATH = process.env.MATTERMOST_ACTION_PATH || "/mattermost/actions";
+const MATTERMOST_SLASH_PATH = process.env.MATTERMOST_SLASH_PATH || "/mattermost/slash";
+const MATTERMOST_ACTION_SECRET = process.env.MATTERMOST_ACTION_SECRET || "";
+const MATTERMOST_SLASH_TOKEN = process.env.MATTERMOST_SLASH_TOKEN || "";
+const MATTERMOST_CALLBACK_PUBLIC_URL = (
+  process.env.MATTERMOST_CALLBACK_PUBLIC_URL ||
+  WEBHOOK_PUBLIC_URL ||
+  MAX_WEBHOOK_PUBLIC_URL ||
+  ""
+).replace(/\/+$/, "");
+const MATTERMOST_ACTION_URL =
+  process.env.MATTERMOST_ACTION_URL ||
+  (MATTERMOST_CALLBACK_PUBLIC_URL ? `${MATTERMOST_CALLBACK_PUBLIC_URL}${MATTERMOST_ACTION_PATH}` : "");
 
 if (TELEGRAM_ENABLED && !TOKEN) {
   console.error("Missing TELEGRAM_BOT_TOKEN");
@@ -2023,6 +2041,95 @@ function writeJson(res, status, payload, headers = {}) {
   res.end(payload == null ? "" : JSON.stringify(payload));
 }
 
+async function handleMattermostSlashRequest(req, res) {
+  if (!MATTERMOST_SLASH_TOKEN) {
+    console.warn("Mattermost slash command rejected: MATTERMOST_SLASH_TOKEN is not configured.");
+  }
+
+  const body = await readRequestBody(req, WEB_CHAT_BODY_LIMIT_BYTES);
+  const parsed = parseMattermostSlashPayload(body, { token: MATTERMOST_SLASH_TOKEN });
+  if (!parsed.ok) {
+    writeMattermostSlashFailure(res, parsed);
+    return;
+  }
+
+  await startScenarioFromCommand(parsed.target, parsed.command);
+  writeJson(res, 200, {
+    response_type: "ephemeral",
+    text: parsed.command === "start" ? "Открываю меню бота..." : "Запускаю сценарий...",
+  });
+}
+
+async function handleMattermostActionRequest(req, res) {
+  if (!MATTERMOST_ACTION_SECRET) {
+    console.warn("Mattermost action rejected: MATTERMOST_ACTION_SECRET is not configured.");
+  }
+
+  const payload = await readJsonBody(req, WEB_CHAT_BODY_LIMIT_BYTES);
+  const parsed = parseMattermostActionPayload(payload, { secret: MATTERMOST_ACTION_SECRET });
+  if (!parsed.ok) {
+    writeMattermostActionFailure(res, parsed);
+    return;
+  }
+
+  try {
+    await handleCallback({
+      platform: "mattermost",
+      id: null,
+      data: parsed.callbackData,
+      message: {
+        platform: "mattermost",
+        chat: parsed.target,
+        message_id: parsed.target.postId || null,
+      },
+    });
+
+    writeJson(res, 200, {
+      ephemeral_text: "Готово.",
+      skip_slack_parsing: true,
+    });
+  } catch (error) {
+    console.error("Mattermost action handling failed:", error);
+    writeJson(res, 200, {
+      error: {
+        message: "Не удалось выполнить действие. Попробуйте ответить номером варианта.",
+      },
+    });
+  }
+}
+
+function writeMattermostSlashFailure(res, parsed) {
+  if (parsed.status === 200) {
+    writeJson(res, 200, {
+      response_type: "ephemeral",
+      text: parsed.text || buildMattermostSlashHelpText(),
+    });
+    return;
+  }
+
+  writeJson(res, parsed.status || 400, {
+    response_type: "ephemeral",
+    text: "Команда Mattermost сейчас недоступна.",
+  });
+}
+
+function writeMattermostActionFailure(res, parsed) {
+  if (parsed.status === 401 || parsed.status === 403) {
+    writeJson(res, parsed.status, {
+      error: {
+        message: "Действие недоступно или открыто не тем пользователем.",
+      },
+    });
+    return;
+  }
+
+  writeJson(res, parsed.status || 400, {
+    error: {
+      message: "Не удалось распознать действие. Попробуйте ответить номером варианта.",
+    },
+  });
+}
+
 function readJsonBody(req, limitBytes) {
   return readRequestBody(req, limitBytes).then((body) => JSON.parse(body || "{}"));
 }
@@ -2149,7 +2256,11 @@ async function startWebhookServer() {
   if (MAX_ENABLED) paths.push(`max=${MAX_WEBHOOK_PATH}`);
   if (ALICE_ENABLED) paths.push(`alice=${ALICE_WEBHOOK_PATH}`);
   if (WEB_CHAT_ENABLED) paths.push(`web=${WEB_CHAT_PATH_PREFIX}`);
-  if (MATTERMOST_ENABLED) paths.push("mattermost=websocket");
+  if (MATTERMOST_ENABLED) {
+    paths.push("mattermost=websocket");
+    paths.push(`mattermost-actions=${MATTERMOST_ACTION_PATH}`);
+    paths.push(`mattermost-slash=${MATTERMOST_SLASH_PATH}`);
+  }
   console.log(`Webhook server is running on ${WEBHOOK_HOST}:${WEBHOOK_PORT} (${paths.join(", ")})`);
 }
 
@@ -2178,6 +2289,16 @@ async function handleWebhookRequest(req, res) {
     if (req.method !== "POST") {
       res.writeHead(404, { "content-type": "application/json" });
       res.end(JSON.stringify({ ok: false, error: "not_found" }));
+      return;
+    }
+
+    if (MATTERMOST_ENABLED && isMattermostSlashPath(req.url || "")) {
+      await handleMattermostSlashRequest(req, res);
+      return;
+    }
+
+    if (MATTERMOST_ENABLED && isMattermostActionPath(req.url || "")) {
+      await handleMattermostActionRequest(req, res);
       return;
     }
 
@@ -2242,6 +2363,16 @@ async function handleWebhookRequest(req, res) {
 function isWebhookPath(url) {
   const [pathname] = String(url).split("?");
   return pathname === WEBHOOK_PATH;
+}
+
+function isMattermostActionPath(url) {
+  const [pathname] = String(url).split("?");
+  return pathname === MATTERMOST_ACTION_PATH;
+}
+
+function isMattermostSlashPath(url) {
+  const [pathname] = String(url).split("?");
+  return pathname === MATTERMOST_SLASH_PATH;
 }
 
 function isMaxWebhookPath(url) {
@@ -2365,6 +2496,8 @@ async function bootstrap() {
         password: MATTERMOST_PASSWORD,
         mode: MATTERMOST_MODE,
         replyMode: MATTERMOST_REPLY_MODE,
+        actionUrl: MATTERMOST_ACTION_URL,
+        actionSecret: MATTERMOST_ACTION_SECRET,
       },
       {
         onText: (message) => processMattermostText(message.chat, message.text),

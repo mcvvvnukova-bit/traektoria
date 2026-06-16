@@ -14,6 +14,7 @@ const MAX_BOT_COMMANDS = TELEGRAM_BOT_COMMANDS.map(({ command, description }) =>
 
 const COMMAND_ALIASES = new Map([
   ["menu", "start"],
+  ["traektoria", "start"],
 ]);
 
 function parseBotCommand(text) {

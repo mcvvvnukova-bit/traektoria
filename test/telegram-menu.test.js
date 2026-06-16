@@ -33,6 +33,7 @@ test("parses Telegram bot commands with bot username and arguments", () => {
   assert.equal(parseBotCommand("/quiz@TraektoriaBot anything"), "quiz");
   assert.equal(parseBotCommand("/TEXT"), "text");
   assert.equal(parseBotCommand("/MENU"), "start");
+  assert.equal(parseBotCommand("/traektoria"), "start");
 });
 
 test("ignores unknown or non-command text", () => {

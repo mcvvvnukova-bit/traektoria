@@ -109,8 +109,19 @@ Endpoint-ы:
 | `MATTERMOST_PASSWORD` | Если нет token | Пусто | Пароль пользователя бота. |
 | `MATTERMOST_MODE` | Нет | `mentions` | Режим обработки сообщений. |
 | `MATTERMOST_REPLY_MODE` | Нет | `thread` | Отправлять ответы в thread или основной канал. |
+| `MATTERMOST_ACTION_PATH` | Нет | `/mattermost/actions` | HTTP endpoint для callbacks интерактивных кнопок Mattermost. |
+| `MATTERMOST_SLASH_PATH` | Нет | `/mattermost/slash` | HTTP endpoint для custom slash command `/traektoria`. |
+| `MATTERMOST_ACTION_SECRET` | Для интерактивных кнопок | Пусто | Секрет, который бот кладет в confidential context кнопок и проверяет на callback. |
+| `MATTERMOST_SLASH_TOKEN` | Для `/traektoria` | Пусто | Token, который Mattermost выдает при создании custom slash command. |
 
 Если `MATTERMOST_TOKEN` задан, он используется вместо логина и пароля.
+
+Для `/traektoria` в Mattermost создайте custom slash command:
+
+- trigger word: `traektoria`;
+- request URL: `https://bot.traektoria51.ru/mattermost/slash`;
+- request method: `POST`;
+- autocomplete hint: `[text|quiz|deep|wide|help]`.
 
 ## PFDO
 

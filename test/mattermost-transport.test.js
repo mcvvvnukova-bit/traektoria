@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  buildMattermostPost,
   formatMattermostMessage,
   isMattermostMention,
   parseMattermostPostedEvent,
@@ -91,4 +92,64 @@ test("formats inline buttons as numbered Mattermost choices", () => {
   });
 
   assert.equal(text, "Выберите вариант\n\n1. Первый\n2. Второй");
+});
+
+test("builds Mattermost interactive button attachments when action config is present", () => {
+  const post = buildMattermostPost({
+    target: {
+      platform: "mattermost",
+      id: "channel:channel1:user:user1",
+      userId: "user1",
+      username: "parent",
+      channelId: "channel1",
+      channelType: "O",
+      rootId: "root1",
+      postId: "post1",
+    },
+    text: "Выберите вариант",
+    replyMarkup: {
+      inline_keyboard: [
+        [{ text: "✓ Первый", callback_data: "one" }],
+        [{ text: "Второй", callback_data: "two" }],
+      ],
+    },
+    actionUrl: "https://bot.example/mattermost/actions",
+    actionSecret: "secret",
+    botUsername: "traektoria51_bot",
+  });
+
+  assert.equal(post.channel_id, "channel1");
+  assert.equal(post.root_id, "root1");
+  assert.equal(post.message, "Выберите вариант\n\n1. Первый\n2. Второй");
+  assert.equal(post.props.attachments.length, 2);
+  assert.deepEqual(
+    post.props.attachments.map((attachment) => attachment.actions[0].name),
+    ["Первый", "Второй"],
+  );
+  assert.equal(post.props.attachments[0].actions[0].integration.url, "https://bot.example/mattermost/actions");
+  assert.equal(post.props.attachments[0].actions[0].integration.context.token, "secret");
+  assert.equal(post.props.attachments[0].actions[0].integration.context.callback_data, "one");
+  assert.equal(post.props.attachments[0].actions[0].integration.context.user_id, "user1");
+  assert.equal(post.props.attachments[0].actions[0].integration.context.channel_id, "channel1");
+});
+
+test("keeps Mattermost numbered fallback without action config", () => {
+  const post = buildMattermostPost({
+    target: {
+      platform: "mattermost",
+      id: "dm:user1",
+      userId: "user1",
+      channelId: "channel1",
+      channelType: "D",
+    },
+    text: "Выберите вариант",
+    replyMarkup: {
+      inline_keyboard: [
+        [{ text: "Первый", callback_data: "one" }],
+      ],
+    },
+  });
+
+  assert.equal(post.message, "Выберите вариант\n\n1. Первый");
+  assert.equal(post.props, undefined);
 });
