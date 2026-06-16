@@ -47,6 +47,7 @@ const {
 const { initializeDatabase } = require("./database-init");
 const { makeTarget, normalizeTarget, targetKey, targetFilePart } = require("./target");
 const { createMattermostTransport, replyMarkupOptions } = require("./mattermost-transport");
+const { TELEGRAM_BOT_COMMANDS, parseBotCommand, buildHelpText } = require("./telegram-menu");
 
 const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED !== "false";
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -561,6 +562,47 @@ async function startScenario3(chatId) {
   return sendMessage(chatId, SCENARIO_3.intro);
 }
 
+async function startScenarioFromCommand(chatId, command) {
+  if (command === "start") {
+    return showEntry(chatId);
+  }
+
+  if (command === "help") {
+    const session = await resetSession(chatId);
+    session.step = "entry";
+    await persistSession(chatId, session);
+    await sendMessage(chatId, buildHelpText());
+    return sendMessage(chatId, FLOW.entry.text, FLOW.entry.keyboard);
+  }
+
+  const session = await resetSession(chatId);
+  if (command === "description") {
+    return startDescriptionFlow({
+      target: chatId,
+      session,
+      persistSession,
+      sendMessage,
+    });
+  }
+
+  if (command === "agent") {
+    return startScenario2(chatId);
+  }
+
+  if (command === "deep") {
+    return startScenario3(chatId);
+  }
+
+  if (command === "new_interests") {
+    return selectScenario(chatId, {
+      id: "trajectory_new_interests",
+      label: "Траектория новых интересов",
+    });
+  }
+
+  return null;
+}
+
 async function handleScenario3Links(chatId, text, session) {
   const merge = mergeScenario3Links(session.scenario3, text);
   if (!merge.added.length && !session.scenario3.submittedProgramIds.length) {
@@ -846,6 +888,10 @@ async function showScenario2Results(chatId, session) {
 async function handleText(message) {
   const chatId = incomingMessageTarget(message);
   const text = (message.text || "").trim();
+  const botCommand = parseBotCommand(text);
+  if (botCommand) {
+    return startScenarioFromCommand(chatId, botCommand);
+  }
 
   if (text === "/start" || text === RESTART_BUTTON_TEXT) {
     return showEntry(chatId);
@@ -1863,6 +1909,15 @@ async function configureTelegramPollingMode() {
   });
 }
 
+async function configureTelegramBotMenu() {
+  await telegramApi("setMyCommands", {
+    commands: TELEGRAM_BOT_COMMANDS,
+  });
+  await telegramApi("setChatMenuButton", {
+    menu_button: { type: "commands" },
+  });
+}
+
 async function configureTelegramWebhookMode() {
   if (!WEBHOOK_PUBLIC_URL && WEBHOOK_REGISTER) {
     throw new Error("Missing TELEGRAM_WEBHOOK_URL for webhook mode");
@@ -2102,6 +2157,12 @@ async function bootstrap() {
     const runtimeState = await loadRuntimeState("telegram_update_offset");
     if (runtimeState?.updateOffset) {
       updateOffset = Number(runtimeState.updateOffset);
+    }
+
+    try {
+      await configureTelegramBotMenu();
+    } catch (error) {
+      console.warn("Telegram bot menu configuration skipped:", error.message);
     }
   }
 
