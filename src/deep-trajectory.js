@@ -444,7 +444,7 @@ function createTopicProfile(programs) {
         categoryCounts.set(topic.categoryCode, (categoryCounts.get(topic.categoryCode) || 0) + 1);
         categoryNames.set(topic.categoryCode, topic.categoryName || topic.categoryCode);
       }
-      const categoryLabel = topic.categoryName || topic.parentName;
+      const categoryLabel = formatTopicClassifierPath(topic);
       if (categoryLabel) {
         categoryLabelCounts.set(categoryLabel, (categoryLabelCounts.get(categoryLabel) || 0) + 1);
       }
@@ -670,11 +670,11 @@ function normalizeRecommendationItem(item, detail, criteria = {}) {
   const bestGroup = chooseBestGroup(groups, criteria);
   const criteriaScore = scoreGroupCriteria(bestGroup, criteria);
   const relatedTopicNames = uniqueBy(
-    [...item.topicKeyMatches, ...item.categoryMatches].map((topic) => topic.name).filter(Boolean),
+    [...item.topicKeyMatches, ...item.categoryMatches].map(formatTopicClassifierPath).filter(Boolean),
     (name) => normalizeText(name),
   ).slice(0, 5);
   const newTopicNames = uniqueBy(
-    item.newRelatedTopics.map((topic) => topic.name).filter(Boolean),
+    item.newRelatedTopics.map(formatTopicClassifierPath).filter(Boolean),
     (name) => normalizeText(name),
   ).slice(0, 5);
 
@@ -703,14 +703,14 @@ function normalizeRecommendationItem(item, detail, criteria = {}) {
 
 function buildDeepTrajectoryResultMessage(analysis, state, result) {
   const profile = result.topicProfile || state.completedTopicProfile || analysis?.topicProfile || createTopicProfile([]);
-  const topicSummary = profile.topicNames.length
-    ? profile.topicNames.slice(0, 8).join(", ")
-    : "темы не удалось надежно распознать";
+  const topicSummary = profile.categoryLabels?.length
+    ? profile.categoryLabels.slice(0, 8).join(", ")
+    : "категории тем не удалось надежно определить";
   const searchContext = result.searchContext || {};
   const municipalityName = searchContext.municipalityName || state.municipalityName;
   const ageYears = searchContext.ageYears || state.ageYears;
   const lines = [
-    "Я нашел пройденные программы и определил основные темы:",
+    "Я нашел пройденные программы и определил основные направления тем по классификатору:",
     topicSummary,
     "",
     `Буду искать продолжение в населенном пункте: ${municipalityName}.`,
@@ -741,7 +741,7 @@ function buildDeepTrajectoryResultMessage(analysis, state, result) {
       `${index + 1}. ${item.program}`,
       "",
       "Почему это следующий шаг:",
-      `продолжает темы: ${related}`,
+      `продолжает направления: ${related}`,
       `углубляет за счет: ${deeper.length ? deeper.join(", ") : "более продвинутого тематического профиля"}`,
       "",
       `Где: ${item.venue}, ${item.address}`,
@@ -767,7 +767,7 @@ function buildCompletedProgramsReviewMessage(state, analysis) {
   programs.forEach((program, index) => {
     lines.push(
       `${index + 1}. ${program.name}`,
-      `Темы: ${formatProgramTopics(program.topics)}`,
+      `Классификатор тем (уровень 1/2): ${formatProgramTopicClassifications(program.topics)}`,
       `Населенный пункт: ${program.municipalityName || "не указан"}`,
       `Возраст: ${program.ageLabel || formatAgeRange(program.ageMinMonths, program.ageMaxMonths)}`,
       `Стоимость: ${program.price || "Стоимость уточняется на карточке программы"}`,
@@ -823,15 +823,32 @@ function buildScenario3PdfResult(result) {
   };
 }
 
-function formatProgramTopics(topics) {
+function formatProgramTopicClassifications(topics) {
   const names = uniqueBy(
-    (topics || []).map((topic) => topic.name).filter(Boolean),
+    (topics || []).map(formatTopicClassifierPath).filter(Boolean),
     (name) => normalizeText(name),
   );
-  if (!names.length) return "темы не удалось надежно распознать";
+  if (!names.length) return "категории тем не удалось надежно определить";
   const visible = names.slice(0, 8);
   const suffix = names.length > visible.length ? ` и еще ${names.length - visible.length}` : "";
   return `${visible.join(", ")}${suffix}`;
+}
+
+function formatTopicClassifierPath(topic) {
+  if (!topic) return "";
+  const parentName = cleanClassifierLabel(topic.parentName);
+  const categoryName = cleanClassifierLabel(topic.categoryName);
+  if (parentName && categoryName && normalizeText(parentName) !== normalizeText(categoryName)) {
+    return `${parentName} / ${categoryName}`;
+  }
+  return categoryName || parentName;
+}
+
+function cleanClassifierLabel(value) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  const normalized = normalizeText(text);
+  if (!text || normalized === "unknown" || normalized === "unknown_content") return "";
+  return text;
 }
 
 function buildMunicipalityKeyboard(municipalities) {

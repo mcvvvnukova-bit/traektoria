@@ -6,6 +6,7 @@ const {
   mergeScenario3Links,
   parsePfdoProgramLinks,
   buildCompletedProgramsReviewMessage,
+  buildDeepTrajectoryResultMessage,
   buildScenario3PdfAnswers,
   buildScenario3PdfResult,
 } = require("../src/deep-trajectory");
@@ -54,7 +55,7 @@ test("caps accumulated scenario 3 links at five programs", () => {
   assert.deepEqual(state.submittedProgramIds, [1, 2, 3, 4, 5]);
 });
 
-test("builds completed programs review with studied topics and program facts", () => {
+test("builds completed programs review with classifier hierarchy labels and program facts", () => {
   const state = createScenario3State();
   state.completedPrograms = [{
     name: "Робототехника",
@@ -62,17 +63,60 @@ test("builds completed programs review with studied topics and program facts", (
     ageLabel: "10-12 лет",
     price: "Бесплатно",
     topics: [
-      { name: "Конструирование робота" },
-      { name: "Программирование датчиков" },
+      {
+        name: "Конструирование робота",
+        parentName: "Инженерное творчество",
+        categoryName: "Робототехника",
+      },
+      {
+        name: "Программирование датчиков",
+        parentName: "Информационные технологии",
+        categoryName: "Программирование",
+      },
     ],
   }];
 
   const message = buildCompletedProgramsReviewMessage(state);
 
   assert.match(message, /Робототехника/);
-  assert.match(message, /Конструирование робота, Программирование датчиков/);
+  assert.match(message, /Классификатор тем \(уровень 1\/2\): Инженерное творчество \/ Робототехника, Информационные технологии \/ Программирование/);
+  assert.doesNotMatch(message, /Конструирование робота/);
+  assert.doesNotMatch(message, /Программирование датчиков/);
   assert.match(message, /Населенный пункт: Мурманск/);
   assert.match(message, /Стоимость: Бесплатно/);
+});
+
+test("builds deep trajectory result with classifier hierarchy labels instead of raw topics", () => {
+  const profile = {
+    categoryLabels: ["Инженерное творчество / Робототехника"],
+    topicNames: ["Конструирование робота"],
+  };
+  const message = buildDeepTrajectoryResultMessage(
+    { topicProfile: profile },
+    { municipalityName: "Мурманск", ageYears: 10 },
+    {
+      topicProfile: profile,
+      searchContext: { municipalityName: "Мурманск", ageYears: 10 },
+      items: [{
+        program: "Инженерный проект",
+        relatedTopics: ["Инженерное творчество / Робототехника"],
+        newTopics: ["Информационные технологии / Программирование"],
+        depthSignals: ["проектная работа"],
+        venue: "Кванториум",
+        address: "ул. Ленина, 1",
+        schedule: "Пн 16:00",
+        ageLabel: "10-14 лет",
+        price: "Бесплатно",
+        sourceUrl: "https://51.pfdo.ru/app/?program=1",
+      }],
+    },
+  );
+
+  assert.match(message, /основные направления тем по классификатору/);
+  assert.match(message, /Инженерное творчество \/ Робототехника/);
+  assert.match(message, /продолжает направления: Инженерное творчество \/ Робототехника/);
+  assert.match(message, /углубляет за счет: Информационные технологии \/ Программирование, проектная работа/);
+  assert.doesNotMatch(message, /Конструирование робота/);
 });
 
 test("builds scenario 3 PDF answers from classifier hierarchy labels", () => {
