@@ -19,7 +19,9 @@ const defaultConcurrency = Math.max(1, Number(process.env.PFDO_CALENDAR_TOPIC_CO
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  await executeSqlFile(schemaPath, DATABASE_URL);
+  if (process.env.PFDO_TOPIC_IMPORT_APPLY_SCHEMA !== "false") {
+    await executeSqlFile(schemaPath, DATABASE_URL);
+  }
 
   const programs = await loadPrograms(options);
   if (!options.keepExisting) {

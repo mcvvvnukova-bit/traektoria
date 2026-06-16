@@ -21,7 +21,9 @@ const sqlFlushBytes = Math.max(256 * 1024, Number(process.env.PFDO_IMPORT_SQL_FL
 async function main() {
   configureMirrorDatabaseUrl();
   await fs.mkdir(path.dirname(importSqlPath), { recursive: true });
-  await executeSqlFile(schemaPath);
+  if (process.env.PFDO_IMPORT_APPLY_SCHEMA !== "false") {
+    await executeSqlFile(schemaPath);
+  }
 
   const writer = new SqlBatchWriter(importSqlPath, sqlFlushBytes);
   await writer.init();

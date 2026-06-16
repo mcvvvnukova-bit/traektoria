@@ -1,8 +1,6 @@
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { loadEnvFile } = require("../src/load-env");
-const { executeSqlFile } = require("../src/db");
-const { getMirrorDatabaseUrl } = require("../src/pfdo-mirror");
 const {
   finishSyncRun,
   loadSyncCounters,
@@ -13,12 +11,10 @@ const {
 
 loadEnvFile();
 
-const schemaPath = path.resolve(__dirname, "..", "db", "pfdo-mirror-schema.sql");
 const projectRoot = path.resolve(__dirname, "..");
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  await executeSqlFile(schemaPath, getMirrorDatabaseUrl());
 
   const runId = await startSyncRun({
     runType: "full",
@@ -30,18 +26,24 @@ async function main() {
   });
 
   try {
-    await runNodeScript("scripts/import-pfdo-mirror.js", []);
+    await runNodeScript("scripts/import-pfdo-mirror.js", [], {
+      PFDO_IMPORT_APPLY_SCHEMA: "false",
+    });
     await markFullCatalogImported({ runId });
 
     if (!options.skipDocuments) {
-      await runNodeScript("scripts/download-pfdo-program-documents.js", []);
+      await runNodeScript("scripts/download-pfdo-program-documents.js", [], {
+        PFDO_DOCUMENT_ENSURE_COLUMNS: "false",
+      });
     }
 
     if (!options.skipTopics) {
       await runNodeScript("scripts/import-pfdo-calendar-topics.js", [
         "--concurrency",
         String(options.topicConcurrency),
-      ]);
+      ], {
+        PFDO_TOPIC_IMPORT_APPLY_SCHEMA: "false",
+      });
     }
 
     await refreshProgramProcessingStatuses({ runId });
@@ -101,11 +103,14 @@ function parseArgs(args) {
   return options;
 }
 
-function runNodeScript(scriptPath, args) {
+function runNodeScript(scriptPath, args, envOverrides = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [scriptPath, ...args], {
       cwd: projectRoot,
-      env: process.env,
+      env: {
+        ...process.env,
+        ...envOverrides,
+      },
       stdio: "inherit",
     });
 

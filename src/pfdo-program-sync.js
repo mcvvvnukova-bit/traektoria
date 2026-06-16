@@ -1,5 +1,4 @@
-const path = require("node:path");
-const { executeSql, executeSqlFile, queryRows } = require("./db");
+const { executeSql, queryRows } = require("./db");
 const { fetchJson } = require("./pfdo");
 const { getMirrorDatabaseUrl } = require("./pfdo-mirror");
 const { getOperatorId } = require("./pfdo-config");
@@ -23,15 +22,11 @@ const {
   startSyncRun,
 } = require("./pfdo-sync-state");
 
-const schemaPath = path.resolve(__dirname, "..", "db", "pfdo-mirror-schema.sql");
-
 async function ensurePfdoProgramsImported(programIds, options = {}) {
   const ids = [...new Set((programIds || []).map(Number).filter(Number.isFinite))];
   if (!ids.length) {
     return { runId: null, results: [] };
   }
-
-  await executeSqlFile(schemaPath, getMirrorDatabaseUrl());
 
   const force = Boolean(options.force);
   const existingIds = force ? new Set() : await loadExistingProgramIds(ids);
