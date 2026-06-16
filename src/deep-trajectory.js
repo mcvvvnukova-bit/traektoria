@@ -1,5 +1,5 @@
 const { queryRows, decodeJsonCell } = require("./db");
-const { getMirrorDatabaseUrl, getProgramDetail } = require("./pfdo-mirror");
+const { getMirrorDatabaseUrl, getMunicipalities, getProgramDetail } = require("./pfdo-mirror");
 const { getProgramUrl } = require("./pfdo-config");
 
 const MAX_COMPLETED_LINKS = 5;
@@ -21,6 +21,8 @@ const ADVANCED_TOPIC_PATTERNS = [
 function createScenario3State() {
   return {
     links: [],
+    programLinks: [],
+    submittedProgramIds: [],
     completedProgramIds: [],
     missingProgramIds: [],
     invalidLinks: [],
@@ -31,12 +33,29 @@ function createScenario3State() {
     age: null,
     ageYears: null,
     completedTopicProfile: null,
+    criteria: null,
     lastResult: null,
+    pdfRequested: null,
+    pdfPath: "",
   };
 }
 
 async function analyzeCompletedProgramsFromText(text) {
   const parsed = parsePfdoProgramLinks(text);
+  return analyzeCompletedProgramsFromIds(parsed.programIds, {
+    links: parsed.links,
+    invalidLinks: parsed.invalidLinks,
+    programLinks: parsed.programLinks,
+  });
+}
+
+async function analyzeCompletedProgramsFromIds(programIds, options = {}) {
+  const parsed = {
+    links: options.links || [],
+    invalidLinks: options.invalidLinks || [],
+    programLinks: options.programLinks || [],
+    programIds: [...new Set((programIds || []).map(Number).filter(Number.isFinite))].slice(0, MAX_COMPLETED_LINKS),
+  };
   if (!parsed.programIds.length) {
     return {
       ...parsed,
@@ -53,9 +72,22 @@ async function analyzeCompletedProgramsFromText(text) {
   const foundIds = new Set(programs.map((program) => Number(program.id)));
   const missingProgramIds = parsed.programIds.filter((id) => !foundIds.has(Number(id)));
   const topicMap = await loadTopicsForPrograms(programs.map((program) => program.id));
-  const programsWithTopics = programs.map((program) => ({
-    ...program,
-    topics: topicMap.get(Number(program.id)) || [],
+  const programsWithTopics = await Promise.all(programs.map(async (program) => {
+    const topics = topicMap.get(Number(program.id)) || [];
+    const detail = await getProgramDetailSafe(program.id);
+    const groups = detail?.available_groups || [];
+    const bestGroup = chooseBestGroup(groups);
+    return {
+      ...program,
+      topics,
+      price: summarizePrice(detail?.program || {}, bestGroup),
+      schedule: summarizeSchedule(bestGroup),
+      ageLabel: formatAgeRange(program.ageMinMonths, program.ageMaxMonths),
+      period: program.durationString || UNKNOWN_SCHEDULE_LABEL,
+      availableGroups: groups.length,
+      availablePlaces: countFreePlaces(groups),
+      enrollment: program.enrollment,
+    };
   }));
   const municipalities = uniqueBy(
     programsWithTopics
@@ -79,10 +111,54 @@ async function analyzeCompletedProgramsFromText(text) {
   };
 }
 
+function mergeScenario3Links(state, text) {
+  const parsed = parsePfdoProgramLinks(text);
+  const entriesById = new Map();
+  for (const entry of state.programLinks || []) {
+    if (Number.isFinite(Number(entry.id))) {
+      entriesById.set(Number(entry.id), { id: Number(entry.id), url: entry.url });
+    }
+  }
+
+  const added = [];
+  const duplicates = [];
+  let ignoredBecauseLimit = 0;
+  for (const entry of parsed.programLinks || []) {
+    const id = Number(entry.id);
+    if (entriesById.has(id)) {
+      duplicates.push(entry);
+      continue;
+    }
+    if (entriesById.size >= MAX_COMPLETED_LINKS) {
+      ignoredBecauseLimit += 1;
+      continue;
+    }
+    entriesById.set(id, { id, url: entry.url });
+    added.push(entry);
+  }
+
+  state.programLinks = [...entriesById.values()];
+  state.links = state.programLinks.map((entry) => entry.url);
+  state.submittedProgramIds = state.programLinks.map((entry) => entry.id);
+  state.invalidLinks = uniqueBy([...(state.invalidLinks || []), ...parsed.invalidLinks], (url) => url);
+  state.lastResult = null;
+
+  return {
+    parsed,
+    added,
+    duplicates,
+    ignoredBecauseLimit,
+    total: state.programLinks.length,
+    maxReached: state.programLinks.length >= MAX_COMPLETED_LINKS,
+  };
+}
+
 async function getDeepTrajectoryRecommendations(state, options = {}) {
   const limit = options.limit || 10;
-  const municipalityId = Number(state.municipalityId);
-  const ageYears = Number(state.ageYears);
+  const criteria = normalizeSearchCriteria(options.criteria || state.criteria);
+  const searchContext = await resolveSearchContext(state, criteria);
+  const municipalityId = Number(searchContext.municipalityId);
+  const ageYears = Number(searchContext.ageYears);
   if (!Number.isFinite(municipalityId)) {
     throw new Error("Missing municipality for deep trajectory");
   }
@@ -100,6 +176,7 @@ async function getDeepTrajectoryRecommendations(state, options = {}) {
       items: [],
       reason: "В выбранном населенном пункте не нашлось программ для этого возраста.",
       topicProfile,
+      searchContext,
     };
   }
 
@@ -110,30 +187,28 @@ async function getDeepTrajectoryRecommendations(state, options = {}) {
       return {
         ...program,
         topics,
-        ...scoreCandidate(program, topics, topicProfile, ageYears),
+        ...scoreCandidate(program, topics, topicProfile, ageYears, criteria),
       };
     })
     .filter((program) => program.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, Math.max(limit * 2, 12));
+    .slice(0, Math.max(limit * 3, 18));
 
   const detailed = [];
-  for (const item of ranked.slice(0, limit)) {
-    let detail = null;
-    try {
-      detail = await getProgramDetail(item.id);
-    } catch (error) {
-      detail = null;
-    }
-    detailed.push(normalizeRecommendationItem(item, detail));
+  for (const item of ranked) {
+    const detail = await getProgramDetailSafe(item.id);
+    detailed.push(normalizeRecommendationItem(item, detail, criteria));
   }
+  detailed.sort((a, b) => b.score - a.score);
+  const items = detailed.slice(0, limit);
 
   return {
     source: "mirror",
-    confidence: detailed.length >= 3 ? "medium" : "low",
-    items: detailed,
-    reason: detailed.length ? "" : explainNoCandidates(candidates, topicProfile),
+    confidence: items.length >= 3 ? "medium" : "low",
+    items,
+    reason: items.length ? "" : explainNoCandidates(candidates, topicProfile),
     topicProfile,
+    searchContext,
   };
 }
 
@@ -143,6 +218,7 @@ function parsePfdoProgramLinks(text) {
   const links = [];
   const invalidLinks = [];
   const ids = [];
+  const programLinks = [];
 
   for (const rawUrl of urlMatches.slice(0, MAX_COMPLETED_LINKS)) {
     const url = rawUrl.replace(/[.,;:!?]+$/g, "");
@@ -157,12 +233,14 @@ function parsePfdoProgramLinks(text) {
     }
     links.push(url);
     ids.push(id);
+    programLinks.push({ id, url });
   }
 
   return {
     links,
     invalidLinks,
     programIds: [...new Set(ids)].slice(0, MAX_COMPLETED_LINKS),
+    programLinks: uniqueBy(programLinks, (entry) => entry.id).slice(0, MAX_COMPLETED_LINKS),
   };
 }
 
@@ -197,6 +275,7 @@ async function loadProgramsByIds(programIds) {
       ${encodeTextSql("p.address_name")},
       ${encodeTextSql("p.duration_string")},
       ${encodeTextSql("COALESCE(p.source_url, '')")},
+      p.enrollment,
       ${encodeTextSql("p.annotation_html")},
       ${encodeTextSql("p.task_html")},
       replace(encode(convert_to(COALESCE(keyword_agg.keyword_names, '[]'::jsonb)::text, 'UTF8'), 'base64'), E'\\n', '')
@@ -237,6 +316,7 @@ async function loadCandidatePrograms({ municipalityId, ageYears, excludeIds }) {
       ${encodeTextSql("p.address_name")},
       ${encodeTextSql("p.duration_string")},
       ${encodeTextSql("COALESCE(p.source_url, '')")},
+      p.enrollment,
       ${encodeTextSql("p.annotation_html")},
       ${encodeTextSql("p.task_html")},
       replace(encode(convert_to(COALESCE(keyword_agg.keyword_names, '[]'::jsonb)::text, 'UTF8'), 'base64'), E'\\n', '')
@@ -315,7 +395,7 @@ async function loadTopicsForPrograms(programIds) {
 }
 
 function rowToProgram(row) {
-  const keywords = decodeSafeJson(row[14]) || [];
+  const keywords = decodeSafeJson(row[15]) || [];
   return {
     id: Number(row[0]),
     name: decodeText(row[1]),
@@ -329,8 +409,9 @@ function rowToProgram(row) {
     addressName: decodeText(row[9]),
     durationString: decodeText(row[10]),
     sourceUrl: decodeText(row[11]) || getProgramUrl(Number(row[0])),
-    annotation: stripHtml(decodeText(row[12])),
-    task: stripHtml(decodeText(row[13])),
+    enrollment: nullableNumber(row[12]),
+    annotation: stripHtml(decodeText(row[13])),
+    task: stripHtml(decodeText(row[14])),
     keywords: Array.isArray(keywords) ? keywords.map(String) : [],
     topics: [],
   };
@@ -342,6 +423,7 @@ function createTopicProfile(programs) {
   const topicNameHours = new Map();
   const categoryCounts = new Map();
   const categoryNames = new Map();
+  const categoryLabelCounts = new Map();
   const directionCounts = new Map();
   let hoursTotal = 0;
   let topicRows = 0;
@@ -362,6 +444,10 @@ function createTopicProfile(programs) {
         categoryCounts.set(topic.categoryCode, (categoryCounts.get(topic.categoryCode) || 0) + 1);
         categoryNames.set(topic.categoryCode, topic.categoryName || topic.categoryCode);
       }
+      const categoryLabel = topic.categoryName || topic.parentName;
+      if (categoryLabel) {
+        categoryLabelCounts.set(categoryLabel, (categoryLabelCounts.get(categoryLabel) || 0) + 1);
+      }
     }
   }
 
@@ -373,6 +459,7 @@ function createTopicProfile(programs) {
       name: categoryNames.get(code) || code,
       count,
     })),
+    categoryLabels: topEntries(categoryLabelCounts, 12).map(([name]) => name),
     directions: topEntries(directionCounts, 6).map(([name, count]) => ({ name, count })),
     hoursTotal,
     topicRows,
@@ -398,7 +485,7 @@ function inferAgeFromPrograms(programs) {
   return Math.round((intersectionMin + intersectionMax) / 2);
 }
 
-function scoreCandidate(program, topics, profile, ageYears) {
+function scoreCandidate(program, topics, profile, ageYears, criteria = {}) {
   const completedTopicKeys = new Set(profile.topicKeys || []);
   const completedCategories = new Set((profile.categories || []).map((item) => item.code));
   const completedDirections = new Set((profile.directions || []).map((item) => normalizeText(item.name)));
@@ -422,6 +509,7 @@ function scoreCandidate(program, topics, profile, ageYears) {
   score += Math.min(newRelatedTopics.length * 2, 8);
   if (directionMatch) score += 3;
   if (fallbackTextMatch) score += 2;
+  score += scoreCriteriaProgramMatch(program, criteria);
   score += depthSignals.length * 2;
   if (!depthSignals.length && topicKeyMatches.length && !newRelatedTopics.length) score -= 4;
   if (topics.length) score += 1;
@@ -468,10 +556,119 @@ function collectDepthSignals(program, topics, profile, ageYears) {
   return [...new Set(signals)];
 }
 
-function normalizeRecommendationItem(item, detail) {
+function scoreCriteriaProgramMatch(program, criteria = {}) {
+  let score = 0;
+  if (criteria.directionLabel && normalizeText(program.directionName).includes(normalizeText(criteria.directionLabel))) {
+    score += 4;
+  }
+  if (criteria.direction && normalizeText(program.directionName).includes(normalizeText(directionLabel(criteria.direction)))) {
+    score += 4;
+  }
+  if (criteria.interestsText && scoreFallbackText(program, {
+    directions: [],
+    topicNames: [criteria.interestsText],
+  }) > 0) {
+    score += 2;
+  }
+  return score;
+}
+
+function normalizeSearchCriteria(criteriaState) {
+  const fields = criteriaState?.fields || criteriaState || {};
+  return {
+    ageYears: nullableNumber(fields.ageYears) || ageBucketToYears(fields.age),
+    ageText: fields.ageText || "",
+    place: fields.place || "",
+    budget: fields.budget || fields.cost || "",
+    scheduleText: fields.scheduleText || scheduleValuesToText(fields.schedule),
+    schedule: Array.isArray(fields.schedule) ? fields.schedule : [],
+    formatLabel: fields.formatLabel || "",
+    direction: fields.direction || null,
+    directionLabel: fields.directionLabel || "",
+    interestsText: fields.interestsText || "",
+    avoidanceLabels: fields.avoidanceLabels || [],
+  };
+}
+
+function ageBucketToYears(value) {
+  const map = {
+    "3-4": 4,
+    "5-6": 6,
+    "7-9": 8,
+    "10-12": 11,
+    "13+": 13,
+  };
+  return map[value] || null;
+}
+
+function scheduleValuesToText(values) {
+  const labels = {
+    weekdays: "будни",
+    weekends: "выходные",
+    morning: "утром",
+    evening: "вечером",
+    any: "",
+  };
+  return (values || []).map((value) => labels[value]).filter(Boolean).join(", ");
+}
+
+function directionLabel(value) {
+  const labels = {
+    technical: "Техническая",
+    art: "Художественная",
+    sport: "Физкультурно-спортивная",
+    social: "Социально-гуманитарная",
+    science: "Естественно-научная",
+    tourism: "Туристско-краеведческая",
+    any: "",
+  };
+  return labels[value] || "";
+}
+
+async function resolveSearchContext(state, criteria = {}) {
+  const defaultMunicipalityId = nullableNumber(state.municipalityId);
+  let municipalityId = defaultMunicipalityId;
+  let municipalityName = state.municipalityName || "";
+  if (criteria.place) {
+    const municipality = await findMunicipalityByName(criteria.place);
+    if (municipality) {
+      municipalityId = municipality.id;
+      municipalityName = municipality.name;
+    }
+  }
+
+  const ageYears = criteria.ageYears || nullableNumber(state.ageYears);
+  return {
+    municipalityId,
+    municipalityName,
+    ageYears,
+    criteria,
+  };
+}
+
+async function findMunicipalityByName(place) {
+  const value = normalizeText(place).trim();
+  if (!value) return null;
+  const municipalities = await getMunicipalities();
+  return municipalities.find((item) => normalizeText(item.name) === value) ||
+    municipalities.find((item) => value.includes(normalizeText(item.name)) || normalizeText(item.name).includes(value)) ||
+    null;
+}
+
+async function getProgramDetailSafe(programId) {
+  try {
+    return await getProgramDetail(programId);
+  } catch (_) {
+    return null;
+  }
+}
+
+function normalizeRecommendationItem(item, detail, criteria = {}) {
+  const hasDetail = Boolean(detail);
   const program = detail?.program || {};
   const groups = detail?.available_groups || [];
-  const bestGroup = chooseBestGroup(groups);
+  const bestGroup = chooseBestGroup(groups, criteria);
+  const criteriaScore = scoreGroupCriteria(bestGroup, criteria);
   const relatedTopicNames = uniqueBy(
     [...item.topicKeyMatches, ...item.categoryMatches].map((topic) => topic.name).filter(Boolean),
     (name) => normalizeText(name),
@@ -489,13 +686,18 @@ function normalizeRecommendationItem(item, detail) {
     directionName: item.directionName,
     venue: detail?.organization?.name || item.organizationName || "Организация не указана",
     address: detail?.address?.name || item.addressName || "Адрес уточняется на карточке",
+    district: detail?.address?.name || item.addressName || "Адрес уточняется на карточке",
     schedule: summarizeSchedule(bestGroup),
     price: summarizePrice(program, bestGroup),
     ageLabel: formatAgeRange(item.ageMinMonths, item.ageMaxMonths),
+    period: item.durationString || UNKNOWN_SCHEDULE_LABEL,
+    availableGroups: hasDetail ? groups.length : null,
+    availablePlaces: hasDetail ? countFreePlaces(groups) : null,
+    enrollment: item.enrollment,
     relatedTopics: relatedTopicNames,
     newTopics: newTopicNames,
     depthSignals: item.depthSignals,
-    score: item.score,
+    score: item.score + criteriaScore,
   };
 }
 
@@ -504,12 +706,15 @@ function buildDeepTrajectoryResultMessage(analysis, state, result) {
   const topicSummary = profile.topicNames.length
     ? profile.topicNames.slice(0, 8).join(", ")
     : "темы не удалось надежно распознать";
+  const searchContext = result.searchContext || {};
+  const municipalityName = searchContext.municipalityName || state.municipalityName;
+  const ageYears = searchContext.ageYears || state.ageYears;
   const lines = [
     "Я нашел пройденные программы и определил основные темы:",
     topicSummary,
     "",
-    `Буду искать продолжение в населенном пункте: ${state.municipalityName}.`,
-    `Возраст: ${state.ageYears} лет.`,
+    `Буду искать продолжение в населенном пункте: ${municipalityName}.`,
+    `Возраст: ${ageYears} лет.`,
     "",
   ];
 
@@ -551,6 +756,84 @@ function buildDeepTrajectoryResultMessage(analysis, state, result) {
   return lines.join("\n");
 }
 
+function buildCompletedProgramsReviewMessage(state, analysis) {
+  const programs = state.completedPrograms || analysis?.programs || [];
+  const lines = ["Я собрал информацию по пройденным программам:", ""];
+
+  if (state.missingProgramIds?.length) {
+    lines.push(`Не нашел в локальном каталоге программы: ${state.missingProgramIds.join(", ")}.`, "");
+  }
+
+  programs.forEach((program, index) => {
+    lines.push(
+      `${index + 1}. ${program.name}`,
+      `Темы: ${formatProgramTopics(program.topics)}`,
+      `Населенный пункт: ${program.municipalityName || "не указан"}`,
+      `Возраст: ${program.ageLabel || formatAgeRange(program.ageMinMonths, program.ageMaxMonths)}`,
+      `Стоимость: ${program.price || "Стоимость уточняется на карточке программы"}`,
+      "",
+    );
+  });
+
+  return lines.join("\n");
+}
+
+function buildScenario3PdfAnswers(state) {
+  const criteria = normalizeSearchCriteria(state.criteria);
+  const profile = state.completedTopicProfile || createTopicProfile(state.completedPrograms || []);
+  const interestLabels = profile.categoryLabels?.length
+    ? profile.categoryLabels
+    : profile.topicNames;
+  const directions = (profile.directions || []).map((item) => item.name).filter(Boolean);
+  return {
+    ageText: criteria.ageText || (criteria.ageYears ? `${criteria.ageYears} лет` : state.ageYears ? `${state.ageYears} лет` : state.age ? `${state.age} лет` : ""),
+    age: "",
+    interestsText: uniqueBy(interestLabels, (item) => normalizeText(item)).slice(0, 8).join(", "),
+    interests: [],
+    goal: "strengths",
+    goalLabel: "Углубить пройденные темы",
+    schedule: criteria.schedule || [],
+    format: null,
+    formatLabel: criteria.formatLabel || "Любой формат",
+    place: criteria.place || state.municipalityName || "",
+    cost: criteria.budget || "",
+    specialNeeds: "none",
+    specialNeedsLabel: "Особенностей нет",
+    specialNeedsOther: "",
+    wantsRefinement: Boolean(criteria.directionLabel || criteria.avoidanceLabels?.length),
+    groupSizeLabel: "",
+    avoidanceLabels: criteria.avoidanceLabels || [],
+    avoidanceCustom: "",
+    direction: criteria.direction || null,
+    directionLabel: criteria.directionLabel || directions.join(", "),
+  };
+}
+
+function buildScenario3PdfResult(result) {
+  return {
+    ...result,
+    items: (result.items || []).map((item) => ({
+      ...item,
+      district: item.district || item.address || "Адрес уточняется на карточке",
+      period: item.period || item.ageLabel || UNKNOWN_SCHEDULE_LABEL,
+      availableGroups: item.availableGroups,
+      availablePlaces: item.availablePlaces,
+      enrollment: item.enrollment,
+    })),
+  };
+}
+
+function formatProgramTopics(topics) {
+  const names = uniqueBy(
+    (topics || []).map((topic) => topic.name).filter(Boolean),
+    (name) => normalizeText(name),
+  );
+  if (!names.length) return "темы не удалось надежно распознать";
+  const visible = names.slice(0, 8);
+  const suffix = names.length > visible.length ? ` и еще ${names.length - visible.length}` : "";
+  return `${visible.join(", ")}${suffix}`;
+}
+
 function buildMunicipalityKeyboard(municipalities) {
   return {
     inline_keyboard: municipalities.map((item) => [
@@ -567,9 +850,83 @@ function explainNoCandidates(candidates, profile) {
   return "Есть программы для этого возраста, но они не выглядят как углубленное продолжение пройденных тем.";
 }
 
-function chooseBestGroup(groups) {
+function chooseBestGroup(groups, criteria = {}) {
   if (!Array.isArray(groups) || !groups.length) return null;
-  return groups.find((group) => Number(group.free_places_counter) > 0) || groups[0];
+  return [...groups].sort((a, b) => scoreGroupChoice(b, criteria) - scoreGroupChoice(a, criteria))[0];
+}
+
+function scoreGroupChoice(group, criteria = {}) {
+  let score = 0;
+  const freePlaces = Number(group?.free_places_counter);
+  if (Number.isFinite(freePlaces) && freePlaces > 0) score += 3;
+  score += scoreGroupCriteria(group, criteria);
+  return score;
+}
+
+function scoreGroupCriteria(group, criteria = {}) {
+  if (!group) return 0;
+  let score = 0;
+  if (criteria.budget) {
+    const budgetValue = extractPriceAmount(criteria.budget);
+    const priceValue = extractPriceAmount(group.period_price);
+    if (budgetValue != null && priceValue != null) {
+      if (priceValue <= budgetValue) score += 3;
+      else if (priceValue <= budgetValue * 1.25) score -= 1;
+      else score -= 4;
+    }
+  }
+  if (criteria.scheduleText) {
+    score += scoreGroupSchedule(group, criteria.scheduleText);
+  }
+  return score;
+}
+
+function scoreGroupSchedule(group, scheduleText) {
+  const normalized = normalizeText(scheduleText);
+  if (!normalized) return 0;
+  const days = collectGroupDays(group);
+  const wantsWeekend = normalized.includes("выход") || normalized.includes("суб") || normalized.includes("воск");
+  const wantsWeekday = normalized.includes("буд");
+  const wantsEvening = normalized.includes("веч");
+  const wantsMorning = normalized.includes("утр");
+  const firstHour = getEarliestGroupHour(group);
+  let score = 0;
+  if (wantsWeekend) score += days.some((day) => day === "saturday" || day === "sunday") ? 2 : -2;
+  if (wantsWeekday) score += days.some((day) => !["saturday", "sunday"].includes(day)) ? 1 : -1;
+  if (wantsEvening && firstHour != null) score += firstHour >= 17 ? 1 : -1;
+  if (wantsMorning && firstHour != null) score += firstHour < 13 ? 1 : -1;
+  return score;
+}
+
+function collectGroupDays(group) {
+  const days = [];
+  for (const period of group?.periods || []) {
+    for (const dayKey of Object.keys(period.schedule || {})) {
+      days.push(normalizeText(dayKey));
+    }
+  }
+  return [...new Set(days)];
+}
+
+function getEarliestGroupHour(group) {
+  const hours = [];
+  for (const period of group?.periods || []) {
+    for (const entries of Object.values(period.schedule || {})) {
+      for (const entry of entries || []) {
+        const match = String(entry.start_time || "").match(/(\d{1,2}):/);
+        if (match) hours.push(Number(match[1]));
+      }
+    }
+  }
+  if (!hours.length) return null;
+  return Math.min(...hours);
+}
+
+function countFreePlaces(groups) {
+  return (groups || []).reduce((sum, group) => {
+    const count = Number(group.free_places_counter);
+    return sum + (Number.isFinite(count) && count > 0 ? count : 0);
+  }, 0);
 }
 
 function summarizeSchedule(group) {
@@ -724,6 +1081,7 @@ function normalizeText(value) {
 
 function extractPriceAmount(value) {
   if (value == null) return null;
+  if (/бесплат/i.test(String(value))) return 0;
   const normalized = String(value).replace(/\s/g, "").replace(",", ".");
   const match = normalized.match(/(\d+(?:\.\d+)?)/);
   if (!match) return null;
@@ -745,8 +1103,13 @@ function capitalize(value) {
 module.exports = {
   createScenario3State,
   analyzeCompletedProgramsFromText,
+  analyzeCompletedProgramsFromIds,
+  mergeScenario3Links,
   getDeepTrajectoryRecommendations,
+  buildCompletedProgramsReviewMessage,
   buildDeepTrajectoryResultMessage,
+  buildScenario3PdfAnswers,
+  buildScenario3PdfResult,
   buildMunicipalityKeyboard,
   parsePfdoProgramLinks,
 };

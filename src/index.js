@@ -10,7 +10,13 @@ const { FLOW, SCENARIO_1, SCENARIO_2, SCENARIO_3 } = require("./flow");
 const { getRecommendations } = require("./recommendations");
 const { createSelectionPdf } = require("./pdf-selection");
 const { analyzeFreeText } = require("./llm-router");
-const { createDescriptionSelectionState, ensureDescriptionSelectionState } = require("./description-selection");
+const {
+  createDescriptionSelectionState,
+  ensureDescriptionSelectionState,
+  applyDescriptionText,
+  applyLlmAnalysis,
+  recordLlmError,
+} = require("./description-selection");
 const {
   isDescriptionStep,
   isDescriptionCallback,
@@ -20,9 +26,13 @@ const {
 } = require("./description-flow");
 const {
   createScenario3State,
-  analyzeCompletedProgramsFromText,
+  analyzeCompletedProgramsFromIds,
+  mergeScenario3Links,
   getDeepTrajectoryRecommendations,
+  buildCompletedProgramsReviewMessage,
   buildDeepTrajectoryResultMessage,
+  buildScenario3PdfAnswers,
+  buildScenario3PdfResult,
   buildMunicipalityKeyboard,
 } = require("./deep-trajectory");
 const {
@@ -533,20 +543,54 @@ async function startScenario2(chatId) {
 
 async function startScenario3(chatId) {
   const session = await getSession(chatId);
-  session.step = "s3_wait_links";
+  session.step = "s3_collect_links";
   session.scenario = {
     id: "trajectory_deep",
     label: "Составить углубленную траекторию",
   };
   session.scenario3 = createScenario3State();
+  session.scenario3.criteria = createDescriptionSelectionState();
   await persistSession(chatId, session);
   return sendMessage(chatId, SCENARIO_3.intro);
 }
 
 async function handleScenario3Links(chatId, text, session) {
+  const merge = mergeScenario3Links(session.scenario3, text);
+  if (!merge.added.length && !session.scenario3.submittedProgramIds.length) {
+    await persistSession(chatId, session);
+    return sendMessage(chatId, SCENARIO_3.noLinks);
+  }
+
+  await persistSession(chatId, session);
+  if (merge.maxReached) {
+    return finalizeScenario3Links(chatId, session);
+  }
+
+  const lines = [];
+  if (merge.added.length) {
+    lines.push(`Добавил ссылок: ${merge.added.length}. Всего собрано: ${merge.total} из 5.`);
+  } else {
+    lines.push(`Новых ссылок не нашел. Сейчас собрано: ${merge.total} из 5.`);
+  }
+  if (merge.duplicates.length) lines.push("Повторяющиеся ссылки я не добавлял.");
+  if (merge.ignoredBecauseLimit) lines.push("Лишние ссылки сверх 5 не добавляю.");
+  if (merge.parsed.invalidLinks.length) lines.push("Сейчас поддерживаются только ссылки на программы 51.pfdo.ru.");
+  lines.push("", "Можете прислать еще ссылки или продолжить.");
+  return sendMessage(chatId, lines.join("\n"), SCENARIO_3.linkCollection.keyboard);
+}
+
+async function finalizeScenario3Links(chatId, session) {
+  if (!session.scenario3.submittedProgramIds?.length) {
+    return sendMessage(chatId, SCENARIO_3.noLinks);
+  }
+
   let analysis;
   try {
-    analysis = await analyzeCompletedProgramsFromText(text);
+    analysis = await analyzeCompletedProgramsFromIds(session.scenario3.submittedProgramIds, {
+      links: session.scenario3.links,
+      invalidLinks: session.scenario3.invalidLinks,
+      programLinks: session.scenario3.programLinks,
+    });
   } catch (error) {
     console.error("Scenario 3 link analysis failed:", error);
     return sendMessage(chatId, "Не удалось проверить ссылки в базе PFDO. Попробуйте отправить ссылки еще раз.");
@@ -581,20 +625,57 @@ async function handleScenario3Links(chatId, text, session) {
     session.scenario3.municipalityName = municipality.name;
   }
 
-  return continueScenario3AfterContext(chatId, session);
+  return showScenario3CompletedReview(chatId, session, analysis);
 }
 
-async function continueScenario3AfterContext(chatId, session) {
-  if (!session.scenario3.ageYears) {
-    session.step = "s3_wait_age";
-    await persistSession(chatId, session);
-    return sendMessage(chatId, SCENARIO_3.age.text);
+async function showScenario3CompletedReview(chatId, session, analysis = null) {
+  session.step = "s3_review_completed";
+  await persistSession(chatId, session);
+  const text = buildCompletedProgramsReviewMessage(session.scenario3, analysis);
+  for (const chunk of splitMessage(text)) {
+    await sendMessage(chatId, chunk);
   }
+  session.step = "s3_criteria_choice";
+  await persistSession(chatId, session);
+  return sendMessage(chatId, SCENARIO_3.criteria.text, SCENARIO_3.criteria.keyboard);
+}
 
+async function handleScenario3CriteriaText(chatId, text, session) {
+  if (!session.scenario3.criteria) {
+    session.scenario3.criteria = createDescriptionSelectionState();
+  }
+  applyDescriptionText(session.scenario3.criteria, text, { mode: "edit" });
+  await enrichScenario3CriteriaWithLlm(session, text);
+  await persistSession(chatId, session);
   return showScenario3Results(chatId, session);
 }
 
+async function enrichScenario3CriteriaWithLlm(session, text) {
+  if (!analyzeFreeText) return;
+  try {
+    const analysis = await analyzeFreeText({
+      scenario: "trajectory_deep",
+      mode: "edit",
+      current: session.scenario3.criteria,
+    }, text);
+    if (analysis) {
+      applyLlmAnalysis(session.scenario3.criteria, analysis, { mode: "edit" });
+    }
+  } catch (error) {
+    recordLlmError(session.scenario3.criteria, error);
+    console.warn("Scenario 3 criteria LLM analysis skipped:", error.message);
+  }
+}
+
 async function showScenario3Results(chatId, session) {
+  const criteriaFields = session.scenario3.criteria?.fields || {};
+  const criteriaAge = Number(criteriaFields.ageYears);
+  if (!session.scenario3.ageYears && !Number.isFinite(criteriaAge) && !criteriaFields.age) {
+    session.step = "s3_wait_criteria_text";
+    await persistSession(chatId, session);
+    return sendMessage(chatId, "Не удалось надежно определить возраст по пройденным программам. Напишите возраст ребенка и при желании другие критерии поиска.");
+  }
+
   session.step = "s3_results";
   await persistSession(chatId, session);
   await sendMessage(chatId, "Ищу программы, которые могут быть углубленным продолжением...");
@@ -620,7 +701,12 @@ async function showScenario3Results(chatId, session) {
   for (const chunk of splitMessage(text)) {
     await sendMessage(chatId, chunk);
   }
-  return sendMessage(chatId, "Чтобы построить новую траекторию, нажмите /start.");
+  if (!result.items.length) {
+    return sendMessage(chatId, "Чтобы построить новую траекторию, нажмите /start.");
+  }
+  session.step = "s3_pdf";
+  await persistSession(chatId, session);
+  return sendMessage(chatId, SCENARIO_3.pdfDownload.text, SCENARIO_3.pdfDownload.keyboard);
 }
 
 async function askScenario2Interests(chatId, session) {
@@ -767,8 +853,12 @@ async function handleText(message) {
     });
   }
 
-  if (session.step === "s3_wait_links") {
+  if (session.step === "s3_collect_links" || session.step === "s3_wait_links") {
     return handleScenario3Links(chatId, text, session);
+  }
+
+  if (session.step === "s3_wait_criteria_text") {
+    return handleScenario3CriteriaText(chatId, text, session);
   }
 
   if (session.step === "s3_wait_age") {
@@ -875,6 +965,41 @@ async function handleCallback(callbackQuery) {
     return startScenario3(chatId);
   }
 
+  if (data === "s3:links:add") {
+    session.step = "s3_collect_links";
+    await persistSession(chatId, session);
+    return sendMessage(chatId, "Пришлите еще одну ссылку на программу 51.pfdo.ru.");
+  }
+
+  if (data === "s3:links:done") {
+    return finalizeScenario3Links(chatId, session);
+  }
+
+  if (data === "s3:criteria:edit") {
+    if (!session.scenario3.criteria) {
+      session.scenario3.criteria = createDescriptionSelectionState();
+    }
+    session.step = "s3_wait_criteria_text";
+    await persistSession(chatId, session);
+    return sendMessage(chatId, SCENARIO_3.criteria.editText);
+  }
+
+  if (data === "s3:criteria:skip") {
+    return showScenario3Results(chatId, session);
+  }
+
+  if (data === "s3:pdf:yes") {
+    session.scenario3.pdfRequested = true;
+    await persistSession(chatId, session);
+    return sendScenario3Pdf(chatId, session);
+  }
+
+  if (data === "s3:pdf:no") {
+    session.scenario3.pdfRequested = false;
+    await persistSession(chatId, session);
+    return sendMessage(chatId, "Хорошо. Чтобы построить новую траекторию, нажмите /start.");
+  }
+
   const scenarios = {
     "scenario:new_interests": {
       id: "trajectory_new_interests",
@@ -894,7 +1019,7 @@ async function handleCallback(callbackQuery) {
     }
     session.scenario3.municipalityId = municipality.id;
     session.scenario3.municipalityName = municipality.name;
-    return continueScenario3AfterContext(chatId, session);
+    return showScenario3CompletedReview(chatId, session);
   }
 
   if (data.startsWith("s2:goal:")) {
@@ -1061,6 +1186,33 @@ async function sendScenario2Pdf(chatId, session) {
   }
 }
 
+async function sendScenario3Pdf(chatId, session) {
+  const result = session.scenario3.lastResult;
+  if (!result?.items?.length) {
+    return sendMessage(chatId, "Не нашел последнюю подборку. Начните новую траекторию через /start.");
+  }
+
+  try {
+    await sendMessage(chatId, "Готовлю PDF-файл с подборкой...");
+    const target = normalizeTarget(chatId);
+    const outputPath = path.join(
+      process.env.PDF_OUTPUT_DIR || path.join(os.tmpdir(), "telegram-bot-pdfs"),
+      `selection-${targetFilePart(target)}-${Date.now()}.pdf`,
+    );
+    await createSelectionPdf({
+      outputPath,
+      answers: buildScenario3PdfAnswers(session.scenario3),
+      result: buildScenario3PdfResult(result),
+    });
+    session.scenario3.pdfPath = outputPath;
+    await persistSession(chatId, session);
+    return sendDocument(chatId, outputPath, "Подборка углубленных программ");
+  } catch (error) {
+    console.error("Scenario 3 PDF delivery failed:", error);
+    return sendMessage(chatId, "Не удалось подготовить PDF-файл. Попробуйте нажать кнопку скачивания еще раз.");
+  }
+}
+
 function incomingMessageTarget(message) {
   const chat = message.chat || {};
   return makeTarget(message.platform || "telegram", chat.id ?? message.chat_id, chat);
@@ -1130,6 +1282,8 @@ function selectedSpecialNeeds(state) {
 
 function applyScenario3Analysis(state, analysis) {
   state.links = analysis.links;
+  state.programLinks = analysis.programLinks || state.programLinks || [];
+  state.submittedProgramIds = analysis.programIds || state.submittedProgramIds || [];
   state.invalidLinks = analysis.invalidLinks;
   state.completedProgramIds = analysis.programs.map((program) => Number(program.id));
   state.missingProgramIds = analysis.missingProgramIds;
@@ -1141,7 +1295,15 @@ function applyScenario3Analysis(state, analysis) {
     directionName: program.directionName,
     ageMinMonths: program.ageMinMonths,
     ageMaxMonths: program.ageMaxMonths,
+    ageLabel: program.ageLabel,
+    price: program.price,
+    schedule: program.schedule,
+    period: program.period,
+    availableGroups: program.availableGroups,
+    availablePlaces: program.availablePlaces,
+    enrollment: program.enrollment,
     sourceUrl: program.sourceUrl,
+    topics: program.topics || [],
   }));
   state.municipalityOptions = analysis.municipalities;
   state.completedTopicProfile = analysis.topicProfile;
@@ -1392,9 +1554,12 @@ function mattermostReplyMarkupForSession(session) {
   if (!session || session.step === "entry") return FLOW.entry.keyboard;
   if (session.step === "s1_confirm_summary") return SCENARIO_1.confirmation.keyboard;
   if (session.step === "s1_pdf") return SCENARIO_1.pdfDownload.keyboard;
+  if (session.step === "s3_collect_links") return SCENARIO_3.linkCollection.keyboard;
   if (session.step === "s3_choose_municipality") {
     return buildMunicipalityKeyboard(session.scenario3?.municipalityOptions || []);
   }
+  if (session.step === "s3_criteria_choice") return SCENARIO_3.criteria.keyboard;
+  if (session.step === "s3_pdf") return SCENARIO_3.pdfDownload.keyboard;
   if (session.step === "s2_goal") {
     return multiSelectKeyboard("goal", SCENARIO_2.goal.options, session.scenario2?.goals || []);
   }
