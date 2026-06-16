@@ -12,6 +12,7 @@ const {
   buildScenario3PdfResult,
   buildMunicipalityKeyboard,
   hasMeaningfulCompletedTopics,
+  inferAgeRangeFromPrograms,
 } = require("../src/deep-trajectory");
 
 test("parses PFDO program links and keeps link-to-program mapping", () => {
@@ -119,6 +120,24 @@ test("detects at least one classifier category as meaningful completed topics", 
   assert.equal(hasMeaningfulCompletedTopics(state), true);
 });
 
+test("infers intersecting age range from completed programs", () => {
+  const ageRange = inferAgeRangeFromPrograms([
+    { ageMinMonths: 7 * 12, ageMaxMonths: 11 * 12 },
+    { ageMinMonths: 9 * 12, ageMaxMonths: 12 * 12 },
+  ]);
+
+  assert.deepEqual(ageRange, { min: 9, max: 11 });
+});
+
+test("does not infer age range when completed program ages do not overlap", () => {
+  const ageRange = inferAgeRangeFromPrograms([
+    { ageMinMonths: 7 * 12, ageMaxMonths: 8 * 12 },
+    { ageMinMonths: 10 * 12, ageMaxMonths: 12 * 12 },
+  ]);
+
+  assert.equal(ageRange, null);
+});
+
 test("builds completed programs review with classifier hierarchy labels and program facts", () => {
   const state = createScenario3State();
   state.completedPrograms = [{
@@ -218,7 +237,7 @@ test("explains pending topic processing for on-demand imported programs", () => 
   assert.doesNotMatch(reviewMessage, /категории тем не удалось надежно определить/);
 });
 
-test("builds deep trajectory result with classifier hierarchy labels instead of raw topics", () => {
+test("builds deep trajectory result list with classifier hierarchy labels instead of raw topics", () => {
   const profile = {
     categoryLabels: ["Инженерное творчество / Робототехника"],
     topicNames: ["Конструирование робота"],
@@ -244,7 +263,10 @@ test("builds deep trajectory result with classifier hierarchy labels instead of 
     },
   );
 
-  assert.match(message, /основные направления тем по классификатору/);
+  assert.match(message, /Вот программы, которые выглядят как следующий шаг:/);
+  assert.doesNotMatch(message, /основные направления тем по классификатору/);
+  assert.doesNotMatch(message, /Буду искать продолжение/);
+  assert.doesNotMatch(message, /Возраст: 10 лет/);
   assert.match(message, /Инженерное творчество \/ Робототехника/);
   assert.match(message, /продолжает направления: Инженерное творчество \/ Робототехника/);
   assert.match(message, /углубляет за счет: Информационные технологии \/ Программирование, проектная работа/);
@@ -279,6 +301,26 @@ test("uses booking clarification when recommended program price is unknown", () 
   assert.match(message, /Стоимость: Уточните при записи/);
 });
 
+test("builds deep trajectory empty result with criteria change suggestion", () => {
+  const profile = {
+    categoryLabels: ["Инженерное творчество / Робототехника"],
+  };
+  const message = buildDeepTrajectoryResultMessage(
+    { topicProfile: profile },
+    { municipalityName: "Мурманск", ageRangeYears: { min: 9, max: 11 } },
+    {
+      topicProfile: profile,
+      searchContext: { municipalityName: "Мурманск", ageRangeYears: { min: 9, max: 11 } },
+      items: [],
+      reason: "Нет подходящих программ.",
+    },
+  );
+
+  assert.equal(message, "Не могу найти подходящих программ. Попробуйте изменить критерии поиска");
+  assert.doesNotMatch(message, /Я нашел пройденные программы/);
+  assert.doesNotMatch(message, /Возраст:/);
+});
+
 test("builds scenario 3 PDF answers from classifier hierarchy labels", () => {
   const state = createScenario3State();
   state.ageYears = 10;
@@ -303,6 +345,21 @@ test("builds scenario 3 PDF answers from classifier hierarchy labels", () => {
   assert.equal(answers.place, "Североморск");
   assert.equal(answers.cost, "бесплатно");
   assert.equal(answers.interestsText, "Робототехника, Программирование");
+});
+
+test("builds scenario 3 PDF answers with inferred age range", () => {
+  const state = createScenario3State();
+  state.ageRangeYears = { min: 9, max: 11 };
+  state.municipalityName = "Мурманск";
+  state.completedTopicProfile = {
+    categoryLabels: ["Робототехника"],
+    topicNames: [],
+    directions: [],
+  };
+
+  const answers = buildScenario3PdfAnswers(state);
+
+  assert.equal(answers.ageText, "9-11 лет");
 });
 
 test("adapts scenario 3 recommendations to common PDF item fields", () => {

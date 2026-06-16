@@ -7,6 +7,7 @@ const { loadProgramSyncStates } = require("./pfdo-sync-state");
 const MAX_COMPLETED_LINKS = 5;
 const UNKNOWN_SCHEDULE_LABEL = "Уточните при записи";
 const UNKNOWN_PRICE_LABEL = "Уточните при записи";
+const DEEP_TRAJECTORY_NO_RESULTS_MESSAGE = "Не могу найти подходящих программ. Попробуйте изменить критерии поиска";
 const TOPIC_SUMMARY_GROUP_LIMIT = 4;
 const TOPIC_SUMMARY_CATEGORY_LIMIT = 3;
 const ADVANCED_TOPIC_PATTERNS = [
@@ -38,6 +39,7 @@ function createScenario3State() {
     municipalityName: "",
     age: null,
     ageYears: null,
+    ageRangeYears: null,
     completedTopicProfile: null,
     criteria: null,
     lastResult: null,
@@ -70,6 +72,7 @@ async function analyzeCompletedProgramsFromIds(programIds, options = {}) {
       municipalities: [],
       topicProfile: createTopicProfile([]),
       inferredAge: null,
+      inferredAgeRange: null,
       shouldAskAge: true,
     };
   }
@@ -121,7 +124,8 @@ async function analyzeCompletedProgramsFromIds(programIds, options = {}) {
       })),
     (item) => item.id,
   );
-  const inferredAge = inferAgeFromPrograms(programsWithTopics);
+  const inferredAgeRange = inferAgeRangeFromPrograms(programsWithTopics);
+  const inferredAge = midpointAgeYears(inferredAgeRange);
   const pendingTopicProgramIds = programsWithTopics
     .filter((program) => !program.topics.length && program.topicsStatus && program.topicsStatus !== "ready")
     .map((program) => Number(program.id));
@@ -135,7 +139,8 @@ async function analyzeCompletedProgramsFromIds(programIds, options = {}) {
     municipalities,
     topicProfile: createTopicProfile(programsWithTopics),
     inferredAge,
-    shouldAskAge: !inferredAge,
+    inferredAgeRange,
+    shouldAskAge: !inferredAgeRange,
   };
 }
 
@@ -186,23 +191,29 @@ async function getDeepTrajectoryRecommendations(state, options = {}) {
   const criteria = normalizeSearchCriteria(options.criteria || state.criteria);
   const searchContext = await resolveSearchContext(state, criteria);
   const municipalityId = Number(searchContext.municipalityId);
-  const ageYears = Number(searchContext.ageYears);
+  const ageRangeYears = normalizeAgeRangeYears(searchContext.ageRangeYears);
+  const ageYears = Number(searchContext.ageYears || midpointAgeYears(ageRangeYears));
   if (!Number.isFinite(municipalityId)) {
     throw new Error("Missing municipality for deep trajectory");
   }
-  if (!Number.isFinite(ageYears)) {
+  if (!ageRangeYears) {
     throw new Error("Missing age for deep trajectory");
   }
 
   const completedIds = (state.completedProgramIds || []).map(Number).filter(Number.isFinite);
   const topicProfile = state.completedTopicProfile || createTopicProfile(state.completedPrograms || []);
-  const candidates = await loadCandidatePrograms({ municipalityId, ageYears, excludeIds: completedIds });
+  const candidates = await loadCandidatePrograms({
+    municipalityId,
+    ageYears,
+    ageRangeYears,
+    excludeIds: completedIds,
+  });
   if (!candidates.length) {
     return {
       source: "mirror",
       confidence: "low",
       items: [],
-      reason: "В выбранном населенном пункте не нашлось программ для этого возраста.",
+      reason: DEEP_TRAJECTORY_NO_RESULTS_MESSAGE,
       topicProfile,
       searchContext,
     };
@@ -325,8 +336,13 @@ async function loadProgramsByIds(programIds) {
   return rows.map(rowToProgram);
 }
 
-async function loadCandidatePrograms({ municipalityId, ageYears, excludeIds }) {
-  const ageMonths = Number(ageYears) * 12;
+async function loadCandidatePrograms({ municipalityId, ageYears, ageRangeYears, excludeIds }) {
+  const normalizedAgeRange = normalizeAgeRangeYears(ageRangeYears) || ageRangeFromYears(ageYears);
+  if (!normalizedAgeRange) {
+    throw new Error("Missing age range for candidate programs");
+  }
+  const minAgeMonths = Math.round(normalizedAgeRange.min * 12);
+  const maxAgeMonths = Math.round(normalizedAgeRange.max * 12);
   const excluded = (excludeIds || []).map(Number).filter(Number.isFinite);
   const excludedSql = excluded.length ? `AND p.id NOT IN (${excluded.join(",")})` : "";
   const rows = await queryRows(
@@ -359,8 +375,8 @@ async function loadCandidatePrograms({ municipalityId, ageYears, excludeIds }) {
     ) keyword_agg ON TRUE
     WHERE p.municipality_id = ${Number(municipalityId)}
       ${excludedSql}
-      AND (p.age_group_min IS NULL OR p.age_group_min <= ${ageMonths})
-      AND (p.age_group_max IS NULL OR p.age_group_max >= ${ageMonths})
+      AND (p.age_group_min IS NULL OR p.age_group_min <= ${maxAgeMonths})
+      AND (p.age_group_max IS NULL OR p.age_group_max >= ${minAgeMonths})
     ORDER BY p.id;
   `,
     getMirrorDatabaseUrl(),
@@ -504,7 +520,7 @@ function createTopicProfile(programs) {
   };
 }
 
-function inferAgeFromPrograms(programs) {
+function inferAgeRangeFromPrograms(programs) {
   const ranges = (programs || [])
     .map((program) => ({
       min: monthsToYears(program.ageMinMonths),
@@ -516,10 +532,11 @@ function inferAgeFromPrograms(programs) {
 
   const intersectionMin = Math.max(...ranges.map((range) => range.min ?? 3));
   const intersectionMax = Math.min(...ranges.map((range) => range.max ?? 18));
-  if (intersectionMin > intersectionMax) return null;
-  if (intersectionMax - intersectionMin > 4) return null;
+  return normalizeAgeRangeYears({ min: intersectionMin, max: intersectionMax });
+}
 
-  return Math.round((intersectionMin + intersectionMax) / 2);
+function inferAgeFromPrograms(programs) {
+  return midpointAgeYears(inferAgeRangeFromPrograms(programs));
 }
 
 function scoreCandidate(program, topics, profile, ageYears, criteria = {}) {
@@ -674,11 +691,18 @@ async function resolveSearchContext(state, criteria = {}) {
     }
   }
 
-  const ageYears = criteria.ageYears || nullableNumber(state.ageYears);
+  const criteriaAgeYears = nullableNumber(criteria.ageYears);
+  const stateAgeYears = nullableNumber(state.ageYears);
+  const stateAgeRangeYears = normalizeAgeRangeYears(state.ageRangeYears);
+  const ageRangeYears = criteriaAgeYears
+    ? ageRangeFromYears(criteriaAgeYears)
+    : stateAgeRangeYears || ageRangeFromYears(stateAgeYears);
+  const ageYears = criteriaAgeYears || stateAgeYears || midpointAgeYears(ageRangeYears);
   return {
     municipalityId,
     municipalityName,
     ageYears,
+    ageRangeYears,
     criteria,
   };
 }
@@ -741,36 +765,11 @@ function normalizeRecommendationItem(item, detail, criteria = {}) {
 function buildDeepTrajectoryResultMessage(analysis, state, result, options = {}) {
   const linkFormat = options.linkFormat || "plain";
   const display = (value) => formatDisplayText(value, linkFormat);
-  const profile = result.topicProfile || state.completedTopicProfile || analysis?.topicProfile || createTopicProfile([]);
-  const topicSummary = profile.categoryLabels?.length
-    ? profile.categoryLabels.slice(0, 8).map(display).join(", ")
-    : "категории тем не удалось надежно определить";
-  const searchContext = result.searchContext || {};
-  const municipalityName = searchContext.municipalityName || state.municipalityName;
-  const ageYears = searchContext.ageYears || state.ageYears;
-  const lines = [
-    "Я нашел пройденные программы и определил основные направления тем по классификатору:",
-    topicSummary,
-    "",
-    `Буду искать продолжение в населенном пункте: ${display(municipalityName)}.`,
-    `Возраст: ${display(ageYears)} лет.`,
-    "",
-  ];
-
-  const missingProgramIds = analysis?.missingProgramIds || state.missingProgramIds || [];
-  if (missingProgramIds.length) {
-    lines.push(`Не нашел в базе программы: ${missingProgramIds.join(", ")}. Продолжаю по найденным ссылкам.`, "");
-  }
-
   if (!result.items.length) {
-    lines.push(
-      result.reason || "Подходящих углубленных программ не нашлось.",
-      "Можно попробовать другой населенный пункт или начать новый поиск через /start.",
-    );
-    return lines.join("\n");
+    return DEEP_TRAJECTORY_NO_RESULTS_MESSAGE;
   }
 
-  lines.push("Вот программы, которые выглядят как следующий шаг:", "");
+  const lines = ["Вот программы, которые выглядят как следующий шаг:", ""];
   result.items.forEach((item, index) => {
     const related = item.relatedTopics.length
       ? item.relatedTopics.map(display).join(", ")
@@ -852,8 +851,15 @@ function buildScenario3PdfAnswers(state) {
     ? profile.categoryLabels
     : profile.topicNames;
   const directions = (profile.directions || []).map((item) => item.name).filter(Boolean);
+  const ageText = criteria.ageText ||
+    formatAgeRangeYears(
+      criteria.ageYears
+        ? ageRangeFromYears(criteria.ageYears)
+        : state.ageRangeYears || ageRangeFromYears(state.ageYears),
+    ) ||
+    (state.age ? `${state.age} лет` : "");
   return {
-    ageText: criteria.ageText || (criteria.ageYears ? `${criteria.ageYears} лет` : state.ageYears ? `${state.ageYears} лет` : state.age ? `${state.age} лет` : ""),
+    ageText,
     age: "",
     interestsText: uniqueBy(interestLabels, (item) => normalizeText(item)).slice(0, 8).join(", "),
     interests: [],
@@ -1045,12 +1051,8 @@ function buildMunicipalityKeyboard(municipalities) {
   };
 }
 
-function explainNoCandidates(candidates, profile) {
-  if (!candidates.length) return "В выбранном населенном пункте нет программ для указанного возраста.";
-  if (!profile.topicKeys.length && !profile.categories.length) {
-    return "У пройденных программ не нашлось распознанных тем, поэтому точный углубленный подбор невозможен.";
-  }
-  return "Есть программы для этого возраста, но они не выглядят как углубленное продолжение пройденных тем.";
+function explainNoCandidates() {
+  return DEEP_TRAJECTORY_NO_RESULTS_MESSAGE;
 }
 
 function chooseBestGroup(groups, criteria = {}) {
@@ -1226,6 +1228,36 @@ function formatAgeRange(minMonths, maxMonths) {
   return "Возраст уточняется на карточке";
 }
 
+function formatAgeRangeYears(range) {
+  const normalized = normalizeAgeRangeYears(range);
+  if (!normalized) return "";
+  if (normalized.min === normalized.max) return `${normalized.min} лет`;
+  return `${normalized.min}-${normalized.max} лет`;
+}
+
+function normalizeAgeRangeYears(range) {
+  if (!range) return null;
+  const min = nullableNumber(range.min);
+  const max = nullableNumber(range.max);
+  if (min == null && max == null) return null;
+  const normalizedMin = min ?? 3;
+  const normalizedMax = max ?? 18;
+  if (normalizedMin > normalizedMax) return null;
+  return { min: normalizedMin, max: normalizedMax };
+}
+
+function ageRangeFromYears(ageYears) {
+  const age = nullableNumber(ageYears);
+  if (age == null) return null;
+  return { min: age, max: age };
+}
+
+function midpointAgeYears(range) {
+  const normalized = normalizeAgeRangeYears(range);
+  if (!normalized) return null;
+  return Math.round((normalized.min + normalized.max) / 2);
+}
+
 function monthsToYears(value) {
   const number = nullableNumber(value);
   if (number == null) return null;
@@ -1316,5 +1348,7 @@ module.exports = {
   buildMunicipalityKeyboard,
   findMunicipalityByName,
   hasMeaningfulCompletedTopics,
+  inferAgeRangeFromPrograms,
+  formatAgeRangeYears,
   parsePfdoProgramLinks,
 };

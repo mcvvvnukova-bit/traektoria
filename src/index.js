@@ -707,7 +707,7 @@ async function handleScenario3CriteriaText(chatId, text, session) {
 async function askScenario3CustomMunicipality(chatId, session) {
   session.step = "s3_wait_municipality_text";
   await persistSession(chatId, session);
-  return sendMessage(chatId, "Напишите населенный пункт, в котором искать продолжение. Например: Североморск.");
+  return sendMessage(chatId, SCENARIO_3.municipality.customText);
 }
 
 async function askScenario3Municipality(chatId, session) {
@@ -760,10 +760,12 @@ async function enrichScenario3CriteriaWithLlm(session, text) {
 async function showScenario3Results(chatId, session) {
   const criteriaFields = session.scenario3.criteria?.fields || {};
   const criteriaAge = Number(criteriaFields.ageYears);
-  if (!session.scenario3.ageYears && !Number.isFinite(criteriaAge) && !criteriaFields.age) {
-    session.step = "s3_wait_criteria_text";
+  const hasCriteriaAge = Number.isFinite(criteriaAge) && criteriaAge >= 3 && criteriaAge <= 18;
+  const hasAgeRange = Boolean(session.scenario3.ageRangeYears);
+  if (!session.scenario3.ageYears && !hasAgeRange && !hasCriteriaAge && !criteriaFields.age) {
+    session.step = "s3_wait_age";
     await persistSession(chatId, session);
-    return sendMessage(chatId, "Не удалось надежно определить возраст по пройденным программам. Напишите возраст ребенка и при желании другие критерии поиска.");
+    return sendMessage(chatId, "Сколько лет ребенку?");
   }
 
   session.step = "s3_results";
@@ -973,6 +975,7 @@ async function handleText(message) {
     }
     session.scenario3.age = String(age);
     session.scenario3.ageYears = age;
+    session.scenario3.ageRangeYears = null;
     return showScenario3Results(chatId, session);
   }
 
@@ -1440,9 +1443,13 @@ function applyScenario3Analysis(state, analysis) {
   }));
   state.municipalityOptions = analysis.municipalities;
   state.completedTopicProfile = analysis.topicProfile;
+  state.ageRangeYears = analysis.inferredAgeRange || null;
   if (analysis.inferredAge) {
     state.ageYears = analysis.inferredAge;
     state.age = String(analysis.inferredAge);
+  } else {
+    state.ageYears = null;
+    state.age = null;
   }
   state.lastResult = null;
 }

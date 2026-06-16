@@ -12,11 +12,18 @@ test("scenario 3 full topics follow-up reuses criteria continuation buttons", ()
 });
 
 test("scenario 3 asks for child interests when completed topics are not meaningful", () => {
-  assert.match(SCENARIO_3.criteria.interestsFallbackText, /что интересно ребенку/);
-  assert.match(SCENARIO_3.criteria.interestsFallbackText, /углубленное продолжение/);
+  assert.equal(
+    SCENARIO_3.criteria.interestsFallbackText,
+    "Не удалось точно определить интересы по пройденным программам.\n\n" +
+      "Расскажите, что сейчас интересно ребенку. Можно также добавить удобное расписание, комфортную стоимость занятий или цели обучения.",
+  );
 });
 
 test("scenario 3 has a separate municipality prompt after completed program review", () => {
   assert.match(SCENARIO_3.municipality.text, /В каком населенном пункте/);
-  assert.match(SCENARIO_3.municipality.text, /продолжение/);
+  assert.match(SCENARIO_3.municipality.text, /хотите продолжить обучение/);
+  assert.equal(
+    SCENARIO_3.municipality.customText,
+    "Напишите населенный пункт, в котором хотите продолжить обучение",
+  );
 });
