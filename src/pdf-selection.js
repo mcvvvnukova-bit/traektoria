@@ -363,9 +363,14 @@ function drawProgramCard(context, item) {
 }
 
 function drawAvailability(page, x, y, item) {
-  const availablePlaces = Number(item.availablePlaces ?? item.availableGroups);
+  const availablePlacesRaw = item.availablePlaces ?? item.availableGroups;
+  const availablePlaces = Number(availablePlacesRaw);
   const enrollmentClosed = Number(item.enrollment) === 3;
-  if (enrollmentClosed || !Number.isFinite(availablePlaces) || availablePlaces <= 0) {
+  if (availablePlacesRaw == null || availablePlacesRaw === "" || !Number.isFinite(availablePlaces)) {
+    page.elements.push({ type: "text", text: "Места уточняются", x: x + 30, y: y + 13, size: 8.5, color: COLORS.muted, font: "semibold" });
+    return;
+  }
+  if (enrollmentClosed || availablePlaces <= 0) {
     page.elements.push({ type: "text", text: "Свободных мест нет", x: x + 30, y: y + 13, size: 8.5, color: COLORS.red, font: "semibold" });
     return;
   }
