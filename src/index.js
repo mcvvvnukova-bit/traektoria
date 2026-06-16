@@ -1799,7 +1799,8 @@ async function processWebChatText(target, text) {
   const trimmed = String(text || "").trim().slice(0, WEB_CHAT_MESSAGE_MAX_LENGTH);
   if (!trimmed) return;
 
-  if (trimmed !== "/start" && trimmed !== RESTART_BUTTON_TEXT) {
+  const botCommand = parseBotCommand(trimmed);
+  if (!botCommand && trimmed !== "/start" && trimmed !== RESTART_BUTTON_TEXT) {
     const session = await getSession(target);
     if (session.step === "entry") {
       await handleCallback({

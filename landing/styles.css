@@ -617,6 +617,8 @@ a {
   flex-direction: column;
   justify-content: space-between;
   gap: 20px;
+  width: 100%;
+  min-width: 0;
   min-height: clamp(520px, 48vw, 655px);
   overflow: hidden;
   padding: clamp(28px, 4vw, 54px) clamp(20px, 6vw, 70px) clamp(34px, 5vw, 66px);
@@ -647,6 +649,60 @@ a {
   width: 47px;
   height: 35px;
   object-fit: contain;
+}
+
+.chat-command-menu {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 6px;
+  border-radius: 18px;
+  background: rgba(242, 244, 254, 0.7);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chat-command-menu::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-command {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #252336;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.15;
+  letter-spacing: 0;
+  text-align: center;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition: transform 160ms ease, background 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.chat-command:hover {
+  transform: translateY(-1px);
+  background: #5042e1;
+  color: #ffffff;
+}
+
+.chat-command-muted {
+  background: transparent;
+  border-color: rgba(80, 66, 225, 0.16);
+  color: rgba(22, 22, 22, 0.7);
 }
 
 .chat-reset {
@@ -896,7 +952,8 @@ a {
 }
 
 .chat-card.is-pending .chat-send,
-.chat-card.is-pending .chat-choice {
+.chat-card.is-pending .chat-choice,
+.chat-card.is-pending .chat-command {
   cursor: progress;
   opacity: 0.62;
 }
@@ -2209,6 +2266,17 @@ a {
     align-items: flex-start;
   }
 
+  .chat-command-menu {
+    grid-template-columns: repeat(5, minmax(132px, 1fr));
+    margin-inline: -2px;
+    padding: 6px;
+  }
+
+  .chat-command {
+    min-height: 42px;
+    padding: 8px 11px;
+  }
+
   .chat-reset {
     padding: 9px 13px;
   }
@@ -2362,6 +2430,18 @@ a {
   .chat-reset {
     min-height: 38px;
     padding: 8px 11px;
+    font-size: 13px;
+  }
+
+  .chat-command-menu {
+    grid-template-columns: repeat(5, minmax(124px, 1fr));
+    gap: 7px;
+    border-radius: 16px;
+  }
+
+  .chat-command {
+    min-height: 40px;
+    padding: 8px 10px;
     font-size: 13px;
   }
 
@@ -2823,6 +2903,7 @@ a {
   }
 
   .chat-choice,
+  .chat-command,
   .chat-document-link {
     min-height: 44px;
     padding: 11px 16px;
