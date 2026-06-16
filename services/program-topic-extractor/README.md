@@ -51,10 +51,18 @@ Documents without a recognizable planning structure produce no topic rows.
 
 ## Topic normalization and classification
 
-After importing calendar-topic rows, build the analytics layer:
+The repository-level importer refreshes this layer automatically after it writes
+calendar-topic rows. For a scoped import, only the affected program analytics is
+rebuilt; for an unscoped import, the full analytics layer is rebuilt. Use
+`--skip-analytics` only when you intentionally want to update raw rows without
+refreshing derived tables.
+
+Manual rebuilds are still available:
 
 ```bash
 node scripts/build-pfdo-topic-analytics.js
+node scripts/build-pfdo-topic-analytics.js --program-id 364163
+node scripts/build-pfdo-topic-analytics.js --program-ids exports/program_ids.csv
 ```
 
 The script creates a versioned derived layer:
@@ -128,7 +136,7 @@ Optional flags:
 - `--model <model>` overrides the OpenAI model.
 - `--out-dir <path>` changes the artifact directory from `tmp/parser-updater`.
 - `--limit <n>` processes only the first N program IDs.
-- `--no-db-refresh` keeps apply mode from rewriting `pfdo_program_calendar_topics`.
+- `--no-db-refresh` keeps apply mode from rewriting `pfdo_program_calendar_topics` and therefore skips the importer-triggered analytics refresh.
 - `--max-attempts <n>` is kept as a compatibility option; parser fixes now produce one repair plan instead of iterative GPT patches.
 
 Outputs:

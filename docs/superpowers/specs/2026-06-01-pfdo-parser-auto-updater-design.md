@@ -77,7 +77,7 @@ For each `program_id` from the CSV:
 13. Keep the patch only if the current program improves and regression checks pass.
 14. Otherwise restore snapshots and record a failed update.
 
-The module does not directly update database topic rows. Database refresh stays the responsibility of `scripts/import-pfdo-calendar-topics.js`, so parser quality work remains separate from import side effects.
+The module does not directly update database topic rows. Database refresh stays the responsibility of `scripts/import-pfdo-calendar-topics.js`, so parser quality work remains separate from import side effects. When that importer rewrites raw topic rows, it also triggers the scoped analytics refresh for normalized topics, aggregates, classifications, and review items.
 
 ## OpenAI Interaction
 
@@ -221,5 +221,5 @@ node scripts/update-pfdo-program-parser.js \
 - Do not rewrite the parser architecture in the first version.
 - Do not update PostgreSQL rows directly from the auto-updater.
 - Do not deploy changes to Beget.
-- Do not change topic classification tables.
+- Do not write topic classification tables directly from the auto-updater; the importer-owned analytics refresh is responsible for derived topic tables.
 - Do not allow OpenAI to edit files outside the parser allowlist.
