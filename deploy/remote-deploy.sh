@@ -33,6 +33,23 @@ npm install --omit=dev --no-audit --no-fund
 echo "==> setup-db (idempotent)"
 node scripts/setup-db.js
 
+echo "==> pfdo mirror schema (idempotent)"
+node - <<'NODE'
+const path = require("node:path");
+const { loadEnvFile } = require("./src/load-env");
+loadEnvFile();
+const { executeSqlFile } = require("./src/db");
+
+const databaseUrl = process.env.PFDO_MIRROR_DATABASE_URL || "postgresql://localhost:5432/pfdo_51_mirror";
+
+(async () => {
+  await executeSqlFile(path.resolve("db/pfdo-mirror-schema.sql"), databaseUrl);
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+NODE
+
 echo "==> chown $SERVICE_USER (сервис работает под этим пользователем)"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
 
