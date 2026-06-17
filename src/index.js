@@ -1803,18 +1803,20 @@ async function processMattermostText(target, text) {
 
   if (trimmed !== "/start" && trimmed !== RESTART_BUTTON_TEXT) {
     const session = await getSession(target);
-    const callbackData = mattermostCallbackForSession(session, trimmed);
-    if (callbackData) {
-      await handleCallback({
-        platform: "mattermost",
-        id: null,
-        data: callbackData,
-        message: {
+    const callbacks = mattermostCallbacksForSession(session, trimmed);
+    if (callbacks.length) {
+      for (const callbackData of callbacks) {
+        await handleCallback({
           platform: "mattermost",
-          chat: target,
-          message_id: null,
-        },
-      });
+          id: null,
+          data: callbackData,
+          message: {
+            platform: "mattermost",
+            chat: target,
+            message_id: null,
+          },
+        });
+      }
       return;
     }
     if (session.step === "entry") {
@@ -1846,9 +1848,20 @@ function isMattermostStartText(text) {
   ].includes(value);
 }
 
-function mattermostCallbackForSession(session, text) {
+function mattermostCallbacksForSession(session, text) {
   const replyMarkup = mattermostReplyMarkupForSession(session);
-  return matchReplyMarkupChoice(replyMarkup, text);
+  return matchReplyMarkupChoices(replyMarkup, text, {
+    allowMultiple: isMattermostMultiSelectStep(session?.step),
+  });
+}
+
+function isMattermostMultiSelectStep(step) {
+  return [
+    "s2_goal",
+    "s2_special",
+    "s2_schedule",
+    "s2_avoidances",
+  ].includes(step);
 }
 
 function mattermostReplyMarkupForSession(session) {
@@ -1882,17 +1895,47 @@ function mattermostReplyMarkupForSession(session) {
 }
 
 function matchReplyMarkupChoice(replyMarkup, text) {
+  return matchReplyMarkupChoices(replyMarkup, text)[0] || null;
+}
+
+function matchReplyMarkupChoices(replyMarkup, text, { allowMultiple = false } = {}) {
   const options = replyMarkupOptions(replyMarkup);
-  if (!options.length) return null;
+  if (!options.length) return [];
 
   const value = normalizeChoiceText(text);
   const number = value.match(/^\d+$/) ? Number(value) : null;
   if (number && number >= 1 && number <= options.length) {
-    return options[number - 1].data;
+    return [options[number - 1].data];
+  }
+
+  const numbers = allowMultiple ? parseMattermostNumberChoices(value) : [];
+  if (numbers.length > 1 && numbers.every((item) => item >= 1 && item <= options.length)) {
+    return orderedMattermostCallbacks(numbers.map((item) => options[item - 1].data));
   }
 
   const exact = options.find((option) => normalizeChoiceText(option.label) === value);
-  return exact?.data || null;
+  return exact?.data ? [exact.data] : [];
+}
+
+function parseMattermostNumberChoices(value) {
+  const tokens = String(value || "")
+    .split(/[\s,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (tokens.length < 2 || tokens.some((item) => !/^\d+$/.test(item))) return [];
+  return tokens.map(Number);
+}
+
+function orderedMattermostCallbacks(callbacks) {
+  const unique = [];
+  for (const callback of callbacks) {
+    if (callback && !unique.includes(callback)) unique.push(callback);
+  }
+  return unique.sort((left, right) => {
+    const leftContinue = left.endsWith("_continue") ? 1 : 0;
+    const rightContinue = right.endsWith("_continue") ? 1 : 0;
+    return leftContinue - rightContinue;
+  });
 }
 
 function normalizeChoiceText(text) {

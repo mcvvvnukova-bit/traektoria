@@ -4,6 +4,7 @@ const path = require("node:path");
 const DEFAULT_RECONNECT_MIN_MS = 1000;
 const DEFAULT_RECONNECT_MAX_MS = 30000;
 const USER_METADATA_CACHE_TTL_MS = 5 * 60 * 1000;
+const MATTERMOST_ACTIONS_PER_POST = 5;
 
 class MattermostTransport {
   constructor(config, handlers) {
@@ -205,14 +206,20 @@ class MattermostTransport {
 
   async sendMessage(target, text, replyMarkup) {
     assertChannelTarget(target);
-    return this.createPost(buildMattermostPost({
+    const posts = buildMattermostPosts({
       target,
       text,
       replyMarkup,
       actionUrl: this.config.actionUrl,
       actionSecret: this.config.actionSecret,
       botUsername: this.user?.username || this.config.username,
-    }));
+    });
+
+    let result;
+    for (const post of posts) {
+      result = await this.createPost(post);
+    }
+    return result;
   }
 
   buildPost(target, text, replyMarkup) {
@@ -422,49 +429,76 @@ function replyMarkupOptions(replyMarkup) {
 }
 
 function buildMattermostPost({ target, text, replyMarkup, actionUrl = "", actionSecret = "", botUsername = "" }) {
+  return buildMattermostPosts({ target, text, replyMarkup, actionUrl, actionSecret, botUsername })[0];
+}
+
+function buildMattermostPosts({ target, text, replyMarkup, actionUrl = "", actionSecret = "", botUsername = "" }) {
   assertChannelTarget(target);
-  const post = {
+  const basePost = {
     channel_id: target.channelId,
     message: formatMattermostMessage(text, replyMarkup),
     ...(target.rootId ? { root_id: target.rootId } : {}),
   };
 
-  const attachments = buildMattermostAttachments({
+  const attachmentGroups = buildMattermostAttachmentGroups({
     target,
     replyMarkup,
     actionUrl,
     actionSecret,
     botUsername,
   });
-  if (attachments.length) {
-    post.props = { attachments };
-  }
-  return post;
+  if (!attachmentGroups.length) return [basePost];
+
+  return attachmentGroups.map((attachments, index) => ({
+    ...basePost,
+    message: index === 0
+      ? basePost.message
+      : buildMattermostContinuationMessage(index, attachmentGroups[index]),
+    props: { attachments },
+  }));
 }
 
-function buildMattermostAttachments({ target, replyMarkup, actionUrl, actionSecret, botUsername }) {
-  if (!actionUrl || !actionSecret || !replyMarkup?.inline_keyboard?.length) return [];
+function buildMattermostContinuationMessage(index, attachments) {
+  const actions = attachments.flatMap((attachment) => attachment.actions || []);
+  const first = index * MATTERMOST_ACTIONS_PER_POST + 1;
+  const last = first + actions.length - 1;
+  if (first === last) return `Еще вариант (${first}):`;
+  return `Еще варианты (${first}-${last}):`;
+}
 
-  return replyMarkup.inline_keyboard
-    .map((row, rowIndex) => {
-      const actions = row
-        .map((button, columnIndex) => buildMattermostAction({
-          target,
-          button,
-          actionUrl,
-          actionSecret,
-          botUsername,
-          index: `${rowIndex}${columnIndex}`,
-        }))
-        .filter(Boolean);
-      return actions.length ? { actions } : null;
-    })
+function buildMattermostAttachmentGroups({ target, replyMarkup, actionUrl, actionSecret, botUsername }) {
+  if (!actionUrl || !actionSecret) return [];
+
+  const options = replyMarkupOptions(replyMarkup);
+  if (!options.length) return [];
+
+  const actions = options
+    .map((option, index) => buildMattermostAction({
+      target,
+      option,
+      actionUrl,
+      actionSecret,
+      botUsername,
+      index: index + 1,
+    }))
     .filter(Boolean);
+  if (!actions.length) return [];
+
+  const groups = [];
+  for (let i = 0; i < actions.length; i += MATTERMOST_ACTIONS_PER_POST) {
+    groups.push([
+      {
+        fallback: "Доступные варианты выбора",
+        actions: actions.slice(i, i + MATTERMOST_ACTIONS_PER_POST),
+      },
+    ]);
+  }
+  return groups;
 }
 
-function buildMattermostAction({ target, button, actionUrl, actionSecret, botUsername, index }) {
-  const label = String(button?.text || "").replace(/^✓\s*/, "");
-  const callbackData = String(button?.callback_data || "");
+function buildMattermostAction({ target, option, actionUrl, actionSecret, botUsername, index }) {
+  const label = String(option?.label || "");
+  const callbackData = String(option?.data || "");
   if (!label || !callbackData) return null;
 
   return {
@@ -530,6 +564,7 @@ function escapeRegex(value) {
 
 module.exports = {
   buildMattermostPost,
+  buildMattermostPosts,
   createMattermostTransport,
   createMattermostTarget,
   formatMattermostMessage,
