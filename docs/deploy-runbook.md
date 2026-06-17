@@ -145,7 +145,11 @@ journalctl -u traektoria51-bot -n 50 --no-pager
 2. `https://bot.traektoria51.ru/health` отвечает `{"ok":true,...}` и показывает включенные transports
 3. `getWebhookInfo` у Telegram показывает правильный URL
 4. `GET /me` у MAX отвечает данными бота
-5. Бот отвечает на `/start` в Telegram и на запуск в MAX
+5. Бот отвечает на `/start`, `/text`, `/quiz`, `/deep`, `/wide` в Telegram
+6. Бот отвечает на запуск и команды меню в MAX
+7. Web-chat отправляет сообщение и получает ответ
+8. Mattermost отвечает на личное сообщение или mention, если включен
+9. `systemctl list-timers traektoria51-pfdo-sync.timer` показывает активный PFDO sync timer
 
 ## Если бот не стартует
 1. Проверить статус `traektoria51-bot`

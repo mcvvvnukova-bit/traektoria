@@ -1,6 +1,6 @@
 # Справочник конфигурации
 
-Статус: первый рабочий черновик от 2026-06-13.
+Статус: обновлено 2026-06-17 с учетом доработок за 2026-06-15 - 2026-06-17.
 
 Документ описывает переменные окружения для бота, каналов, баз данных, PFDO, PDF и сервисных скриптов. Примеры значений лежат в [.env.example](../.env.example) и [deploy/env.production.example](../deploy/env.production.example).
 
@@ -157,15 +157,20 @@ Runtime-рекомендации читают локальное зеркало 
 | --- | --- | --- | --- |
 | `PFDO_IMPORT_CONCURRENCY` | `scripts/import-pfdo-mirror.js` | `6` | Параллельность загрузки деталей программ. |
 | `PFDO_IMPORT_SQL_FLUSH_BYTES` | `scripts/import-pfdo-mirror.js` | `4194304` | Размер SQL-буфера перед flush. |
+| `PFDO_IMPORT_APPLY_SCHEMA` | `scripts/import-pfdo-mirror.js` | `true` | Применять `db/pfdo-mirror-schema.sql` перед импортом. Orchestrator ставит `false`, чтобы не применять схему повторно. |
 | `PFDO_KEYWORDS_BACKFILL_CONCURRENCY` | `scripts/backfill-pfdo-keywords.js` | `8` | Параллельность backfill ключевых слов. |
 | `PFDO_DOCUMENT_DOWNLOAD_CONCURRENCY` | `scripts/download-pfdo-program-documents.js` | `10` | Параллельность скачивания документов. |
 | `PFDO_DOCUMENT_DOWNLOAD_TIMEOUT_MS` | `scripts/download-pfdo-program-documents.js` | `90000` | Timeout скачивания документа. |
 | `PFDO_DOCUMENT_DOWNLOAD_ATTEMPTS` | `scripts/download-pfdo-program-documents.js` | `3` | Количество попыток скачивания. |
 | `PFDO_DOCUMENT_DOWNLOAD_FORCE` | `scripts/download-pfdo-program-documents.js` | `false` | Принудительно перекачивать документы при `1`. |
+| `PFDO_DOCUMENT_ENSURE_COLUMNS` | `scripts/download-pfdo-program-documents.js` | `true` | Создавать document-поля перед скачиванием. Orchestrator ставит `false`, потому что схема уже применена. |
 | `PFDO_CALENDAR_TOPIC_CONCURRENCY` | `scripts/import-pfdo-calendar-topics.js` | `3` | Параллельность импорта календарных тем. |
 | `PFDO_CALENDAR_TOPIC_INSERT_BATCH_SIZE` | `scripts/import-pfdo-calendar-topics.js` | `500` | Размер batch-вставки тем. |
+| `PFDO_TOPIC_IMPORT_APPLY_SCHEMA` | `scripts/import-pfdo-calendar-topics.js` | `true` | Применять схему перед импортом календарных тем. Orchestrator ставит `false`. |
 | `PFDO_TOPIC_ANALYTICS_BATCH_SIZE` | `scripts/build-pfdo-topic-analytics.js` | `500` | Размер batch для аналитического слоя тем. |
+| `PFDO_TOPIC_ANALYTICS_APPLY_SCHEMA` | `scripts/build-pfdo-topic-analytics.js` | `true` | Применять схему перед пересборкой аналитики тем. |
 | `PFDO_PROGRAMS_CSV_FILENAME` | `scripts/export-pfdo-programs-csv.js` | `pfdo_51_programs_export.csv` | Имя CSV-экспорта программ. |
+| `PFDO_SYNC_TRIGGER` | `scripts/sync-pfdo-programs.js` | `manual` | Метка источника sync-запуска, если не передан `--trigger`. |
 
 ## Parser auto-updater и OpenAI
 

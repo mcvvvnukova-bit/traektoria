@@ -2,6 +2,8 @@
 
 Date: 2026-06-17
 
+Current runtime note: the production code now uses a text-only Mattermost UX. The bot sends numbered options and accepts numeric or text replies through the WebSocket transport. Slash commands, `MATTERMOST_ACTION_*`, and `MATTERMOST_SLASH_*` are historical design items and are not required by the current `src/index.js` runtime.
+
 ## Goal
 
 Make Mattermost scenario entry behave close to Telegram while reusing the existing shared conversation runtime.

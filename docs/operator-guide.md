@@ -1,6 +1,6 @@
 # Руководство оператора
 
-Статус: первый рабочий черновик от 2026-06-13.
+Статус: обновлено 2026-06-17 с учетом доработок за 2026-06-15 - 2026-06-17.
 
 Документ описывает ежедневное сопровождение проекта «Траектория талантов»: как проверить, что сервис работает, как реагировать на типовые сбои, как обновлять данные PFDO и что смотреть после релиза.
 
@@ -54,9 +54,12 @@ psql -d pfdo_51_mirror -c "select count(*) from pfdo_programs;"
 2. `systemctl is-active traektoria51-bot` возвращает `active`.
 3. В логах нет повторяющихся ошибок подключения к PostgreSQL, PFDO, Telegram, MAX или Mattermost.
 4. В Telegram бот отвечает на `/start`.
-5. В MAX бот отвечает на стартовое сообщение или callback.
-6. Web-chat на сайте может отправить сообщение и получить ответ.
-7. В `pfdo_51_mirror.pfdo_programs` есть данные.
+5. В Telegram доступны команды `/text`, `/quiz`, `/deep`, `/wide`, `/help`.
+6. В MAX бот отвечает на стартовое сообщение или callback, команды меню зарегистрированы без ошибок в логах.
+7. Web-chat на сайте показывает меню сценариев, может отправить сообщение и получить ответ.
+8. В Mattermost бот отвечает на личное сообщение или mention, а выбор пунктов работает по номерам.
+9. В `pfdo_51_mirror.pfdo_programs` есть данные.
+10. Последний PFDO sync не завершился ошибкой.
 
 ## Основные команды
 
@@ -162,6 +165,8 @@ curl -sS http://127.0.0.1:3000/health
 - режим `MATTERMOST_MODE`;
 - логи WebSocket-подключения в `journalctl`.
 
+Текущий runtime Mattermost использует текстовый UX: бот отправляет нумерованные варианты, а пользователь отвечает номером, несколькими номерами на multi-select шагах или обычным текстом. Slash-команды и interactive buttons настраивать не нужно.
+
 ### Алиса
 
 Алиса сейчас отвечает справкой и примерами запроса. Полный сценарий подбора через общий runtime не подключен.
@@ -210,6 +215,13 @@ psql -d pfdo_51_mirror -c "select count(*) from pfdo_program_calendar_topics;"
 psql -d pfdo_51_mirror -c "select count(*) from pfdo_program_topic_aggregates;"
 psql -d pfdo_51_mirror -c "select id, run_type, status, started_at, finished_at from pfdo_sync_runs order by id desc limit 5;"
 psql -d pfdo_51_mirror -c "select document_status, topics_status, count(*) from pfdo_program_sync_state group by 1, 2 order by 1, 2;"
+```
+
+Для быстрой пересборки аналитики по одной программе:
+
+```bash
+node scripts/import-pfdo-calendar-topics.js --program-id 364163
+node scripts/build-pfdo-topic-analytics.js --program-id 364163
 ```
 
 Если обновлялись темы программ, проверьте качество классификатора:
@@ -261,7 +273,8 @@ npm test
 4. Если менялась схема PFDO-зеркала, обновлены `db/pfdo-mirror-schema.sql` и [pfdo-database-schema.md](pfdo-database-schema.md).
 5. Если менялся пользовательский сценарий, обновлен соответствующий документ в `docs/`.
 6. После деплоя `/health` отвечает.
-7. Telegram, MAX и web-chat проходят ручную smoke-проверку.
+7. Telegram, MAX, web-chat и Mattermost проходят ручную smoke-проверку.
+8. Если менялись сценарии 3 или 4, PDF и обзор пройденных тем проверены на 1-5 ссылках PFDO.
 
 ## Типовые проблемы
 
@@ -274,7 +287,8 @@ npm test
 | В webhook приходит 401 | Неверный secret header | Сверить `TELEGRAM_WEBHOOK_SECRET_TOKEN` или `MAX_WEBHOOK_SECRET`. |
 | PDF не создается | Не найден шрифт с кириллицей или нет прав на каталог | Проверить `assets/fonts/`, `PDF_OUTPUT_DIR`, права на запись. |
 | Web-chat получает CORS-ошибку | Origin не разрешен | Добавить домен в `WEB_CHAT_ALLOWED_ORIGINS`. |
-| Mattermost не отвечает | Нет WebSocket-сессии или прав | Проверить credentials, режим mention и логи транспорта. |
+| Mattermost не отвечает | Нет WebSocket-сессии или прав | Проверить credentials, режим mention, личное сообщение/mention и логи транспорта. |
+| Mattermost не распознал выбор | Пользователь ввел не номер пункта или неактивный шаг | Повторить выбор номером из последнего сообщения бота. |
 | Алиса не ведет подбор | Это текущее ограничение | Использовать Telegram, MAX или web-chat для полного сценария. |
 
 ## Что нельзя делать
