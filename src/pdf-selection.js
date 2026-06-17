@@ -196,7 +196,6 @@ function drawParameters(context, answers) {
     ["ФОРМАТ", answers.formatLabel || "не указан"],
     ["МЕСТО", answers.place || "не указано"],
     ["СТОИМОСТЬ", answers.cost || "не указана"],
-    ["ОСОБЕННОСТИ", formatSpecialNeeds(answers)],
   ];
   if (answers.wantsRefinement) {
     params.push(
@@ -460,17 +459,6 @@ function formatHeroPlace(place) {
   if (/^в\s+/i.test(value) || /^во\s+/i.test(value)) return value;
   if (/^мурманск$/i.test(value)) return "в Мурманске";
   return `в ${value}`;
-}
-
-function formatSpecialNeeds(answers) {
-  const values = Array.isArray(answers.specialNeedLabels)
-    ? answers.specialNeedLabels.filter((label) => label !== "Другое")
-    : [];
-  if (!values.length && answers.specialNeedsLabel && answers.specialNeedsLabel !== "Другое") {
-    values.push(answers.specialNeedsLabel);
-  }
-  if (answers.specialNeedsOther) values.push(answers.specialNeedsOther);
-  return values.length ? values.join(", ") : "не указаны";
 }
 
 function formatGoals(answers) {

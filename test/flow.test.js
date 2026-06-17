@@ -1,7 +1,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 
-const { FLOW, SCENARIO_3, SCENARIO_4 } = require("../src/flow");
+const { FLOW, SCENARIO_2, SCENARIO_3, SCENARIO_4 } = require("../src/flow");
 
 test("entry text has bold scenario titles in html variant only", () => {
   assert.match(FLOW.entry.text, /Подобрать по описанию/);
@@ -26,6 +26,12 @@ test("scenario 3 asks for child interests when completed topics are not meaningf
     "Не удалось точно определить интересы по пройденным программам.\n\n" +
       "Расскажите, что сейчас интересно ребенку. Можно также добавить удобное расписание, комфортную стоимость занятий или цели обучения.",
   );
+});
+
+test("scenario 2 does not ask about child special needs", () => {
+  assert.equal(SCENARIO_2.specialNeeds, undefined);
+  assert.equal(SCENARIO_2.specialNeedsOther, undefined);
+  assert.doesNotMatch(JSON.stringify(SCENARIO_2), /ОВЗ|РАС|СДВГ|зрением|слухом|особенности ребенка/i);
 });
 
 test("scenario 3 has a separate municipality prompt after completed program review", () => {

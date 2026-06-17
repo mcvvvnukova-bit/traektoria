@@ -160,10 +160,6 @@ function createScenario2State() {
     goalLabels: [],
     goal: null,
     goalLabel: "",
-    specialNeeds: [],
-    specialNeedLabels: [],
-    specialNeedsLabel: "",
-    specialNeedsOther: "",
     schedule: [],
     format: null,
     formatLabel: "",
@@ -181,16 +177,38 @@ function createScenario2State() {
   };
 }
 
+function normalizeScenario2State(state) {
+  const scenario2 = state || createScenario2State();
+  for (const key of ["special" + "Needs", "special" + "NeedLabels", "special" + "NeedsLabel", "special" + "NeedsOther"]) {
+    delete scenario2[key];
+  }
+  return scenario2;
+}
+
+function isObsoleteScenario2Step(step) {
+  return step === "s2_" + "special" || step === "s2_" + "special_other";
+}
+
 async function getSession(target) {
   const normalized = normalizeTarget(target);
   const key = targetKey(normalized);
-  if (sessions.has(key)) return sessions.get(key);
+  if (sessions.has(key)) {
+    const session = sessions.get(key);
+    session.scenario2 = normalizeScenario2State(session.scenario2);
+    if (isObsoleteScenario2Step(session.step)) {
+      session.step = "s2_schedule";
+    }
+    return session;
+  }
 
   const stored = await loadSession(normalized.platform, normalized.id);
   const session = stored || createSession();
   ensureDescriptionSelectionState(session);
-  if (!session.scenario2) session.scenario2 = createScenario2State();
+  session.scenario2 = normalizeScenario2State(session.scenario2);
   if (!session.scenario3) session.scenario3 = createScenario3State();
+  if (isObsoleteScenario2Step(session.step)) {
+    session.step = "s2_schedule";
+  }
   sessions.set(key, session);
   return session;
 }
@@ -859,22 +877,6 @@ async function askScenario2Goal(chatId, session) {
   );
 }
 
-async function askScenario2SpecialNeeds(chatId, session) {
-  session.step = "s2_special";
-  await persistSession(chatId, session);
-  return sendMessage(
-    chatId,
-    SCENARIO_2.specialNeeds.text,
-    multiSelectKeyboard("special", SCENARIO_2.specialNeeds.options, selectedSpecialNeeds(session.scenario2)),
-  );
-}
-
-async function askScenario2SpecialNeedsOther(chatId, session) {
-  session.step = "s2_special_other";
-  await persistSession(chatId, session);
-  return sendMessage(chatId, SCENARIO_2.specialNeedsOther.text);
-}
-
 async function askScenario2Schedule(chatId, session) {
   session.step = "s2_schedule";
   await persistSession(chatId, session);
@@ -1040,11 +1042,6 @@ async function handleText(message) {
     session.scenario2.interestsText = text;
     session.scenario2.interests = detectInterests(text);
     return askScenario2Goal(chatId, session);
-  }
-
-  if (session.step === "s2_special_other") {
-    session.scenario2.specialNeedsOther = text;
-    return askScenario2Schedule(chatId, session);
   }
 
   if (session.step === "s2_place") {
@@ -1221,35 +1218,6 @@ async function handleCallback(callbackQuery) {
   if (data === "s2:goal_continue") {
     if (!Array.isArray(session.scenario2.goals) || !session.scenario2.goals.length) {
       return sendMessage(chatId, "Выберите хотя бы одну цель обучения.");
-    }
-    return askScenario2SpecialNeeds(chatId, session);
-  }
-
-  if (data.startsWith("s2:special:")) {
-    const value = data.split(":")[2];
-    session.scenario2.specialNeeds = selectedSpecialNeeds(session.scenario2);
-    toggleSelected(session.scenario2.specialNeeds, value, value === "none", ["none"]);
-    session.scenario2.specialNeedLabels = labelsForSelected(SCENARIO_2.specialNeeds.options, session.scenario2.specialNeeds);
-    session.scenario2.specialNeedsLabel = session.scenario2.specialNeedLabels[0] || "";
-    if (!session.scenario2.specialNeeds.includes("other")) {
-      session.scenario2.specialNeedsOther = "";
-    }
-    await persistSession(chatId, session);
-    return editMessage(
-      chatId,
-      messageId,
-      SCENARIO_2.specialNeeds.text,
-      multiSelectKeyboard("special", SCENARIO_2.specialNeeds.options, session.scenario2.specialNeeds),
-    );
-  }
-
-  if (data === "s2:special_continue") {
-    const selected = selectedSpecialNeeds(session.scenario2);
-    if (!selected.length) {
-      return sendMessage(chatId, "Выберите хотя бы один вариант особенностей.");
-    }
-    if (selected.includes("other") && !String(session.scenario2.specialNeedsOther || "").trim()) {
-      return askScenario2SpecialNeedsOther(chatId, session);
     }
     return askScenario2Schedule(chatId, session);
   }
@@ -1486,11 +1454,6 @@ function labelsForSelected(options, selected) {
   return selected
     .map((value) => options.find(([, optionValue]) => optionValue === value)?.[0])
     .filter(Boolean);
-}
-
-function selectedSpecialNeeds(state) {
-  if (Array.isArray(state.specialNeeds)) return state.specialNeeds;
-  return state.specialNeeds ? [state.specialNeeds] : [];
 }
 
 function applyScenario3Analysis(state, analysis) {
@@ -1846,7 +1809,6 @@ function mattermostCallbacksForSession(session, text) {
 function isMattermostMultiSelectStep(step) {
   return [
     "s2_goal",
-    "s2_special",
     "s2_schedule",
     "s2_avoidances",
   ].includes(step);
@@ -1864,9 +1826,6 @@ function mattermostReplyMarkupForSession(session) {
   if (session.step === "s3_pdf") return scenario3Flow(session.scenario3).pdfDownload.keyboard;
   if (session.step === "s2_goal") {
     return multiSelectKeyboard("goal", SCENARIO_2.goal.options, session.scenario2?.goals || []);
-  }
-  if (session.step === "s2_special") {
-    return multiSelectKeyboard("special", SCENARIO_2.specialNeeds.options, selectedSpecialNeeds(session.scenario2 || {}));
   }
   if (session.step === "s2_schedule") {
     return multiSelectKeyboard("schedule", SCENARIO_2.schedule.options, session.scenario2?.schedule || []);
