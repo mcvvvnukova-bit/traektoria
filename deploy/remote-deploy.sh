@@ -35,7 +35,20 @@ node scripts/setup-db.js
 
 echo "==> pfdo mirror schema (idempotent)"
 PFDO_MIRROR_DATABASE_NAME="${PFDO_MIRROR_DATABASE_NAME:-pfdo_51_mirror}"
+PFDO_MIRROR_DATABASE_USER="${PFDO_MIRROR_DATABASE_USER:-botapp}"
 sudo -u postgres psql -d "$PFDO_MIRROR_DATABASE_NAME" -X -v ON_ERROR_STOP=1 -q -f db/pfdo-mirror-schema.sql
+
+echo "==> pfdo mirror grants for $PFDO_MIRROR_DATABASE_USER"
+sudo -u postgres psql -d "$PFDO_MIRROR_DATABASE_NAME" -X -v ON_ERROR_STOP=1 -q \
+  -v app_user="$PFDO_MIRROR_DATABASE_USER" <<'SQL'
+GRANT USAGE ON SCHEMA public TO :"app_user";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO :"app_user";
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA public TO :"app_user";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"app_user";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO :"app_user";
+SQL
 
 echo "==> chown $SERVICE_USER (сервис работает под этим пользователем)"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
