@@ -1,8 +1,12 @@
 const { queryRows, decodeJsonCell } = require("./db");
-const { getMirrorDatabaseUrl, getMunicipalities, getProgramDetail } = require("./pfdo-mirror");
+const { getMirrorDatabaseUrl, getMunicipalities, getProgramDetail, getProgramScoringData } = require("./pfdo-mirror");
 const { getProgramUrl } = require("./pfdo-config");
 const { ensurePfdoProgramsImported } = require("./pfdo-program-sync");
 const { loadProgramSyncStates } = require("./pfdo-sync-state");
+const {
+  scoreRecommendationCandidate: scoreModelRecommendationCandidate,
+  scoreCandidateForNewInterests: scoreModelCandidateForNewInterests,
+} = require("./scoring-model");
 
 const MAX_COMPLETED_LINKS = 5;
 const UNKNOWN_SCHEDULE_LABEL = "Уточните при записи";
@@ -10,20 +14,6 @@ const UNKNOWN_PRICE_LABEL = "Уточните при записи";
 const DEEP_TRAJECTORY_NO_RESULTS_MESSAGE = "Не могу найти подходящих программ. Попробуйте изменить критерии поиска";
 const TOPIC_SUMMARY_GROUP_LIMIT = 4;
 const TOPIC_SUMMARY_CATEGORY_LIMIT = 3;
-const ADVANCED_TOPIC_PATTERNS = [
-  /углуб/i,
-  /проект/i,
-  /разработ/i,
-  /исслед/i,
-  /соревн/i,
-  /олимпиад/i,
-  /модел/i,
-  /программ/i,
-  /констру/i,
-  /инженер/i,
-  /практик/i,
-];
-
 function createScenario3State() {
   return {
     links: [],
@@ -222,14 +212,27 @@ async function getDeepTrajectoryRecommendations(state, options = {}) {
     };
   }
 
-  const topicMap = await loadTopicsForPrograms(candidates.map((program) => program.id));
+  const candidateIds = candidates.map((program) => program.id);
+  const topicMap = await loadTopicsForPrograms(candidateIds);
+  const scoringDataMap = await getProgramScoringData(candidateIds);
   const ranked = candidates
     .map((program) => {
       const topics = topicMap.get(Number(program.id)) || [];
+      const scoringData = scoringDataMap.get(Number(program.id)) || {};
       return {
         ...program,
         topics,
-        ...scoreRecommendationCandidate(program, topics, topicProfile, ageYears, criteria, recommendationMode),
+        scoringData,
+        ...scoreRecommendationCandidate({
+          ...program,
+          groups: scoringData.groups || [],
+          modules: scoringData.modules || [],
+          topics,
+          topicsKnown: true,
+        }, topics, topicProfile, ageYears, {
+          ...criteria,
+          completedProgramIds: completedIds,
+        }, recommendationMode),
       };
     })
     .filter((program) => program.score > 0)
@@ -312,6 +315,10 @@ async function loadProgramsByIds(programIds) {
       ${encodeTextSql("mm.name")},
       p.direction_id,
       ${encodeTextSql("d.name")},
+      p.edu_form,
+      ${encodeTextSql("ef.name")},
+      p.directory_level_id,
+      p.organization_id,
       p.age_group_min,
       p.age_group_max,
       ${encodeTextSql("p.organization_name")},
@@ -325,6 +332,7 @@ async function loadProgramsByIds(programIds) {
     FROM pfdo_programs p
     LEFT JOIN pfdo_main_municipalities mm ON mm.id = p.municipality_id
     LEFT JOIN pfdo_program_directions d ON d.id = p.direction_id
+    LEFT JOIN pfdo_program_education_forms ef ON ef.id = p.edu_form
     LEFT JOIN LATERAL (
       SELECT jsonb_agg(k.name ORDER BY k.name) AS keyword_names
       FROM pfdo_program_keyword_links l
@@ -358,6 +366,10 @@ async function loadCandidatePrograms({ municipalityId, ageYears, ageRangeYears, 
       ${encodeTextSql("mm.name")},
       p.direction_id,
       ${encodeTextSql("d.name")},
+      p.edu_form,
+      ${encodeTextSql("ef.name")},
+      p.directory_level_id,
+      p.organization_id,
       p.age_group_min,
       p.age_group_max,
       ${encodeTextSql("p.organization_name")},
@@ -371,6 +383,7 @@ async function loadCandidatePrograms({ municipalityId, ageYears, ageRangeYears, 
     FROM pfdo_programs p
     LEFT JOIN pfdo_main_municipalities mm ON mm.id = p.municipality_id
     LEFT JOIN pfdo_program_directions d ON d.id = p.direction_id
+    LEFT JOIN pfdo_program_education_forms ef ON ef.id = p.edu_form
     LEFT JOIN LATERAL (
       SELECT jsonb_agg(k.name ORDER BY k.name) AS keyword_names
       FROM pfdo_program_keyword_links l
@@ -452,7 +465,7 @@ async function safeLoadProgramSyncStates(programIds) {
 }
 
 function rowToProgram(row) {
-  const keywords = decodeSafeJson(row[15]) || [];
+  const keywords = decodeSafeJson(row[19]) || [];
   return {
     id: Number(row[0]),
     name: decodeText(row[1]),
@@ -460,15 +473,19 @@ function rowToProgram(row) {
     municipalityName: decodeText(row[3]),
     directionId: nullableNumber(row[4]),
     directionName: decodeText(row[5]),
-    ageMinMonths: nullableNumber(row[6]),
-    ageMaxMonths: nullableNumber(row[7]),
-    organizationName: decodeText(row[8]),
-    addressName: decodeText(row[9]),
-    durationString: decodeText(row[10]),
-    sourceUrl: decodeText(row[11]) || getProgramUrl(Number(row[0])),
-    enrollment: nullableNumber(row[12]),
-    annotation: stripHtml(decodeText(row[13])),
-    task: stripHtml(decodeText(row[14])),
+    eduForm: nullableNumber(row[6]),
+    eduFormName: decodeText(row[7]),
+    directoryLevelId: nullableNumber(row[8]),
+    organizationId: nullableNumber(row[9]),
+    ageMinMonths: nullableNumber(row[10]),
+    ageMaxMonths: nullableNumber(row[11]),
+    organizationName: decodeText(row[12]),
+    addressName: decodeText(row[13]),
+    durationString: decodeText(row[14]),
+    sourceUrl: decodeText(row[15]) || getProgramUrl(Number(row[0])),
+    enrollment: nullableNumber(row[16]),
+    annotation: stripHtml(decodeText(row[17])),
+    task: stripHtml(decodeText(row[18])),
     keywords: Array.isArray(keywords) ? keywords.map(String) : [],
     topics: [],
   };
@@ -558,162 +575,11 @@ function normalizeRecommendationMode(value) {
 }
 
 function scoreRecommendationCandidate(program, topics, profile, ageYears, criteria = {}, mode = "deep") {
-  if (normalizeRecommendationMode(mode) === "wide") {
-    return scoreCandidateForNewInterests(program, topics, profile, ageYears, criteria);
-  }
-  return scoreCandidate(program, topics, profile, ageYears, criteria);
-}
-
-function scoreCandidate(program, topics, profile, ageYears, criteria = {}) {
-  const completedTopicKeys = new Set(profile.topicKeys || []);
-  const completedCategories = new Set((profile.categories || []).map((item) => item.code));
-  const completedDirections = new Set((profile.directions || []).map((item) => normalizeText(item.name)));
-
-  const topicKeyMatches = topics.filter((topic) => topic.key && completedTopicKeys.has(topic.key));
-  const categoryMatches = topics.filter((topic) => topic.categoryCode && completedCategories.has(topic.categoryCode));
-  const newRelatedTopics = topics.filter(
-    (topic) => topic.categoryCode && completedCategories.has(topic.categoryCode) && !completedTopicKeys.has(topic.key),
-  );
-  const directionMatch = completedDirections.has(normalizeText(program.directionName));
-  const fallbackTextMatch = !profile.topicKeys.length && scoreFallbackText(program, profile) > 0;
-  const hasThematicLink = topicKeyMatches.length || fallbackTextMatch || (directionMatch && categoryMatches.length);
-  if (!hasThematicLink) {
-    return { score: 0, topicKeyMatches, categoryMatches, newRelatedTopics, depthSignals: [] };
-  }
-
-  const depthSignals = collectDepthSignals(program, topics, profile, ageYears);
-  let score = 0;
-  score += topicKeyMatches.length * 3;
-  score += directionMatch ? categoryMatches.length * 4 : 0;
-  score += Math.min(newRelatedTopics.length * 2, 8);
-  if (directionMatch) score += 3;
-  if (fallbackTextMatch) score += 2;
-  score += scoreCriteriaProgramMatch(program, criteria);
-  score += depthSignals.length * 2;
-  if (!depthSignals.length && topicKeyMatches.length && !newRelatedTopics.length) score -= 4;
-  if (topics.length) score += 1;
-
-  return {
-    score,
-    topicKeyMatches,
-    categoryMatches,
-    newRelatedTopics,
-    depthSignals,
-  };
+  return scoreModelRecommendationCandidate(program, topics, profile, ageYears, criteria, normalizeRecommendationMode(mode));
 }
 
 function scoreCandidateForNewInterests(program, topics, profile, ageYears, criteria = {}) {
-  const completedLevel2Keys = new Set(profile.categoryKeys || []);
-  for (const category of profile.categories || []) {
-    for (const key of topicClassifierKeys(category.code, category.name)) {
-      completedLevel2Keys.add(key);
-    }
-  }
-  const completedLevel1Keys = new Set(profile.parentCategoryKeys || []);
-  const meaningfulTopics = (topics || []).filter(hasMeaningfulClassifierTopic);
-  const repeatedLevel2Topics = meaningfulTopics.filter((topic) => topicMatchesAnyKey(topic, completedLevel2Keys, "level2"));
-  if (repeatedLevel2Topics.length) {
-    return {
-      score: 0,
-      topicKeyMatches: [],
-      categoryMatches: repeatedLevel2Topics,
-      newRelatedTopics: [],
-      depthSignals: [],
-      noveltySignals: [],
-    };
-  }
-
-  if (!meaningfulTopics.length) {
-    return {
-      score: 0,
-      topicKeyMatches: [],
-      categoryMatches: [],
-      newRelatedTopics: [],
-      depthSignals: [],
-      noveltySignals: [],
-    };
-  }
-
-  const sameLevel1Topics = meaningfulTopics.filter((topic) => topicMatchesAnyKey(topic, completedLevel1Keys, "level1"));
-  const differentLevel1Topics = meaningfulTopics.filter((topic) => !topicMatchesAnyKey(topic, completedLevel1Keys, "level1"));
-  const newRelatedTopics = uniqueBy(meaningfulTopics, (topic) => formatTopicClassifierPath(topic) || topic.name);
-  const noveltySignals = [];
-  if (differentLevel1Topics.length) {
-    noveltySignals.push("добавляет новый раздел тем");
-  }
-  if (!sameLevel1Topics.length) {
-    noveltySignals.push("не повторяет изученные темы по классификатору");
-  } else {
-    noveltySignals.push("не повторяет конкретные изученные темы");
-  }
-
-  const depthSignals = collectDepthSignals(program, topics, profile, ageYears);
-  let score = 0;
-  score += Math.min(differentLevel1Topics.length * 4, 16);
-  score += Math.min(sameLevel1Topics.length * 2, 6);
-  score += Math.min(meaningfulTopics.length, 6);
-  score += scoreCriteriaProgramMatch(program, criteria);
-  score += Math.min(depthSignals.length, 2);
-  if (sameLevel1Topics.length) score -= Math.min(sameLevel1Topics.length * 2, 8);
-
-  return {
-    score: Math.max(0, score),
-    topicKeyMatches: [],
-    categoryMatches: [],
-    newRelatedTopics,
-    depthSignals,
-    noveltySignals,
-  };
-}
-
-function collectDepthSignals(program, topics, profile, ageYears) {
-  const signals = [];
-  const combinedText = normalizeText([
-    program.name,
-    program.annotation,
-    program.task,
-    program.directionName,
-    ...program.keywords,
-    ...topics.map((topic) => topic.name),
-  ].join(" "));
-
-  if (ADVANCED_TOPIC_PATTERNS.some((pattern) => pattern.test(combinedText))) {
-    signals.push("продвинутые темы или проектная работа");
-  }
-
-  const minAge = monthsToYears(program.ageMinMonths);
-  if (minAge != null && Number(ageYears) >= minAge && minAge >= Number(ageYears) - 1) {
-    signals.push("рассчитана на текущий или более старший возраст");
-  }
-
-  const hoursTotal = topics.reduce((sum, topic) => sum + Number(topic.hoursTotal || 0), 0);
-  if (profile.averageHours && topics.length && hoursTotal / topics.length > profile.averageHours * 1.15) {
-    signals.push("больший объем часов по связанным темам");
-  }
-
-  const practiceHours = topics.reduce((sum, topic) => sum + Number(topic.hoursPractice || 0), 0);
-  if (practiceHours > 0 && practiceHours >= hoursTotal * 0.4) {
-    signals.push("заметная практическая часть");
-  }
-
-  return [...new Set(signals)];
-}
-
-function scoreCriteriaProgramMatch(program, criteria = {}) {
-  let score = 0;
-  if (criteria.directionLabel && normalizeText(program.directionName).includes(normalizeText(criteria.directionLabel))) {
-    score += 4;
-  }
-  if (criteria.direction && normalizeText(program.directionName).includes(normalizeText(directionLabel(criteria.direction)))) {
-    score += 4;
-  }
-  if (criteria.interestsText && scoreFallbackText(program, {
-    directions: [],
-    topicNames: [criteria.interestsText],
-  }) > 0) {
-    score += 2;
-  }
-  return score;
+  return scoreModelCandidateForNewInterests(program, topics, profile, ageYears, criteria);
 }
 
 function normalizeSearchCriteria(criteriaState) {
@@ -817,9 +683,8 @@ function normalizeRecommendationItem(item, detail, criteria = {}, options = {}) 
   const recommendationMode = normalizeRecommendationMode(options.recommendationMode);
   const hasDetail = Boolean(detail);
   const program = detail?.program || {};
-  const groups = detail?.available_groups || [];
+  const groups = detail?.available_groups || item.scoringData?.groups || [];
   const bestGroup = chooseBestGroup(groups, criteria);
-  const criteriaScore = scoreGroupCriteria(bestGroup, criteria);
   const relatedTopicNames = uniqueBy(
     [...item.topicKeyMatches, ...item.categoryMatches].map(formatTopicClassifierPath).filter(Boolean),
     (name) => normalizeText(name),
@@ -850,7 +715,7 @@ function normalizeRecommendationItem(item, detail, criteria = {}, options = {}) 
     depthSignals: item.depthSignals,
     noveltySignals: item.noveltySignals || [],
     recommendationMode,
-    score: item.score + criteriaScore,
+    score: item.score,
   };
 }
 
@@ -1104,16 +969,6 @@ function topicClassifierKeys(code, name) {
     keys.push(`name:${normalizeText(cleanName)}`);
   }
   return keys;
-}
-
-function hasMeaningfulClassifierTopic(topic) {
-  return topicLevel2Keys(topic).length > 0 || topicLevel1Keys(topic).length > 0;
-}
-
-function topicMatchesAnyKey(topic, keySet, level) {
-  if (!keySet?.size) return false;
-  const keys = level === "level1" ? topicLevel1Keys(topic) : topicLevel2Keys(topic);
-  return keys.some((key) => keySet.has(key));
 }
 
 function buildTopicClassifierGroups(topics) {
@@ -1423,19 +1278,6 @@ function monthsToYears(value) {
   const number = nullableNumber(value);
   if (number == null) return null;
   return Math.round(number / 12);
-}
-
-function scoreFallbackText(program, profile) {
-  const haystack = normalizeText([program.name, program.annotation, program.task, program.directionName, ...program.keywords].join(" "));
-  let score = 0;
-  for (const direction of profile.directions || []) {
-    if (haystack.includes(normalizeText(direction.name))) score += 1;
-  }
-  for (const topicName of profile.topicNames || []) {
-    const words = normalizeText(topicName).split(/\s+/).filter((word) => word.length > 4);
-    if (words.some((word) => haystack.includes(word))) score += 1;
-  }
-  return score;
 }
 
 function encodeTextSql(column) {

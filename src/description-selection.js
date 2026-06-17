@@ -408,9 +408,15 @@ function buildRecommendationProfile(state) {
     location: fields.place,
     budget: fields.budget,
     schedule: fields.scheduleText,
+    scheduleValues: fields.schedule || [],
+    format: fields.format,
+    formatLabel: fields.formatLabel,
     clarifyGroup: fields.clarifyGroup || null,
     clarifyFocus: fields.clarifyFocus || null,
+    groupSize: fields.groupSize || null,
     directionLabel: fields.directionLabel,
+    direction: fields.direction,
+    interestsText: fields.interestsText || "",
   };
 }
 

@@ -1522,8 +1522,13 @@ function buildRecommendationProfile(state) {
     location: state.place,
     budget: state.cost,
     schedule: scheduleText(state.schedule),
+    scheduleValues: state.schedule || [],
+    format: state.format,
+    formatLabel: state.formatLabel,
     clarifyGroup: mapGroupSize(state.groupSize),
     clarifyFocus: null,
+    groupSize: state.groupSize,
+    direction: state.direction,
     directionLabel: state.directionLabel,
   };
 }

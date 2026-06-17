@@ -3,8 +3,13 @@ const {
   getMunicipalities: getMirrorMunicipalities,
   searchPrograms: searchMirrorPrograms,
   getProgramDetail: getMirrorProgramDetail,
+  getProgramScoringData: getMirrorProgramScoringData,
   checkMirrorHealth,
 } = require("./pfdo-mirror");
+const {
+  SCENARIO_DESCRIPTION,
+  scoreProgramCandidate,
+} = require("./scoring-model");
 
 let catalogSourceCache = null;
 const UNKNOWN_SCHEDULE_LABEL = "Уточните при записи";
@@ -292,32 +297,43 @@ async function getCatalogRecommendations(profile, source, options = {}) {
   const confidence = computeConfidence(profile);
   const municipalities = await source.getMunicipalities();
   const municipality = matchMunicipality(profile.location, municipalities);
+  const context = buildCatalogScoringContext(profile, municipality, options);
   const candidates = await source.searchPrograms({
     municipalityId: municipality ? municipality.id : null,
   });
+  const scoringData = await loadCatalogScoringData(candidates, source);
 
   const ranked = candidates
-    .map((item) => ({
-      ...item,
-      score: scoreLiveProgram(item, profile),
-    }))
-    .filter((item) => item.score > -100)
+    .map((item) => {
+      const candidateScoringData = scoringData.get(Number(item.id)) || {};
+      const scoring = scoreProgramCandidate(
+        buildCatalogScoringCandidate(item, candidateScoringData),
+        context,
+      );
+      return {
+        ...item,
+        scoring,
+        scoringData: candidateScoringData,
+        score: scoring.score,
+      };
+    })
+    .filter((item) => item.scoring.passesFilters !== false && item.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, 12);
+    .slice(0, Math.max((limit || 4) * 3, 12));
 
   const detailed = [];
   for (const item of ranked) {
     try {
-      const detail = await source.getProgramDetail(item.id);
-      detailed.push(normalizeLiveProgram(item, detail, profile, item.score));
+      const detail = item.scoringData?.detail || await source.getProgramDetail(item.id);
+      detailed.push(normalizeLiveProgram(item, detail, profile, item.score, item.scoringData));
     } catch (error) {
       console.error(`Program detail failed for ${item.id}:`, error.message);
-      detailed.push(normalizeLiveProgram(item, null, profile, item.score));
+      detailed.push(normalizeLiveProgram(item, null, profile, item.score, item.scoringData));
     }
   }
 
   const filtered = detailed
-    .filter((item) => item.score > -100)
+    .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit || (confidence === "high" ? 4 : 3));
 
@@ -359,8 +375,90 @@ async function resolveCatalogSource() {
     getMunicipalities: getMirrorMunicipalities,
     searchPrograms: searchMirrorPrograms,
     getProgramDetail: getMirrorProgramDetail,
+    getProgramScoringData: getMirrorProgramScoringData,
   };
   return catalogSourceCache;
+}
+
+function buildCatalogScoringContext(profile, municipality, options = {}) {
+  return {
+    scenario: options.scenario || profile.scenario || SCENARIO_DESCRIPTION,
+    municipalityId: municipality?.id || profile.municipalityId || null,
+    organizationId: profile.organizationId || null,
+    organizationName: profile.organization || (!municipality && profile.location ? profile.location : ""),
+    age: profile.age,
+    ageYears: profile.ageYears,
+    ageRangeYears: profile.ageRangeYears,
+    budget: profile.budget,
+    scheduleText: profile.schedule,
+    schedule: profile.scheduleValues || [],
+    format: profile.format || profile.formatLabel,
+    direction: profile.direction,
+    directionLabel: profile.directionLabel,
+    groupSize: profile.groupSize,
+    clarifyGroup: profile.clarifyGroup,
+    interests: profile.interests || [],
+    interestsText: profile.interestsText || "",
+  };
+}
+
+async function loadCatalogScoringData(candidates, source) {
+  const ids = candidates.map((item) => Number(item.id)).filter(Number.isFinite);
+  if (source.getProgramScoringData) {
+    return source.getProgramScoringData(ids);
+  }
+
+  const result = new Map();
+  for (const item of candidates) {
+    try {
+      const detail = await source.getProgramDetail(item.id);
+      result.set(Number(item.id), {
+        detail,
+        modules: normalizeDetailModules(detail),
+        groups: detail?.available_groups || [],
+        topics: [],
+        topicsKnown: false,
+      });
+    } catch (_) {
+      result.set(Number(item.id), {
+        modules: [],
+        groups: [],
+        topics: [],
+        topicsKnown: false,
+      });
+    }
+  }
+  return result;
+}
+
+function buildCatalogScoringCandidate(item, scoringData = {}) {
+  return {
+    id: Number(item.id),
+    name: item.name,
+    municipalityId: item.municipalityId,
+    organizationId: item.organizationId,
+    organizationName: item.organization_name,
+    directionId: item.directionId || item.direction?.id,
+    directionName: item.direction?.name,
+    eduForm: item.eduForm,
+    eduFormName: item.eduFormName,
+    directoryLevelId: item.directoryLevelId,
+    ageMinMonths: item.age_min,
+    ageMaxMonths: item.age_max,
+    enrollment: item.enrollment,
+    annotation: item.annotation,
+    task: item.task,
+    keywords: item.keywords || [],
+    modules: scoringData.modules || [],
+    groups: scoringData.groups || [],
+    topics: scoringData.topics || [],
+    topicsKnown: scoringData.topicsKnown,
+  };
+}
+
+function normalizeDetailModules(detail) {
+  const modules = detail?.modules || detail?.program?.modules || [];
+  return Array.isArray(modules) ? modules : [];
 }
 
 function scoreLiveProgram(item, profile) {
@@ -419,18 +517,18 @@ function scoreLiveProgram(item, profile) {
   return score;
 }
 
-function normalizeLiveProgram(listItem, detail, profile, baseScore) {
+function normalizeLiveProgram(listItem, detail, profile, baseScore, scoringData = {}) {
   const data = detail || {};
   const program = data.program || {};
-  const groups = data.available_groups || [];
+  const groups = data.available_groups || scoringData.groups || [];
   const organization = data.organization || {};
   const address = data.address || listItem.address || {};
   const sourceUrl = getProgramUrl(listItem.id);
   const summarySource = stripHtml(program.annotation || program.task || "");
   const directionName = data.direction?.name || listItem.direction?.name || "Направление не указано";
-  const programScore = Number.isFinite(baseScore) ? baseScore : scoreLiveProgram(listItem, profile);
+  const programScore = Number.isFinite(baseScore) ? baseScore : 0;
   const { bestGroup, groupScore } = chooseBestGroup(groups, profile);
-  const finalScore = programScore + groupScore;
+  const finalScore = programScore;
 
   return {
     id: String(listItem.id),
