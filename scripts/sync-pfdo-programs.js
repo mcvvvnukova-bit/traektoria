@@ -1,6 +1,9 @@
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { loadEnvFile } = require("../src/load-env");
+
+loadEnvFile();
+
 const {
   finishSyncRun,
   loadSyncCounters,
@@ -8,8 +11,6 @@ const {
   refreshProgramProcessingStatuses,
   startSyncRun,
 } = require("../src/pfdo-sync-state");
-
-loadEnvFile();
 
 const projectRoot = path.resolve(__dirname, "..");
 

@@ -6,7 +6,8 @@ const { promisify } = require("node:util");
 
 const execFileAsync = promisify(execFile);
 
-const DEFAULT_PSQL_BIN = `${os.homedir()}/Applications/Postgres.app/Contents/Versions/latest/bin/psql`;
+const MACOS_POSTGRES_APP_PSQL_BIN = `${os.homedir()}/Applications/Postgres.app/Contents/Versions/latest/bin/psql`;
+const DEFAULT_PSQL_BIN = process.platform === "darwin" ? MACOS_POSTGRES_APP_PSQL_BIN : "psql";
 const PSQL_BIN = process.env.PSQL_BIN || DEFAULT_PSQL_BIN;
 
 function getDatabaseUrl(overrideUrl) {

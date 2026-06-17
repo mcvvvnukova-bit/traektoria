@@ -2,9 +2,10 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { loadEnvFile } = require("../src/load-env");
-const { executeSql, queryRows, textToSql } = require("../src/db");
 
 loadEnvFile();
+
+const { executeSql, queryRows, textToSql } = require("../src/db");
 
 const DATABASE_URL =
   process.env.PFDO_MIRROR_DATABASE_URL || "postgresql://localhost:5432/pfdo_51_mirror";

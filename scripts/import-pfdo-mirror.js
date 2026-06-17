@@ -1,9 +1,10 @@
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { loadEnvFile } = require("../src/load-env");
-const { getProgramUrl, getOperatorId } = require("../src/pfdo-config");
 
 loadEnvFile();
+
+const { getProgramUrl, getOperatorId } = require("../src/pfdo-config");
 
 const { executeSql, executeSqlFile, jsonToSql, textToSql } = require("../src/db");
 const { fetchJson } = require("../src/pfdo");

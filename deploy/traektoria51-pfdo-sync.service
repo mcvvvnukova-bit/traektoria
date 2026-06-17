@@ -12,6 +12,7 @@ WorkingDirectory=/opt/telegram-bot
 ExecStart=/usr/bin/node /opt/telegram-bot/scripts/sync-pfdo-programs.js --trigger timer
 
 Environment=NODE_ENV=production
+Environment=PSQL_BIN=/usr/bin/psql
 
 StandardOutput=journal
 StandardError=journal

@@ -1,6 +1,9 @@
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { loadEnvFile } = require("../src/load-env");
+
+loadEnvFile();
+
 const { executeSql, executeSqlFile, jsonToSql, queryRows, textToSql } = require("../src/db");
 const { parseCsv } = require("../services/program-topic-extractor/src/csv");
 const { extractDocumentText } = require("../services/program-topic-extractor/src/extractors");
@@ -8,8 +11,6 @@ const {
   extractCalendarTopicsFromText,
 } = require("../services/program-topic-extractor/src/parsers/calendar-topics");
 const { runTopicAnalytics } = require("./build-pfdo-topic-analytics");
-
-loadEnvFile();
 
 const DATABASE_URL =
   process.env.PFDO_MIRROR_DATABASE_URL || "postgresql://localhost:5432/pfdo_51_mirror";

@@ -1,4 +1,3 @@
-const os = require("node:os");
 const path = require("node:path");
 const fs = require("node:fs/promises");
 const { execFile } = require("node:child_process");
@@ -8,8 +7,7 @@ const { loadEnvFile } = require("../src/load-env");
 loadEnvFile();
 
 const execFileAsync = promisify(execFile);
-const DEFAULT_PSQL_BIN = `${os.homedir()}/Applications/Postgres.app/Contents/Versions/latest/bin/psql`;
-const PSQL_BIN = process.env.PSQL_BIN || DEFAULT_PSQL_BIN;
+const { PSQL_BIN } = require("../src/db");
 const DATABASE_URL =
   process.env.PFDO_MIRROR_DATABASE_URL || "postgresql://localhost:5432/pfdo_51_mirror";
 const outputPath = path.resolve(

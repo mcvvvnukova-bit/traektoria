@@ -1,6 +1,9 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { loadEnvFile } = require("../src/load-env");
+
+loadEnvFile();
+
 const { executeSql, executeSqlFile, jsonToSql, queryRows, textToSql } = require("../src/db");
 const { parseCsv } = require("../services/program-topic-extractor/src/csv");
 const {
@@ -14,8 +17,6 @@ const {
   CLASSIFIER_VERSION,
   AGGREGATION_VERSION,
 } = require("../services/program-topic-extractor/src/classification/technical-topic-classifier");
-
-loadEnvFile();
 
 const DATABASE_URL =
   process.env.PFDO_MIRROR_DATABASE_URL || "postgresql://localhost:5432/pfdo_51_mirror";
