@@ -19,6 +19,7 @@ const {
 } = require("./description-selection");
 const {
   isDescriptionStep,
+  isDescriptionTextStep,
   isDescriptionCallback,
   startDescriptionFlow,
   handleDescriptionText,
@@ -994,7 +995,7 @@ async function handleText(message) {
   if (!session.scenario2) session.scenario2 = createScenario2State();
   if (!session.scenario3) session.scenario3 = createScenario3State();
 
-  if (isDescriptionStep(session.step)) {
+  if (isDescriptionTextStep(session.step)) {
     return handleDescriptionText({
       target: chatId,
       text,
@@ -1006,6 +1007,10 @@ async function handleText(message) {
       logRecommendation,
       normalizeTarget,
     });
+  }
+
+  if (isDescriptionStep(session.step)) {
+    return sendMessage(chatId, "Выберите один из предложенных вариантов или нажмите /start, чтобы начать заново.");
   }
 
   if (session.step === "s3_collect_links" || session.step === "s3_wait_links") {
@@ -1787,6 +1792,15 @@ async function processMattermostText(target, text) {
   const trimmed = String(text || "").trim().slice(0, WEB_CHAT_MESSAGE_MAX_LENGTH);
   if (!trimmed) return;
 
+  if (isMattermostStartText(trimmed)) {
+    await handleText({
+      platform: "mattermost",
+      chat: target,
+      text: "/start",
+    });
+    return;
+  }
+
   if (trimmed !== "/start" && trimmed !== RESTART_BUTTON_TEXT) {
     const session = await getSession(target);
     const callbackData = mattermostCallbackForSession(session, trimmed);
@@ -1818,6 +1832,18 @@ async function processMattermostText(target, text) {
     chat: target,
     text: trimmed,
   });
+}
+
+function isMattermostStartText(text) {
+  const value = normalizeChoiceText(text).replace(/^\/+/, "");
+  return [
+    "start",
+    "старт",
+    "menu",
+    "меню",
+    "начать",
+    "начать заново",
+  ].includes(value);
 }
 
 function mattermostCallbackForSession(session, text) {

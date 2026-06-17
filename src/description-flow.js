@@ -25,6 +25,14 @@ function isDescriptionStep(step) {
   return String(step || "").startsWith("s1_");
 }
 
+function isDescriptionTextStep(step) {
+  return [
+    "s1_wait_description",
+    "s1_wait_required_clarification",
+    "s1_wait_edit",
+  ].includes(String(step || ""));
+}
+
 function isDescriptionCallback(data) {
   return String(data || "").startsWith("s1:");
 }
@@ -228,6 +236,7 @@ function splitMessage(text, limit = 3500) {
 
 module.exports = {
   isDescriptionStep,
+  isDescriptionTextStep,
   isDescriptionCallback,
   startDescriptionFlow,
   handleDescriptionText,
