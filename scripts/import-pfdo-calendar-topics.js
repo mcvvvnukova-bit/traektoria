@@ -241,18 +241,18 @@ async function createAnalyticsOptionsAfterImport(options, successfulProgramIds) 
 
   const scoped = Boolean(options.programId || options.programIdsPath);
   if (!scoped) {
-    return {};
+    return { applySchema: false };
   }
 
   if (options.keepExisting) {
-    return { programIds: [...successfulProgramIds] };
+    return { programIds: [...successfulProgramIds], applySchema: false };
   }
 
   if (options.programId) {
-    return { programIds: [options.programId] };
+    return { programIds: [options.programId], applySchema: false };
   }
 
-  return { programIds: await loadProgramIds(options) };
+  return { programIds: await loadProgramIds(options), applySchema: false };
 }
 
 async function loadPrograms(options) {

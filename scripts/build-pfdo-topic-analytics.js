@@ -36,7 +36,9 @@ async function main() {
 
 async function runTopicAnalytics(options = {}) {
   const normalizedOptions = normalizeOptions(options);
-  await executeSqlFile(schemaPath, DATABASE_URL);
+  if (normalizedOptions.applySchema) {
+    await executeSqlFile(schemaPath, DATABASE_URL);
+  }
   const programIds = await resolveProgramIds(normalizedOptions);
   await clearAnalyticsTables(programIds);
 
@@ -110,6 +112,7 @@ function parseArgs(argv) {
     programIdsPath: null,
     programIds: [],
     skipExports: false,
+    applySchema: process.env.PFDO_TOPIC_ANALYTICS_APPLY_SCHEMA !== "false",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -139,6 +142,11 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (value === "--skip-schema") {
+      options.applySchema = false;
+      continue;
+    }
+
     if (value === "--help" || value === "-h") {
       console.log(`
 Usage:
@@ -149,6 +157,7 @@ Options:
   --program-id 364163 Rebuild analytics only for one program.
   --program-ids file  Rebuild analytics for programs from CSV with a program_id column.
   --skip-exports      Do not refresh CSV exports after analytics rebuild.
+  --skip-schema       Do not apply the PFDO mirror schema before rebuilding analytics.
 `);
       process.exit(0);
     }
@@ -164,6 +173,7 @@ function normalizeOptions(options) {
     programIdsPath: options.programIdsPath || null,
     programIds: normalizeProgramIds(options.programIds || []),
     skipExports: Boolean(options.skipExports),
+    applySchema: options.applySchema !== false,
   };
 }
 

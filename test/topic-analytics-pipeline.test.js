@@ -19,12 +19,14 @@ test("parses topic analytics incremental rebuild options", () => {
     "--limit",
     "1000",
     "--skip-exports",
+    "--skip-schema",
   ]);
 
   assert.equal(options.programId, 1247288);
   assert.equal(options.programIdsPath, "exports/program_ids.csv");
   assert.equal(options.limit, 1000);
   assert.equal(options.skipExports, true);
+  assert.equal(options.applySchema, false);
 });
 
 test("normalizes unique positive program ids for analytics scopes", () => {
@@ -43,7 +45,7 @@ test("runs full analytics after unscoped import", async () => {
     new Set([10, 20]),
   );
 
-  assert.deepEqual(options, {});
+  assert.deepEqual(options, { applySchema: false });
 });
 
 test("rebuilds target program analytics after scoped replacement import", async () => {
@@ -52,7 +54,7 @@ test("rebuilds target program analytics after scoped replacement import", async 
     new Set(),
   );
 
-  assert.deepEqual(options, { programIds: [1247288] });
+  assert.deepEqual(options, { programIds: [1247288], applySchema: false });
 });
 
 test("rebuilds only successful scoped programs when keeping existing raw rows", async () => {
@@ -61,7 +63,7 @@ test("rebuilds only successful scoped programs when keeping existing raw rows", 
     new Set([1247288]),
   );
 
-  assert.deepEqual(options, { programIds: [1247288] });
+  assert.deepEqual(options, { programIds: [1247288], applySchema: false });
 });
 
 test("can skip analytics after import explicitly", async () => {
