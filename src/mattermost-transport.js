@@ -4,7 +4,6 @@ const path = require("node:path");
 const DEFAULT_RECONNECT_MIN_MS = 1000;
 const DEFAULT_RECONNECT_MAX_MS = 30000;
 const USER_METADATA_CACHE_TTL_MS = 5 * 60 * 1000;
-const MATTERMOST_ACTIONS_PER_POST = 5;
 
 class MattermostTransport {
   constructor(config, handlers) {
@@ -206,20 +205,11 @@ class MattermostTransport {
 
   async sendMessage(target, text, replyMarkup) {
     assertChannelTarget(target);
-    const posts = buildMattermostPosts({
+    return this.createPost(buildMattermostPost({
       target,
       text,
       replyMarkup,
-      actionUrl: this.config.actionUrl,
-      actionSecret: this.config.actionSecret,
-      botUsername: this.user?.username || this.config.username,
-    });
-
-    let result;
-    for (const post of posts) {
-      result = await this.createPost(post);
-    }
-    return result;
+    }));
   }
 
   buildPost(target, text, replyMarkup) {
@@ -227,9 +217,6 @@ class MattermostTransport {
       target,
       text,
       replyMarkup,
-      actionUrl: this.config.actionUrl,
-      actionSecret: this.config.actionSecret,
-      botUsername: this.user?.username || this.config.username,
     });
   }
 
@@ -329,8 +316,6 @@ function normalizeConfig(config) {
     password: String(config.password || ""),
     mode: config.mode || "mentions",
     replyMode: config.replyMode || "thread",
-    actionUrl: String(config.actionUrl || "").trim(),
-    actionSecret: String(config.actionSecret || "").trim(),
   };
 }
 
@@ -414,7 +399,17 @@ function formatMattermostMessage(text, replyMarkup) {
     base,
     "",
     ...options.map((option, index) => `${index + 1}. ${option.label}`),
+    "",
+    mattermostChoiceHint(options),
   ].join("\n");
+}
+
+function mattermostChoiceHint(options) {
+  const hasContinue = options.some((option) => option.data.endsWith("_continue"));
+  if (hasContinue) {
+    return "Ответьте одним или несколькими номерами через запятую. Чтобы перейти дальше, укажите номер «Продолжить».";
+  }
+  return "Ответьте номером варианта или напишите ответ текстом, если нужен свой вариант.";
 }
 
 function replyMarkupOptions(replyMarkup) {
@@ -428,97 +423,12 @@ function replyMarkupOptions(replyMarkup) {
     .filter((button) => button.label && button.data);
 }
 
-function buildMattermostPost({ target, text, replyMarkup, actionUrl = "", actionSecret = "", botUsername = "" }) {
-  return buildMattermostPosts({ target, text, replyMarkup, actionUrl, actionSecret, botUsername })[0];
-}
-
-function buildMattermostPosts({ target, text, replyMarkup, actionUrl = "", actionSecret = "", botUsername = "" }) {
+function buildMattermostPost({ target, text, replyMarkup }) {
   assertChannelTarget(target);
-  const basePost = {
+  return {
     channel_id: target.channelId,
     message: formatMattermostMessage(text, replyMarkup),
     ...(target.rootId ? { root_id: target.rootId } : {}),
-  };
-
-  const attachmentGroups = buildMattermostAttachmentGroups({
-    target,
-    replyMarkup,
-    actionUrl,
-    actionSecret,
-    botUsername,
-  });
-  if (!attachmentGroups.length) return [basePost];
-
-  return attachmentGroups.map((attachments, index) => ({
-    ...basePost,
-    message: index === 0
-      ? basePost.message
-      : buildMattermostContinuationMessage(index, attachmentGroups[index]),
-    props: { attachments },
-  }));
-}
-
-function buildMattermostContinuationMessage(index, attachments) {
-  const actions = attachments.flatMap((attachment) => attachment.actions || []);
-  const first = index * MATTERMOST_ACTIONS_PER_POST + 1;
-  const last = first + actions.length - 1;
-  if (first === last) return `Еще вариант (${first}):`;
-  return `Еще варианты (${first}-${last}):`;
-}
-
-function buildMattermostAttachmentGroups({ target, replyMarkup, actionUrl, actionSecret, botUsername }) {
-  if (!actionUrl || !actionSecret) return [];
-
-  const options = replyMarkupOptions(replyMarkup);
-  if (!options.length) return [];
-
-  const actions = options
-    .map((option, index) => buildMattermostAction({
-      target,
-      option,
-      actionUrl,
-      actionSecret,
-      botUsername,
-      index: index + 1,
-    }))
-    .filter(Boolean);
-  if (!actions.length) return [];
-
-  const groups = [];
-  for (let i = 0; i < actions.length; i += MATTERMOST_ACTIONS_PER_POST) {
-    groups.push([
-      {
-        fallback: "Доступные варианты выбора",
-        actions: actions.slice(i, i + MATTERMOST_ACTIONS_PER_POST),
-      },
-    ]);
-  }
-  return groups;
-}
-
-function buildMattermostAction({ target, option, actionUrl, actionSecret, botUsername, index }) {
-  const label = String(option?.label || "");
-  const callbackData = String(option?.data || "");
-  if (!label || !callbackData) return null;
-
-  return {
-    id: `a${index}`,
-    type: "button",
-    name: label,
-    integration: {
-      url: actionUrl,
-      context: {
-        token: actionSecret,
-        callback_data: callbackData,
-        user_id: String(target.userId || ""),
-        username: String(target.username || ""),
-        channel_id: String(target.channelId || ""),
-        channel_type: String(target.channelType || ""),
-        root_id: String(target.rootId || ""),
-        post_id: String(target.postId || ""),
-        bot_username: String(botUsername || ""),
-      },
-    },
   };
 }
 
@@ -564,7 +474,6 @@ function escapeRegex(value) {
 
 module.exports = {
   buildMattermostPost,
-  buildMattermostPosts,
   createMattermostTransport,
   createMattermostTarget,
   formatMattermostMessage,

@@ -3,7 +3,6 @@ const assert = require("node:assert/strict");
 
 const {
   buildMattermostPost,
-  buildMattermostPosts,
   formatMattermostMessage,
   isMattermostMention,
   parseMattermostPostedEvent,
@@ -84,7 +83,7 @@ test("detects and strips username and id mentions", () => {
   assert.equal(stripMattermostMention("<@bot1> подбери", "botnumber2", "bot1"), "подбери");
 });
 
-test("formats inline buttons as numbered Mattermost choices", () => {
+test("formats inline keyboards as numbered Mattermost choices", () => {
   const text = formatMattermostMessage("Выберите вариант", {
     inline_keyboard: [
       [{ text: "✓ Первый", callback_data: "one" }],
@@ -92,88 +91,28 @@ test("formats inline buttons as numbered Mattermost choices", () => {
     ],
   });
 
-  assert.equal(text, "Выберите вариант\n\n1. Первый\n2. Второй");
+  assert.equal(
+    text,
+    "Выберите вариант\n\n1. Первый\n2. Второй\n\nОтветьте номером варианта или напишите ответ текстом, если нужен свой вариант.",
+  );
 });
 
-test("builds Mattermost interactive button attachments when action config is present", () => {
-  const post = buildMattermostPost({
-    target: {
-      platform: "mattermost",
-      id: "channel:channel1:user:user1",
-      userId: "user1",
-      username: "parent",
-      channelId: "channel1",
-      channelType: "O",
-      rootId: "root1",
-      postId: "post1",
-    },
-    text: "Выберите вариант",
-    replyMarkup: {
-      inline_keyboard: [
-        [{ text: "✓ Первый", callback_data: "one" }],
-        [{ text: "Второй", callback_data: "two" }],
-      ],
-    },
-    actionUrl: "https://bot.example/mattermost/actions",
-    actionSecret: "secret",
-    botUsername: "traektoria51_bot",
+test("formats Mattermost multi-select choices with comma-number guidance", () => {
+  const text = formatMattermostMessage("Выберите варианты", {
+    inline_keyboard: [
+      [{ text: "Первый", callback_data: "s2:goal:first" }],
+      [{ text: "Второй", callback_data: "s2:goal:second" }],
+      [{ text: "Продолжить", callback_data: "s2:goal_continue" }],
+    ],
   });
 
-  assert.equal(post.channel_id, "channel1");
-  assert.equal(post.root_id, "root1");
-  assert.equal(post.message, "Выберите вариант\n\n1. Первый\n2. Второй");
-  assert.equal(post.props.attachments.length, 1);
-  assert.equal(post.props.attachments[0].fallback, "Доступные варианты выбора");
-  assert.deepEqual(
-    post.props.attachments[0].actions.map((action) => action.name),
-    ["Первый", "Второй"],
+  assert.equal(
+    text,
+    "Выберите варианты\n\n1. Первый\n2. Второй\n3. Продолжить\n\nОтветьте одним или несколькими номерами через запятую. Чтобы перейти дальше, укажите номер «Продолжить».",
   );
-  assert.equal(post.props.attachments[0].actions[0].integration.url, "https://bot.example/mattermost/actions");
-  assert.equal(post.props.attachments[0].actions[0].integration.context.token, "secret");
-  assert.equal(post.props.attachments[0].actions[0].integration.context.callback_data, "one");
-  assert.equal(post.props.attachments[0].actions[0].integration.context.user_id, "user1");
-  assert.equal(post.props.attachments[0].actions[0].integration.context.channel_id, "channel1");
 });
 
-test("splits long Mattermost interactive keyboards into several posts", () => {
-  const posts = buildMattermostPosts({
-    target: {
-      platform: "mattermost",
-      id: "dm:user1",
-      userId: "user1",
-      channelId: "channel1",
-      channelType: "D",
-    },
-    text: "Выберите варианты",
-    replyMarkup: {
-      inline_keyboard: [
-        [{ text: "Первый", callback_data: "one" }],
-        [{ text: "Второй", callback_data: "two" }],
-        [{ text: "Третий", callback_data: "three" }],
-        [{ text: "Четвертый", callback_data: "four" }],
-        [{ text: "Пятый", callback_data: "five" }],
-        [{ text: "Продолжить", callback_data: "continue" }],
-      ],
-    },
-    actionUrl: "https://bot.example/mattermost/actions",
-    actionSecret: "secret",
-  });
-
-  assert.equal(posts.length, 2);
-  assert.equal(posts[0].message, "Выберите варианты\n\n1. Первый\n2. Второй\n3. Третий\n4. Четвертый\n5. Пятый\n6. Продолжить");
-  assert.deepEqual(
-    posts[0].props.attachments[0].actions.map((action) => action.name),
-    ["Первый", "Второй", "Третий", "Четвертый", "Пятый"],
-  );
-  assert.equal(posts[1].message, "Еще вариант (6):");
-  assert.deepEqual(
-    posts[1].props.attachments[0].actions.map((action) => action.name),
-    ["Продолжить"],
-  );
-  assert.equal(posts[1].props.attachments[0].actions[0].integration.context.callback_data, "continue");
-});
-
-test("keeps Mattermost numbered fallback without action config", () => {
+test("keeps Mattermost choices text-only without attachments", () => {
   const post = buildMattermostPost({
     target: {
       platform: "mattermost",
@@ -188,8 +127,13 @@ test("keeps Mattermost numbered fallback without action config", () => {
         [{ text: "Первый", callback_data: "one" }],
       ],
     },
+    actionUrl: "ignored",
+    actionSecret: "secret",
   });
 
-  assert.equal(post.message, "Выберите вариант\n\n1. Первый");
+  assert.equal(
+    post.message,
+    "Выберите вариант\n\n1. Первый\n\nОтветьте номером варианта или напишите ответ текстом, если нужен свой вариант.",
+  );
   assert.equal(post.props, undefined);
 });

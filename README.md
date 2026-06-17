@@ -59,17 +59,8 @@
 - `MATTERMOST_USERNAME=botnumber2` и `MATTERMOST_PASSWORD=...` — запасной вариант, если token-based авторизация недоступна
 - `MATTERMOST_MODE=mentions` — личные сообщения и сообщения в канале только при упоминании бота
 - `MATTERMOST_REPLY_MODE=thread` — ответы в канале отправляются в тред к сообщению пользователя
-- `MATTERMOST_ACTION_SECRET=...` — случайный секрет для проверки интерактивных кнопок Mattermost
-- `MATTERMOST_SLASH_TOKEN=...` — token кастомной slash-команды `/traektoria` из Mattermost
-- `MATTERMOST_ACTION_PATH=/mattermost/actions`
-- `MATTERMOST_SLASH_PATH=/mattermost/slash`
 
-Для меню Mattermost создайте custom slash command:
-
-- trigger word: `traektoria`
-- request URL: `https://bot.traektoria51.ru/mattermost/slash`
-- request method: `POST`
-- autocomplete: включить, hint `[text|quiz|deep|wide|help]`
+В Mattermost бот работает без slash-команд и интерактивных кнопок: он отправляет нумерованный список вариантов, пользователь отвечает номером пункта или вводит данные текстом.
 
 5. Запустить бота:
 
