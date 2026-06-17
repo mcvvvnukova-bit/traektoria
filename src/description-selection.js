@@ -1,3 +1,5 @@
+const { analyzeQueryInterests } = require("./query-ontology");
+
 const AGE_LABELS = {
   "3-4": "3-4 года",
   "5-6": "5-6 лет",
@@ -91,6 +93,9 @@ function createDescriptionSelectionState() {
       interestsText: "",
       interests: [],
       interestLabels: [],
+      specificInterestTerms: [],
+      specificInterestLabels: [],
+      excludedSpecificInterestTerms: [],
       broadInterest: false,
       direction: null,
       directionLabel: "",
@@ -279,6 +284,27 @@ function parseDescriptionText(text) {
     if (!fields.interestsText) fields.interestsText = direction.label;
   }
 
+  const queryInterests = analyzeQueryInterests(text);
+  if (queryInterests.specificInterestTerms.length) {
+    fields.specificInterestTerms = queryInterests.specificInterestTerms;
+    fields.specificInterestLabels = queryInterests.specificInterestLabels;
+    if (queryInterests.specificInterestLabels.length) {
+      fields.interestsText = queryInterests.specificInterestLabels.join(", ");
+    }
+  }
+  if (queryInterests.excludedSpecificInterestTerms.length) {
+    fields.excludedSpecificInterestTerms = queryInterests.excludedSpecificInterestTerms;
+  }
+  if (queryInterests.broadInterests.length) {
+    fields.interests = [...new Set([...(fields.interests || []), ...queryInterests.broadInterests])];
+    fields.interestLabels = labelsForInterests(fields.interests);
+    if (!fields.interestsText) fields.interestsText = fields.interestLabels.join(", ");
+  }
+  if (queryInterests.direction && !fields.direction) {
+    fields.direction = queryInterests.direction;
+    fields.directionLabel = queryInterests.directionLabel;
+  }
+
   const budget = detectBudget(text);
   if (budget) fields.budget = budget;
 
@@ -351,9 +377,10 @@ function getMissingRequiredFields(state) {
 function hasInterestOrDirection(fields) {
   return Boolean(
     fields.direction ||
-      (Array.isArray(fields.interests) && fields.interests.length) ||
-      fields.broadInterest ||
-      fields.interestsText,
+    (Array.isArray(fields.interests) && fields.interests.length) ||
+    (Array.isArray(fields.specificInterestTerms) && fields.specificInterestTerms.length) ||
+    fields.broadInterest ||
+    fields.interestsText,
   );
 }
 
@@ -417,6 +444,9 @@ function buildRecommendationProfile(state) {
     directionLabel: fields.directionLabel,
     direction: fields.direction,
     interestsText: fields.interestsText || "",
+    specificInterestTerms: fields.specificInterestTerms || [],
+    specificInterestLabels: fields.specificInterestLabels || [],
+    excludedSpecificInterestTerms: fields.excludedSpecificInterestTerms || [],
   };
 }
 
@@ -427,6 +457,8 @@ function buildPdfAnswers(state) {
     age: fields.age || "",
     interestsText: fields.interestsText || fields.directionLabel || labelsForInterests(fields.interests).join(", "),
     interests: fields.interests || [],
+    specificInterestTerms: fields.specificInterestTerms || [],
+    specificInterestLabels: fields.specificInterestLabels || [],
     goal: fields.goal || "discover",
     goalLabel: fields.goalLabel || "Подобрать подходящие занятия",
     schedule: fields.schedule || [],

@@ -13,6 +13,7 @@ const {
 
 let catalogSourceCache = null;
 const UNKNOWN_SCHEDULE_LABEL = "Уточните при записи";
+const ENROLLMENT_CLOSED = 3;
 
 const MOCK_CATALOG = [
   {
@@ -310,15 +311,19 @@ async function getCatalogRecommendations(profile, source, options = {}) {
         buildCatalogScoringCandidate(item, candidateScoringData),
         context,
       );
-      return {
+      const rankedItem = {
         ...item,
         scoring,
         scoringData: candidateScoringData,
         score: scoring.score,
       };
+      return {
+        ...rankedItem,
+        specificInterestBucket: catalogSpecificInterestBucket(rankedItem, context),
+      };
     })
     .filter((item) => item.scoring.passesFilters !== false && item.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => compareCatalogRank(a, b, context))
     .slice(0, Math.max((limit || 4) * 3, 12));
 
   const detailed = [];
@@ -334,7 +339,7 @@ async function getCatalogRecommendations(profile, source, options = {}) {
 
   const filtered = detailed
     .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score)
+    .sort((a, b) => compareCatalogRank(a, b, context))
     .slice(0, limit || (confidence === "high" ? 4 : 3));
 
   if (!filtered.length) {
@@ -358,6 +363,33 @@ async function getCatalogRecommendations(profile, source, options = {}) {
     municipality,
     isSparse: filtered.length < (options.sparseThreshold || 3),
   };
+}
+
+function compareCatalogRank(a, b, context = {}) {
+  if ((context.specificInterestTerms || []).length) {
+    const bucketDiff = Number(a.specificInterestBucket || 40) - Number(b.specificInterestBucket || 40);
+    if (bucketDiff !== 0) return bucketDiff;
+  }
+
+  const scoreDiff = Number(b.score || 0) - Number(a.score || 0);
+  if (scoreDiff !== 0) return scoreDiff;
+  return Number(a.id) - Number(b.id);
+}
+
+function catalogSpecificInterestBucket(item, context = {}) {
+  if (!(context.specificInterestTerms || []).length) return 0;
+  if (!item.scoring?.specificInterestMatch) return 40;
+  if (item.scoring.ageEligible === false) return 30;
+  return catalogItemHasOpenPlaces(item) ? 10 : 20;
+}
+
+function catalogItemHasOpenPlaces(item) {
+  if (Number(item.enrollment) === ENROLLMENT_CLOSED) return false;
+  const groups = item.scoringData?.groups || [];
+  const freePlaces = groups
+    .map((group) => Number(group?.free_places_counter ?? group?.freePlacesCounter))
+    .filter(Number.isFinite);
+  return freePlaces.some((value) => value > 0);
 }
 
 async function resolveCatalogSource() {
@@ -399,6 +431,9 @@ function buildCatalogScoringContext(profile, municipality, options = {}) {
     clarifyGroup: profile.clarifyGroup,
     interests: profile.interests || [],
     interestsText: profile.interestsText || "",
+    specificInterestTerms: profile.specificInterestTerms || [],
+    specificInterestLabels: profile.specificInterestLabels || [],
+    excludedSpecificInterestTerms: profile.excludedSpecificInterestTerms || [],
   };
 }
 
@@ -548,6 +583,11 @@ function normalizeLiveProgram(listItem, detail, profile, baseScore, scoringData 
     availableGroups: groups.length,
     availablePlaces: countFreePlaces(groups),
     enrollment: listItem.enrollment,
+    specificInterestBucket: listItem.specificInterestBucket || 0,
+    specificInterestMatch: Boolean(listItem.scoring?.specificInterestMatch),
+    specificInterestScore: listItem.scoring?.specificInterestScore || 0,
+    specificInterestMatchLevel: listItem.scoring?.specificInterestMatchLevel || "",
+    ageEligible: listItem.scoring?.ageEligible !== false,
     phone: organization.phone || null,
     programTextUrl: data.program_text?.link ? data.program_text.value : null,
     ageMin: Math.floor((program.age_group_min || listItem.age_min || 0) / 12),

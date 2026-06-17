@@ -92,6 +92,65 @@ test("allows fallback interest match when normalized topics are absent", () => {
   assert.equal(result.eligible, true);
 });
 
+test("keeps a basketball topic match even when broad sports terms do not match", () => {
+  const result = scoreProgramCandidate(
+    baseCandidate({
+      directionName: "Физкультурно-спортивная",
+      enrollment: 3,
+      topics: [{
+        name: "Игра в баскетбол",
+        key: "igra-v-basketbol",
+        categoryName: "Предметная тема без категории",
+        parentName: "Предметные темы без категории",
+      }],
+    }),
+    {
+      scenario: SCENARIO_DESCRIPTION,
+      municipalityId: 10,
+      ageYears: 13,
+      interests: ["sports"],
+      directionLabel: "Физкультурно-спортивная",
+      specificInterestTerms: ["баскетбол", "баскет"],
+    },
+  );
+
+  assert.equal(result.passesFilters, true);
+  assert.equal(result.eligible, true);
+  assert.equal(result.exclusionReason, "");
+  assert.equal(result.specificInterestMatch, true);
+  assert.equal(result.specificInterestMatchLevel, "topic_level_3");
+  assert.equal(result.criteriaScores.specificInterests, 180);
+});
+
+test("keeps an exact basketball fallback match after age mismatch", () => {
+  const result = scoreProgramCandidate(
+    baseCandidate({
+      name: "Баскетбол",
+      directionName: "Физкультурно-спортивная",
+      ageMinMonths: 15 * 12,
+      ageMaxMonths: 17 * 12,
+      enrollment: 3,
+      topics: [],
+      keywords: ["баскетбол"],
+    }),
+    {
+      scenario: SCENARIO_DESCRIPTION,
+      municipalityId: 10,
+      ageYears: 13,
+      interests: ["sports"],
+      directionLabel: "Физкультурно-спортивная",
+      specificInterestTerms: ["баскетбол", "баскет"],
+    },
+  );
+
+  assert.equal(result.passesFilters, true);
+  assert.equal(result.ageEligible, false);
+  assert.equal(result.eligible, true);
+  assert.equal(result.exclusionReason, "");
+  assert.equal(result.specificInterestMatch, true);
+  assert.equal(result.specificInterestMatchLevel, "text_strong");
+});
+
 test("scores schedule and availability by the best group", () => {
   const result = scoreProgramCandidate(
     baseCandidate({

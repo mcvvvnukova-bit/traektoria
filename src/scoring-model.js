@@ -52,7 +52,8 @@ const ADVANCED_TOPIC_PATTERNS = [
 
 function scoreProgramCandidate(candidate, rawContext = {}) {
   const context = normalizeScoringContext(rawContext);
-  const hardFilter = evaluateHardFilters(candidate, context);
+  const specificInterestResult = scoreSpecificInterestBlock(candidate, context);
+  const hardFilter = evaluateHardFilters(candidate, context, specificInterestResult);
   if (!hardFilter.passes) {
     return buildResult({
       score: 0,
@@ -60,6 +61,8 @@ function scoreProgramCandidate(candidate, rawContext = {}) {
       eligible: false,
       exclusionReason: hardFilter.reason,
       criteriaScores: hardFilter.criteriaScores,
+      ageEligible: hardFilter.ageEligible,
+      ...withoutOwnScore(specificInterestResult),
     });
   }
 
@@ -70,19 +73,41 @@ function scoreProgramCandidate(candidate, rawContext = {}) {
   criteriaScores.topicPresence = topicPresenceScore;
   score += topicPresenceScore;
 
+  criteriaScores.specificInterests = specificInterestResult.score;
+  score += specificInterestResult.score;
+  if (
+    context.specificInterestTerms.length &&
+    !context.interests.length &&
+    !specificInterestResult.specificInterestMatch
+  ) {
+    return buildResult({
+      score: 0,
+      passesFilters: true,
+      eligible: false,
+      exclusionReason: "interest_mismatch",
+      criteriaScores,
+      ageEligible: hardFilter.ageEligible,
+      ...withoutOwnScore(specificInterestResult),
+    });
+  }
+
   const interestResult = scoreInterestBlock(candidate, context);
   criteriaScores.interests = interestResult.score;
-  if (interestResult.exclusionReason) {
+  if (interestResult.exclusionReason && !specificInterestResult.specificInterestMatch) {
     return buildResult({
       score: 0,
       passesFilters: true,
       eligible: false,
       exclusionReason: interestResult.exclusionReason,
       criteriaScores,
-      ...withoutOwnScore(interestResult),
+      ageEligible: hardFilter.ageEligible,
+      ...mergeInterestSignals(specificInterestResult, interestResult),
     });
   }
-  score += interestResult.score;
+  if (!interestResult.exclusionReason) {
+    score += interestResult.score;
+  }
+  const interestSignals = mergeInterestSignals(specificInterestResult, interestResult);
 
   const scheduleScore = scoreSchedule(candidate, context);
   criteriaScores.schedule = scheduleScore;
@@ -92,7 +117,11 @@ function scoreProgramCandidate(candidate, rawContext = {}) {
   criteriaScores.availability = availabilityScore;
   score += availabilityScore;
 
-  const directionScore = scoreDirection(candidate, context, interestResult.exactTopicMatch);
+  const directionScore = scoreDirection(
+    candidate,
+    context,
+    interestResult.exactTopicMatch || specificInterestResult.specificInterestMatch,
+  );
   criteriaScores.direction = directionScore;
   score += directionScore;
 
@@ -117,7 +146,8 @@ function scoreProgramCandidate(candidate, rawContext = {}) {
         ...criteriaScores,
         trajectory: 0,
       },
-      ...withoutOwnScore(interestResult),
+      ageEligible: hardFilter.ageEligible,
+      ...interestSignals,
       ...withoutOwnScore(trajectoryResult),
     });
   }
@@ -132,7 +162,8 @@ function scoreProgramCandidate(candidate, rawContext = {}) {
     passesFilters: true,
     eligible: score > 0,
     criteriaScores,
-    ...withoutOwnScore(interestResult),
+    ageEligible: hardFilter.ageEligible,
+    ...interestSignals,
     ...withoutOwnScore(trajectoryResult),
   });
 }
@@ -170,6 +201,10 @@ function buildResult(result) {
     noveltySignals: result.noveltySignals || [],
     exactTopicMatch: Boolean(result.exactTopicMatch),
     fallbackTopicMatch: Boolean(result.fallbackTopicMatch),
+    specificInterestMatch: Boolean(result.specificInterestMatch),
+    specificInterestScore: result.specificInterestScore || 0,
+    specificInterestMatchLevel: result.specificInterestMatchLevel || "",
+    ageEligible: result.ageEligible !== false,
   };
 }
 
@@ -195,6 +230,9 @@ function normalizeScoringContext(rawContext = {}) {
     format: rawContext.format || rawContext.educationForm || rawContext.formatLabel || "",
     groupSize: rawContext.groupSize || groupSizeFromClarifier(rawContext.clarifyGroup),
     interests: normalizeInterestInputs(rawContext),
+    specificInterestTerms: normalizeSpecificInterestTerms(rawContext.specificInterestTerms),
+    specificInterestLabels: normalizeSpecificInterestTerms(rawContext.specificInterestLabels),
+    excludedSpecificInterestTerms: normalizeSpecificInterestTerms(rawContext.excludedSpecificInterestTerms),
     completedProgramIds: new Set((rawContext.completedProgramIds || []).map(Number).filter(Number.isFinite)),
     completedTopicProfile: rawContext.completedTopicProfile || rawContext.topicProfile || {},
   };
@@ -221,6 +259,13 @@ function normalizeInterestInputs(context) {
   return uniqueBy(interests, (item) => normalizeText(item.value));
 }
 
+function normalizeSpecificInterestTerms(values) {
+  return [...new Set((values || [])
+    .map(normalizeText)
+    .map((value) => value.trim())
+    .filter((value) => value.length >= 3))];
+}
+
 function splitInterestText(value) {
   return String(value || "")
     .split(/[,;]+/)
@@ -236,7 +281,7 @@ function termsForInterest(value) {
   return words.length ? words : [normalized].filter(Boolean);
 }
 
-function evaluateHardFilters(candidate, context) {
+function evaluateHardFilters(candidate, context, specificInterestResult = {}) {
   const criteriaScores = {};
 
   const candidateMunicipalityId = nullableNumber(candidate.municipalityId ?? candidate.municipality_id);
@@ -249,8 +294,16 @@ function evaluateHardFilters(candidate, context) {
     if (!orgMatches) return { passes: false, reason: "organization_mismatch", criteriaScores };
   }
 
+  if (context.excludedSpecificInterestTerms.length && matchesSpecificInterestTerms(candidate, context.excludedSpecificInterestTerms)) {
+    return { passes: false, reason: "excluded_specific_interest", criteriaScores };
+  }
+
   if (context.ageRangeMonths && !matchesAge(candidate, context.ageRangeMonths)) {
-    return { passes: false, reason: "age_mismatch", criteriaScores };
+    if (!specificInterestResult.specificInterestMatch) {
+      return { passes: false, reason: "age_mismatch", criteriaScores, ageEligible: false };
+    }
+    criteriaScores.age = -100;
+    return { passes: true, criteriaScores, ageEligible: false };
   }
 
   if (context.budgetAmount != null && !matchesBudget(candidate, context.budgetAmount)) {
@@ -265,7 +318,7 @@ function evaluateHardFilters(candidate, context) {
     return { passes: false, reason: "education_form_mismatch", criteriaScores };
   }
 
-  return { passes: true, criteriaScores };
+  return { passes: true, criteriaScores, ageEligible: true };
 }
 
 function matchesOrganization(candidate, context) {
@@ -372,6 +425,95 @@ function scoreInterestBlock(candidate, context) {
     score,
     exactTopicMatch,
     fallbackTopicMatch,
+    topicKeyMatches: uniqueBy(topicKeyMatches, topicIdentity),
+    categoryMatches: uniqueBy(categoryMatches, topicIdentity),
+  };
+}
+
+function scoreSpecificInterestBlock(candidate, context) {
+  const terms = context.specificInterestTerms || [];
+  if (!terms.length) {
+    return {
+      score: 0,
+      specificInterestScore: 0,
+      specificInterestMatch: false,
+      specificInterestMatchLevel: "",
+      topicKeyMatches: [],
+      categoryMatches: [],
+    };
+  }
+
+  return scoreSpecificInterestTerms(candidate, terms);
+}
+
+function matchesSpecificInterestTerms(candidate, terms) {
+  return scoreSpecificInterestTerms(candidate, normalizeSpecificInterestTerms(terms)).specificInterestMatch;
+}
+
+function scoreSpecificInterestTerms(candidate, terms) {
+  const normalizedTerms = normalizeSpecificInterestTerms(terms);
+  const topics = candidate.topics || [];
+
+  const level3Matches = topics.filter((topic) =>
+    textMatchesTerms([topic.key, topic.name, topic.normalizedTopicKey, topic.normalizedTopicName], normalizedTerms),
+  );
+  if (level3Matches.length) {
+    return buildSpecificInterestResult({
+      score: 180,
+      level: "topic_level_3",
+      topicKeyMatches: level3Matches,
+    });
+  }
+
+  const level2Matches = topics.filter((topic) =>
+    textMatchesTerms([topic.categoryCode, topic.categoryName], normalizedTerms),
+  );
+  if (level2Matches.length) {
+    return buildSpecificInterestResult({
+      score: 130,
+      level: "topic_level_2",
+      categoryMatches: level2Matches,
+    });
+  }
+
+  const level1Matches = topics.filter((topic) =>
+    textMatchesTerms([topic.parentCode, topic.parentName], normalizedTerms),
+  );
+  if (level1Matches.length) {
+    return buildSpecificInterestResult({
+      score: 80,
+      level: "topic_level_1",
+      categoryMatches: level1Matches,
+    });
+  }
+
+  if (textMatchesTerms([candidate.name, candidate.program, candidate.searchName, ...(candidate.keywords || [])], normalizedTerms)) {
+    return buildSpecificInterestResult({
+      score: 110,
+      level: "text_strong",
+    });
+  }
+
+  const hasTopicData = topics.length > 0;
+  if (!hasTopicData && textMatchesTerms([candidate.annotation, candidate.task, candidate.summary], normalizedTerms)) {
+    return buildSpecificInterestResult({
+      score: 40,
+      level: "text_weak",
+    });
+  }
+
+  return buildSpecificInterestResult({
+    score: 0,
+    level: "",
+  });
+}
+
+function buildSpecificInterestResult({ score, level, topicKeyMatches = [], categoryMatches = [] }) {
+  return {
+    score,
+    specificInterestScore: score,
+    specificInterestMatch: score > 0,
+    specificInterestMatchLevel: level,
     topicKeyMatches: uniqueBy(topicKeyMatches, topicIdentity),
     categoryMatches: uniqueBy(categoryMatches, topicIdentity),
   };
@@ -890,6 +1032,30 @@ function uniqueBy(items, keyFn) {
 function withoutOwnScore(value) {
   const { score, ...rest } = value || {};
   return rest;
+}
+
+function mergeInterestSignals(specificInterestResult, interestResult) {
+  const specificSignals = withoutOwnScore(specificInterestResult);
+  const broadSignals = withoutOwnScore(interestResult);
+  if (specificInterestResult?.specificInterestMatch && broadSignals.exclusionReason === "interest_mismatch") {
+    broadSignals.exclusionReason = "";
+  }
+
+  return {
+    ...specificSignals,
+    ...broadSignals,
+    topicKeyMatches: uniqueBy([
+      ...(specificInterestResult?.topicKeyMatches || []),
+      ...(interestResult?.topicKeyMatches || []),
+    ], topicIdentity),
+    categoryMatches: uniqueBy([
+      ...(specificInterestResult?.categoryMatches || []),
+      ...(interestResult?.categoryMatches || []),
+    ], topicIdentity),
+    specificInterestMatch: Boolean(specificInterestResult?.specificInterestMatch),
+    specificInterestScore: specificInterestResult?.specificInterestScore || 0,
+    specificInterestMatchLevel: specificInterestResult?.specificInterestMatchLevel || "",
+  };
 }
 
 function topicIdentity(topic) {

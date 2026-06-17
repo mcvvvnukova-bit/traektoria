@@ -40,6 +40,23 @@ test("counts direction as required interest signal", () => {
   assert.equal(state.fields.directionLabel, "Художественная");
 });
 
+test("keeps concrete basketball terms in the recommendation profile", () => {
+  const state = createDescriptionSelectionState();
+  applyDescriptionText(state, "занятия по баскетболу в Оленегорске для мальчика 13 лет");
+
+  assert.deepEqual(getMissingRequiredFields(state), []);
+  assert.equal(state.fields.ageYears, 13);
+  assert.equal(state.fields.place, "Оленегорск");
+  assert.ok(state.fields.interests.includes("sports"));
+  assert.ok(state.fields.specificInterestTerms.includes("баскетбол"));
+  assert.ok(state.fields.specificInterestTerms.includes("баскет"));
+
+  const profile = buildRecommendationProfile(state);
+  assert.ok(profile.interests.includes("sports"));
+  assert.ok(profile.specificInterestTerms.includes("баскетбол"));
+  assert.deepEqual(profile.specificInterestLabels, ["баскетбол"]);
+});
+
 test("builds one prompt for multiple missing required fields", () => {
   const state = createDescriptionSelectionState();
   applyDescriptionText(state, "8 лет");
@@ -67,8 +84,8 @@ test("edit replaces changed interest and keeps existing age and place", () => {
 
   assert.equal(state.fields.age, "10-12");
   assert.equal(state.fields.place, "Североморск");
-  assert.deepEqual(state.fields.interests, ["creative"]);
-  assert.equal(state.fields.interestsText, "творчество");
+  assert.deepEqual(state.fields.interests, ["creative", "calm"]);
+  assert.equal(state.fields.interestsText, "рисование");
 });
 
 test("uses llm slots as validated enrichment for missing required fields", () => {
