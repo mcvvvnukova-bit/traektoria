@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  isDescriptionTextStep,
   startDescriptionFlow,
   handleDescriptionText,
   handleDescriptionCallback,
@@ -62,6 +63,14 @@ test("starts description flow from menu", async () => {
   assert.equal(harness.session.step, "s1_wait_description");
   assert.equal(harness.session.scenario.id, "description_selection");
   assert.match(harness.messages[0].text, /Напишите, что ищете/);
+});
+
+test("only accepts free text on description input steps", () => {
+  assert.equal(isDescriptionTextStep("s1_wait_description"), true);
+  assert.equal(isDescriptionTextStep("s1_wait_required_clarification"), true);
+  assert.equal(isDescriptionTextStep("s1_wait_edit"), true);
+  assert.equal(isDescriptionTextStep("s1_confirm_summary"), false);
+  assert.equal(isDescriptionTextStep("s1_pdf"), false);
 });
 
 test("complete request goes directly to recommendations and PDF prompt", async () => {

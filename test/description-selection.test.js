@@ -10,6 +10,7 @@ const {
   buildRequiredClarificationPrompt,
   shouldUseLlmForDescription,
   applyLlmAnalysis,
+  buildPdfAnswers,
 } = require("../src/description-selection");
 
 test("parses complete free-text request", () => {
@@ -90,4 +91,20 @@ test("uses llm slots as validated enrichment for missing required fields", () =>
   assert.deepEqual(state.fields.interests, ["building", "logic"]);
   assert.equal(state.fields.budget, "до 1000 рублей");
   assert.equal(state.fields.scheduleText, "вечером");
+});
+
+test("does not extract child special needs from free-text requests", () => {
+  const state = createDescriptionSelectionState();
+  applyDescriptionText(state, "Сыну 10 лет, Мурманск, робототехника, ОВЗ, СДВГ");
+
+  assert.equal(state.fields.specialNeedsLabel, undefined);
+  assert.equal(state.fields.specialNeedsOther, undefined);
+
+  const profile = buildRecommendationProfile(state);
+  assert.equal(profile.specialNeeds, undefined);
+  assert.equal(profile.specialNeedsLabel, undefined);
+
+  const pdfAnswers = buildPdfAnswers(state);
+  assert.equal(pdfAnswers.specialNeeds, undefined);
+  assert.equal(pdfAnswers.specialNeedsLabel, undefined);
 });

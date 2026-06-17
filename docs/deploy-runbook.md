@@ -9,10 +9,13 @@
 - Приложение: `/opt/telegram-bot`
 - Конфиг окружения: `/opt/telegram-bot/.env`
 - systemd unit: `/etc/systemd/system/traektoria51-bot.service`
+- PFDO sync unit: `/etc/systemd/system/traektoria51-pfdo-sync.service`
+- PFDO sync timer: `/etc/systemd/system/traektoria51-pfdo-sync.timer`
 - nginx site: `/etc/nginx/sites-available/traektoria51-bot`
 
 ## Что запущено
 - Сервис бота: `traektoria51-bot`
+- Ночной sync PFDO-зеркала: `traektoria51-pfdo-sync.timer`
 - Transport: `webhook`
 - Внутренний webhook listener: `127.0.0.1:3000`
 - Публичный webhook URL: `https://bot.traektoria51.ru/telegram/webhook`
@@ -36,6 +39,19 @@ ssh beget-bot
 Проверить статус бота:
 ```bash
 sudo systemctl status traektoria51-bot
+```
+
+Проверить ночной sync PFDO:
+```bash
+sudo systemctl status traektoria51-pfdo-sync.timer
+sudo systemctl list-timers traektoria51-pfdo-sync.timer
+journalctl -u traektoria51-pfdo-sync -n 100 --no-pager
+```
+
+Запустить sync PFDO вручную:
+```bash
+cd /opt/telegram-bot
+node scripts/sync-pfdo-programs.js --trigger manual
 ```
 
 Перезапустить бота:
@@ -68,6 +84,12 @@ curl -sS "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
 ```bash
 curl -sS "https://platform-api.max.ru/me" -H "Authorization: <MAX_BOT_TOKEN>"
 ```
+
+Проверить Mattermost:
+
+- отправьте личное сообщение боту;
+- в канале упомяните бота и напишите запрос;
+- убедитесь, что бот показывает нумерованный список вариантов и принимает ответ номером.
 
 Зарегистрировать webhook MAX вручную, если `MAX_WEBHOOK_REGISTER=false`:
 ```bash

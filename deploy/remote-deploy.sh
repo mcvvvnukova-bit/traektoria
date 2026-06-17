@@ -33,8 +33,22 @@ npm install --omit=dev --no-audit --no-fund
 echo "==> setup-db (idempotent)"
 node scripts/setup-db.js
 
+echo "==> pfdo mirror schema (idempotent)"
+PFDO_MIRROR_DATABASE_NAME="${PFDO_MIRROR_DATABASE_NAME:-pfdo_51_mirror}"
+sudo -u postgres psql -d "$PFDO_MIRROR_DATABASE_NAME" -X -v ON_ERROR_STOP=1 -q -f db/pfdo-mirror-schema.sql
+
 echo "==> chown $SERVICE_USER (сервис работает под этим пользователем)"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"
+
+echo "==> install PFDO sync timer"
+if [[ -f "$APP_DIR/deploy/traektoria51-pfdo-sync.service" && -f "$APP_DIR/deploy/traektoria51-pfdo-sync.timer" ]]; then
+  cp "$APP_DIR/deploy/traektoria51-pfdo-sync.service" /etc/systemd/system/traektoria51-pfdo-sync.service
+  cp "$APP_DIR/deploy/traektoria51-pfdo-sync.timer" /etc/systemd/system/traektoria51-pfdo-sync.timer
+  systemctl daemon-reload
+  systemctl enable --now traektoria51-pfdo-sync.timer
+else
+  echo "PFDO sync timer files not found, skipping"
+fi
 
 echo "==> restart service: $SERVICE"
 systemctl restart "$SERVICE"

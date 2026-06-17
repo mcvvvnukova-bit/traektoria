@@ -1,0 +1,22 @@
+[Unit]
+Description=Traektoria51 PFDO mirror sync
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=botsvc
+Group=botsvc
+
+WorkingDirectory=/opt/telegram-bot
+ExecStart=/usr/bin/node /opt/telegram-bot/scripts/sync-pfdo-programs.js --trigger timer
+
+Environment=NODE_ENV=production
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=traektoria51-pfdo-sync
+
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true

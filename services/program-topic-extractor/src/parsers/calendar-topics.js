@@ -65,6 +65,7 @@ function extractCalendarTopicsFromText({ text, documentPath, documentFormat }) {
   const genericNumberedStudyPlanRows = extractGenericNumberedStudyPlanRows(lines);
   const alphabeticTourismStudyPlanRows = extractAlphabeticTourismStudyPlanRows(lines);
   const annualStudyPlanRows = extractAnnualStudyPlanRows(rawLines);
+  const detachedHourStudyPlanRows = extractDetachedHourStudyPlanRows(lines);
   const ocrSplitHeaderStudyPlanRows = extractOcrSplitHeaderStudyPlanRows(lines);
   const moduleBasicStudyPlanRows = extractModuleBasicStudyPlanRows(lines);
   const yearlyBasicStudyPlanRows = extractYearlyBasicStudyPlanRows(lines);
@@ -114,6 +115,7 @@ function extractCalendarTopicsFromText({ text, documentPath, documentFormat }) {
     coursePlanningSummaryRows,
     compactStudyPlanRows,
     alphabeticTourismStudyPlanRows,
+    detachedHourStudyPlanRows,
     ocrSplitHeaderStudyPlanRows,
     moduleBasicStudyPlanRows,
     yearlyBasicStudyPlanRows,
@@ -429,7 +431,7 @@ function isCoherentMultiYearBasicStudyPlan(rows) {
 }
 
 function isFocusedStudyPlanCandidate(quality) {
-  return /^(basic-study-plan|second-year-table-three-study-plan|named-study-plan|annual-study-plan|generic-numbered-study-plan|tourist-camp-ocr-study-plan|monthly-section-thematic-plan|cell-wise-study-plan|title-first-cell-wise-study-plan|course-planning-summary|compact-study-plan|simple-topic-hour-plan|section-topic-hour-plan|textutil-delimited-study-plan|alphabetic-tourism-study-plan|course-year-study-plan|lesson-number-study-plan|theory-practice-study-plan)$/iu.test(
+  return /^(basic-study-plan|second-year-table-three-study-plan|named-study-plan|annual-study-plan|generic-numbered-study-plan|tourist-camp-ocr-study-plan|monthly-section-thematic-plan|cell-wise-study-plan|title-first-cell-wise-study-plan|course-planning-summary|compact-study-plan|simple-topic-hour-plan|section-topic-hour-plan|textutil-delimited-study-plan|alphabetic-tourism-study-plan|detached-hour-study-plan|course-year-study-plan|lesson-number-study-plan|theory-practice-study-plan)$/iu.test(
     quality.source || "",
   );
 }
@@ -15410,6 +15412,194 @@ function parseNumericLineValues(line) {
 
 function isPlausibleAggregateHours(hoursTotal) {
   return Number.isFinite(hoursTotal) && hoursTotal > 0 && hoursTotal <= 5000;
+}
+
+function extractDetachedHourStudyPlanRows(lines) {
+  const headerIndexes = findDetachedHourStudyPlanHeaderIndexes(lines);
+  const rows = [];
+
+  for (let headerPosition = 0; headerPosition < headerIndexes.length; headerPosition += 1) {
+    const startIndex = headerIndexes[headerPosition];
+    const nextHeaderIndex = headerIndexes[headerPosition + 1] || lines.length;
+    const endIndex = findDetachedHourStudyPlanEndIndex(lines, startIndex + 1, nextHeaderIndex);
+    rows.push(...extractDetachedHourStudyPlanRowsFromRange(lines, startIndex, endIndex));
+  }
+
+  return rows.length >= 3 && sumTopicHoursTotal(rows) > 0 ? rows : [];
+}
+
+function findDetachedHourStudyPlanHeaderIndexes(lines) {
+  const indexes = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = cleanupLine(lines[index]);
+    if (!/учебн(?:ый|ого)\s+план/iu.test(line)) continue;
+
+    const window = lines
+      .slice(index, index + 16)
+      .map(cleanupLine)
+      .join(" ");
+    if (
+      /наименовани[ея]\s+тем/iu.test(window) &&
+      /теоре?-?\s*тическ/iu.test(window) &&
+      /прак-?\s*тическ/iu.test(window) &&
+      /всего/iu.test(window)
+    ) {
+      indexes.push(index);
+    }
+  }
+
+  return indexes;
+}
+
+function findDetachedHourStudyPlanEndIndex(lines, startIndex, hardEnd) {
+  for (let index = startIndex; index < hardEnd; index += 1) {
+    const line = cleanupLine(lines[index]);
+    if (!line) continue;
+    if (index > startIndex + 12 && /^(?:итого|всего)(?:\s|:|$)/iu.test(line)) return index + 1;
+    if (index > startIndex + 12 && /^\d+(?:\.\d+)*[.)]?\s+(?:календарн|содержание|раздел|ресурс|список)/iu.test(line)) {
+      return index;
+    }
+    if (index > startIndex + 12 && HARD_STOP_RE.test(line)) return index;
+  }
+
+  return Math.min(hardEnd, startIndex + 140);
+}
+
+function extractDetachedHourStudyPlanRowsFromRange(lines, startIndex, endIndex) {
+  const rows = [];
+  const sectionTitle = cleanupDetachedHourStudyPlanSectionTitle(lines[startIndex]);
+  let segment = null;
+
+  const flushSegment = () => {
+    const row = buildDetachedHourStudyPlanRow(segment, sectionTitle);
+    if (row) rows.push(row);
+    segment = null;
+  };
+
+  for (let index = startIndex + 1; index < endIndex; index += 1) {
+    const line = cleanupLine(lines[index]);
+    if (!line || isDetachedHourStudyPlanHeaderLine(line)) continue;
+    if (/^(?:итого|всего)(?:\s|:|$)/iu.test(line)) break;
+
+    if (segment && !segment.hours) {
+      const hours = parseDetachedHourStudyPlanHoursLine(line);
+      if (hours) {
+        segment.hours = hours;
+        segment.rawLines.push(line);
+        if (hours.controlForm) segment.controlLines.push(hours.controlForm);
+        continue;
+      }
+    }
+
+    const rowStart = parseDetachedHourStudyPlanRowStart(line);
+    if (rowStart) {
+      flushSegment();
+      segment = {
+        number: rowStart.number,
+        titleLines: rowStart.title ? [rowStart.title] : [],
+        controlLines: [],
+        rawLines: [line],
+        hours: null,
+      };
+      continue;
+    }
+
+    if (!segment) continue;
+    segment.rawLines.push(line);
+    if (segment.hours) {
+      segment.controlLines.push(line);
+    } else {
+      segment.titleLines.push(line);
+    }
+  }
+
+  flushSegment();
+  return rows;
+}
+
+function isDetachedHourStudyPlanHeaderLine(line) {
+  const cleaned = cleanupLine(line);
+  return (
+    /^(?:№|п\s*[\\/]\s*п)$/iu.test(cleaned) ||
+    /^наименовани[ея]\s+тем(?:\s|$)/iu.test(cleaned) ||
+    /^(?:теоре?-?|тических|прак-?|всего\s+формы|аттестации\/?|контроля)$/iu.test(cleaned)
+  );
+}
+
+function parseDetachedHourStudyPlanRowStart(line) {
+  const cleaned = cleanupDetachedHourStudyPlanText(line);
+  const match = cleaned.match(/^(\d{1,2})(?:[.)])?\s+(.+)$/u);
+  if (!match) return null;
+  if (parseDetachedHourStudyPlanHoursLine(cleaned)) return null;
+
+  const number = Number(match[1]);
+  if (!Number.isInteger(number) || number <= 0 || number > 80) return null;
+
+  const title = cleanupLine(match[2]);
+  if (!/[А-ЯЁа-яёA-Za-z]/u.test(title)) return null;
+  return { number, title };
+}
+
+function parseDetachedHourStudyPlanHoursLine(line) {
+  const cleaned = cleanupDetachedHourStudyPlanText(line);
+  const match = cleaned.match(/^(-|\d+(?:[,.]\d+)?)\s+(-|\d+(?:[,.]\d+)?)\s+(-|\d+(?:[,.]\d+)?)(?:\s+(.+))?$/u);
+  if (!match) return null;
+
+  const hoursTheory = parseHourCell(match[1]);
+  const hoursPractice = parseHourCell(match[2]);
+  const hoursTotal = parseHourCell(match[3]);
+  if (!isPlausibleHours(hoursTheory, hoursPractice, hoursTotal)) return null;
+
+  return {
+    hoursTheory,
+    hoursPractice,
+    hoursTotal,
+    controlForm: cleanupControlForm(match[4] || ""),
+    values: [hoursTheory, hoursPractice, hoursTotal],
+  };
+}
+
+function buildDetachedHourStudyPlanRow(segment, sectionTitle) {
+  if (!segment || !segment.hours) return null;
+
+  const topicName = cleanupDetachedHourStudyPlanTopicName(segment.titleLines);
+  if (!isValidTopic(topicName) && !isLongBasicStudyPlanTopicName(topicName)) return null;
+
+  const { hoursTheory, hoursPractice, hoursTotal, values } = segment.hours;
+  const controlForm = cleanupControlForm(segment.controlLines.map(cleanupDetachedHourStudyPlanText).filter(Boolean).join(" "));
+
+  return {
+    plan_number: String(segment.number),
+    section_title: sectionTitle || "Учебный план",
+    topic_name: topicName,
+    hours_theory: hoursTheory,
+    hours_practice: hoursPractice,
+    hours_total: hoursTotal,
+    activity_type: inferActivityType({ topicName, controlForm, hoursTheory, hoursPractice }),
+    control_form: controlForm,
+    source_section: "detached-hour-study-plan",
+    source_excerpt: segment.rawLines.join(" / ").slice(0, 1500),
+    confidence: 0.84,
+    raw_payload: {
+      parser: "detached-hour-study-plan",
+      plan_number: String(segment.number),
+      parsed_lines: segment.rawLines,
+      parsed_hour_cells: values,
+      control_form: controlForm,
+    },
+  };
+}
+
+function cleanupDetachedHourStudyPlanSectionTitle(value) {
+  return cleanupLine(value).replace(/^\d+(?:\.\d+)*[.)]?\s*/u, "").trim() || "Учебный план";
+}
+
+function cleanupDetachedHourStudyPlanTopicName(lines) {
+  return cleanupBasicStudyPlanTopicName(lines.map(cleanupDetachedHourStudyPlanText).filter(Boolean).join(" "));
+}
+
+function cleanupDetachedHourStudyPlanText(value) {
+  return cleanupLine(value).replace(/\s*\|\s*/gu, " ").replace(/\s+/g, " ").trim();
 }
 
 function extractOcrSplitHeaderStudyPlanRows(lines) {

@@ -55,11 +55,12 @@
 
 - `MATTERMOST_ENABLED=true`
 - `MATTERMOST_URL=https://mattermost.example.ru`
-- `MATTERMOST_USERNAME=botnumber2`
-- `MATTERMOST_PASSWORD=...` — только в `.env` или переменных окружения, не коммитить
-- `MATTERMOST_TOKEN=...` — опционально; если задан, используется вместо логина и пароля
+- `MATTERMOST_TOKEN=...` — token Mattermost Bot Account, только в `.env` или переменных окружения, не коммитить
+- `MATTERMOST_USERNAME=botnumber2` и `MATTERMOST_PASSWORD=...` — запасной вариант, если token-based авторизация недоступна
 - `MATTERMOST_MODE=mentions` — личные сообщения и сообщения в канале только при упоминании бота
 - `MATTERMOST_REPLY_MODE=thread` — ответы в канале отправляются в тред к сообщению пользователя
+
+В Mattermost бот работает без slash-команд и интерактивных кнопок: он отправляет нумерованный список вариантов, пользователь отвечает номером пункта или вводит данные текстом.
 
 5. Запустить бота:
 

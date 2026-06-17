@@ -196,7 +196,6 @@ function drawParameters(context, answers) {
     ["ФОРМАТ", answers.formatLabel || "не указан"],
     ["МЕСТО", answers.place || "не указано"],
     ["СТОИМОСТЬ", answers.cost || "не указана"],
-    ["ОСОБЕННОСТИ", formatSpecialNeeds(answers)],
   ];
   if (answers.wantsRefinement) {
     params.push(
@@ -363,9 +362,14 @@ function drawProgramCard(context, item) {
 }
 
 function drawAvailability(page, x, y, item) {
-  const availablePlaces = Number(item.availablePlaces ?? item.availableGroups);
+  const availablePlacesRaw = item.availablePlaces ?? item.availableGroups;
+  const availablePlaces = Number(availablePlacesRaw);
   const enrollmentClosed = Number(item.enrollment) === 3;
-  if (enrollmentClosed || !Number.isFinite(availablePlaces) || availablePlaces <= 0) {
+  if (availablePlacesRaw == null || availablePlacesRaw === "" || !Number.isFinite(availablePlaces)) {
+    page.elements.push({ type: "text", text: "Места уточняются", x: x + 30, y: y + 13, size: 8.5, color: COLORS.muted, font: "semibold" });
+    return;
+  }
+  if (enrollmentClosed || availablePlaces <= 0) {
     page.elements.push({ type: "text", text: "Свободных мест нет", x: x + 30, y: y + 13, size: 8.5, color: COLORS.red, font: "semibold" });
     return;
   }
@@ -455,17 +459,6 @@ function formatHeroPlace(place) {
   if (/^в\s+/i.test(value) || /^во\s+/i.test(value)) return value;
   if (/^мурманск$/i.test(value)) return "в Мурманске";
   return `в ${value}`;
-}
-
-function formatSpecialNeeds(answers) {
-  const values = Array.isArray(answers.specialNeedLabels)
-    ? answers.specialNeedLabels.filter((label) => label !== "Другое")
-    : [];
-  if (!values.length && answers.specialNeedsLabel && answers.specialNeedsLabel !== "Другое") {
-    values.push(answers.specialNeedsLabel);
-  }
-  if (answers.specialNeedsOther) values.push(answers.specialNeedsOther);
-  return values.length ? values.join(", ") : "не указаны";
 }
 
 function formatGoals(answers) {

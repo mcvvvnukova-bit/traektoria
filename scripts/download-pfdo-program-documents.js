@@ -17,7 +17,9 @@ const force = process.env.PFDO_DOCUMENT_DOWNLOAD_FORCE === "1";
 
 async function main() {
   await fs.mkdir(outputDir, { recursive: true });
-  await ensureDocumentColumns();
+  if (process.env.PFDO_DOCUMENT_ENSURE_COLUMNS !== "false") {
+    await ensureDocumentColumns();
+  }
 
   const programs = await loadPrograms();
   const withUrl = programs.filter((program) => program.documentUrl);

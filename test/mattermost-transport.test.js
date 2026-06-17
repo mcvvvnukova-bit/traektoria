@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  buildMattermostPost,
   formatMattermostMessage,
   isMattermostMention,
   parseMattermostPostedEvent,
@@ -82,7 +83,7 @@ test("detects and strips username and id mentions", () => {
   assert.equal(stripMattermostMention("<@bot1> подбери", "botnumber2", "bot1"), "подбери");
 });
 
-test("formats inline buttons as numbered Mattermost choices", () => {
+test("formats inline keyboards as numbered Mattermost choices", () => {
   const text = formatMattermostMessage("Выберите вариант", {
     inline_keyboard: [
       [{ text: "✓ Первый", callback_data: "one" }],
@@ -90,5 +91,49 @@ test("formats inline buttons as numbered Mattermost choices", () => {
     ],
   });
 
-  assert.equal(text, "Выберите вариант\n\n1. Первый\n2. Второй");
+  assert.equal(
+    text,
+    "Выберите вариант\n\n1. Первый\n2. Второй\n\nОтветьте номером варианта или напишите ответ текстом, если нужен свой вариант.",
+  );
+});
+
+test("formats Mattermost multi-select choices with comma-number guidance", () => {
+  const text = formatMattermostMessage("Выберите варианты", {
+    inline_keyboard: [
+      [{ text: "Первый", callback_data: "s2:goal:first" }],
+      [{ text: "Второй", callback_data: "s2:goal:second" }],
+      [{ text: "Продолжить", callback_data: "s2:goal_continue" }],
+    ],
+  });
+
+  assert.equal(
+    text,
+    "Выберите варианты\n\n1. Первый\n2. Второй\n3. Продолжить\n\nОтветьте одним или несколькими номерами через запятую. Чтобы перейти дальше, укажите номер «Продолжить».",
+  );
+});
+
+test("keeps Mattermost choices text-only without attachments", () => {
+  const post = buildMattermostPost({
+    target: {
+      platform: "mattermost",
+      id: "dm:user1",
+      userId: "user1",
+      channelId: "channel1",
+      channelType: "D",
+    },
+    text: "Выберите вариант",
+    replyMarkup: {
+      inline_keyboard: [
+        [{ text: "Первый", callback_data: "one" }],
+      ],
+    },
+    actionUrl: "ignored",
+    actionSecret: "secret",
+  });
+
+  assert.equal(
+    post.message,
+    "Выберите вариант\n\n1. Первый\n\nОтветьте номером варианта или напишите ответ текстом, если нужен свой вариант.",
+  );
+  assert.equal(post.props, undefined);
 });

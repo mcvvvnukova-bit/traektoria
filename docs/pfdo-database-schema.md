@@ -10,6 +10,8 @@
 | `pfdo_operator_info` | 1 | Сырые сведения о региональном операторе. |
 | `pfdo_main_municipalities` | 17 | Муниципалитеты оператора, их описание и полезные контакты. |
 | `pfdo_programs` | 5614 | Основные карточки образовательных программ. |
+| `pfdo_sync_runs` | 0 | Аудит запусков синхронизации PFDO-зеркала. |
+| `pfdo_program_sync_state` | 0 | Состояние синхронизации, документов и тем по программам. |
 | `pfdo_program_directions` | 6 | Справочник направленностей программ. |
 | `pfdo_program_kinds` | 3 | Справочник видов образовательных программ. |
 | `pfdo_program_education_forms` | 3 | Справочник форм обучения. |
@@ -131,6 +133,47 @@
 | `program_document_downloaded_at` | `TIMESTAMPTZ` | Да | Время успешного скачивания документа. |
 | `program_document_download_error` | `TEXT` | Да | Ошибка скачивания документа. |
 | `organization_id` | `BIGINT` | Да | Организация из детальной карточки, FK на `pfdo_organizations(id)`. |
+
+### `pfdo_sync_runs`
+
+Аудит запусков синхронизации PFDO. Используется nightly orchestrator и on-demand импортом отдельных программ.
+
+Ключи: PK `id`.
+
+| Атрибут | Тип | NULL | Значение |
+|---|---|---:|---|
+| `id` | `BIGSERIAL` | Нет | Внутренний идентификатор запуска. |
+| `run_type` | `TEXT` | Нет | Тип запуска: например `full` или `on_demand_program`. |
+| `trigger_source` | `TEXT` | Нет | Источник запуска: `timer`, `manual`, `scenario3`. |
+| `status` | `TEXT` | Нет | Состояние запуска: `running`, `succeeded`, `failed`. |
+| `started_at` | `TIMESTAMPTZ` | Нет | Время старта. |
+| `finished_at` | `TIMESTAMPTZ` | Да | Время завершения. |
+| `counters` | `JSONB` | Нет | Счетчики и итоговая статистика запуска. |
+| `error_text` | `TEXT` | Да | Текст ошибки при неуспешном запуске. |
+
+### `pfdo_program_sync_state`
+
+Состояние синхронизации по каждой программе. Таблица отделяет факт наличия карточки в `pfdo_programs` от готовности документов, календарных тем и классификаций.
+
+Ключи: PK `program_id`. Логическая связь: `program_id -> pfdo_programs.id`, но запись может сохраняться и для программ, исчезнувших из текущего каталога.
+
+| Атрибут | Тип | NULL | Значение |
+|---|---|---:|---|
+| `program_id` | `BIGINT` | Нет | Идентификатор программы PFDO. |
+| `catalog_status` | `TEXT` | Нет | Статус в каталоге: `active` или `missing`. |
+| `first_seen_at` | `TIMESTAMPTZ` | Нет | Когда программа впервые попала в sync-state. |
+| `last_seen_at` | `TIMESTAMPTZ` | Да | Когда программа последний раз была видна в каталоге или импортирована on-demand. |
+| `last_catalog_missing_at` | `TIMESTAMPTZ` | Да | Когда программа последний раз отсутствовала в полном каталожном sync. |
+| `last_detail_imported_at` | `TIMESTAMPTZ` | Да | Когда обновлялась детальная карточка. |
+| `last_document_processed_at` | `TIMESTAMPTZ` | Да | Когда был обработан документ программы. |
+| `last_topics_processed_at` | `TIMESTAMPTZ` | Да | Когда были обработаны темы программы. |
+| `search_payload_hash` | `TEXT` | Да | Хэш поисковой карточки для определения изменений. |
+| `detail_payload_hash` | `TEXT` | Да | Хэш детальной карточки для определения изменений. |
+| `document_status` | `TEXT` | Нет | Статус документа: `pending`, `ready`, `missing`, `error`. |
+| `topics_status` | `TEXT` | Нет | Статус тем: `pending`, `ready`, `missing`, `error`. |
+| `last_sync_run_id` | `BIGINT` | Да | Последний запуск синхронизации, который менял состояние. |
+| `last_error` | `TEXT` | Да | Последняя ошибка обработки программы. |
+| `updated_at` | `TIMESTAMPTZ` | Нет | Время последнего изменения sync-state. |
 
 ### `pfdo_program_directions`
 
@@ -612,4 +655,3 @@
 | `endpoint` | `TEXT` | Нет | Endpoint PFDO API. |
 | `payload` | `JSONB` | Нет | Сырой ответ API. |
 | `imported_at` | `TIMESTAMPTZ` | Нет | Время сохранения ответа. |
-

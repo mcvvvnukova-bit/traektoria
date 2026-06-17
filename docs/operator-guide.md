@@ -177,7 +177,23 @@ curl -sS http://127.0.0.1:3000/health
 
 Перед обновлением убедитесь, что известен источник данных и есть место на диске для документов программ.
 
-Базовый порядок:
+Основной способ:
+
+```bash
+npm run pfdo:sync
+```
+
+Команда запускает полный управляемый цикл:
+
+1. импорт каталога и карточек PFDO;
+2. фиксацию состояния синхронизации в `pfdo_sync_runs` и `pfdo_program_sync_state`;
+3. скачивание документов программ;
+4. извлечение календарных тем;
+5. нормализацию, агрегацию и классификацию тем.
+
+На проде этот же сценарий запускается nightly timer `traektoria51-pfdo-sync.timer`.
+
+Составные команды для ручной диагностики:
 
 ```bash
 node scripts/import-pfdo-mirror.js
@@ -192,6 +208,8 @@ node scripts/build-pfdo-topic-analytics.js
 psql -d pfdo_51_mirror -c "select count(*) from pfdo_programs;"
 psql -d pfdo_51_mirror -c "select count(*) from pfdo_program_calendar_topics;"
 psql -d pfdo_51_mirror -c "select count(*) from pfdo_program_topic_aggregates;"
+psql -d pfdo_51_mirror -c "select id, run_type, status, started_at, finished_at from pfdo_sync_runs order by id desc limit 5;"
+psql -d pfdo_51_mirror -c "select document_status, topics_status, count(*) from pfdo_program_sync_state group by 1, 2 order by 1, 2;"
 ```
 
 Если обновлялись темы программ, проверьте качество классификатора:

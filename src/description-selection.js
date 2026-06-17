@@ -106,8 +106,6 @@ function createDescriptionSelectionState() {
       adaptation: null,
       clarifyGroup: null,
       clarifyFocus: null,
-      specialNeedsLabel: "",
-      specialNeedsOther: "",
     },
     ambiguities: [],
     llm: {
@@ -308,12 +306,6 @@ function parseDescriptionText(text) {
     fields.avoidanceLabels = avoidances.labels;
   }
 
-  const specialNeeds = detectSpecialNeeds(text);
-  if (specialNeeds) {
-    fields.specialNeedsLabel = specialNeeds.label;
-    fields.specialNeedsOther = specialNeeds.other || "";
-  }
-
   if (hasMultipleDirections(text)) ambiguities.push("multiple_directions");
   if (hasInterestConflict(fields, normalized)) ambiguities.push("interest_conflict");
 
@@ -436,9 +428,6 @@ function buildPdfAnswers(state) {
     formatLabel: fields.formatLabel || "Любой формат",
     place: fields.place || "",
     cost: fields.budget || "",
-    specialNeeds: fields.specialNeedsLabel ? "specified" : "none",
-    specialNeedsLabel: fields.specialNeedsLabel || "Особенностей нет",
-    specialNeedsOther: fields.specialNeedsOther || "",
     wantsRefinement: false,
     groupSizeLabel: "",
     avoidanceLabels: fields.avoidanceLabels || [],
@@ -678,15 +667,6 @@ function addAvoidance(values, labels, condition, value, label) {
   if (!condition) return;
   values.push(value);
   labels.push(label);
-}
-
-function detectSpecialNeeds(text) {
-  if (/сдвг/i.test(text)) return { label: "СДВГ" };
-  if (/\bрас\b/i.test(text)) return { label: "РАС" };
-  if (/овз/i.test(text)) return { label: "ОВЗ" };
-  if (/зрен/i.test(text)) return { label: "Проблемы со зрением" };
-  if (/слух/i.test(text)) return { label: "Проблемы со слухом" };
-  return null;
 }
 
 function hasMultipleDirections(text) {

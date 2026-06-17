@@ -58,12 +58,21 @@ node scripts/import-pfdo-mirror.js
 - `PFDO_IMPORT_CONCURRENCY`;
 - `PFDO_IMPORT_SQL_FLUSH_BYTES`.
 
+Рекомендуемый запуск полного цикла:
+
+```bash
+npm run pfdo:sync
+```
+
+Этот orchestrator запускает импорт PFDO, обновляет `pfdo_sync_runs` и `pfdo_program_sync_state`, скачивает документы, извлекает календарные темы и обновляет аналитику тем.
+
 Проверка после импорта:
 
 ```bash
 psql -d pfdo_51_mirror -c "select count(*) from pfdo_programs;"
 psql -d pfdo_51_mirror -c "select count(*) from pfdo_program_groups;"
 psql -d pfdo_51_mirror -c "select count(*) from pfdo_group_schedule_entries;"
+psql -d pfdo_51_mirror -c "select id, run_type, status, started_at, finished_at from pfdo_sync_runs order by id desc limit 5;"
 ```
 
 ## Шаг 2. Скачивание документов программ

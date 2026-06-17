@@ -7,6 +7,7 @@ const { extractDocumentText } = require("../services/program-topic-extractor/src
 const {
   extractCalendarTopicsFromText,
 } = require("../services/program-topic-extractor/src/parsers/calendar-topics");
+const { runTopicAnalytics } = require("./build-pfdo-topic-analytics");
 
 loadEnvFile();
 
@@ -18,7 +19,9 @@ const defaultConcurrency = Math.max(1, Number(process.env.PFDO_CALENDAR_TOPIC_CO
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
-  await executeSqlFile(schemaPath, DATABASE_URL);
+  if (process.env.PFDO_TOPIC_IMPORT_APPLY_SCHEMA !== "false") {
+    await executeSqlFile(schemaPath, DATABASE_URL);
+  }
 
   const programs = await loadPrograms(options);
   if (!options.keepExisting) {
@@ -35,6 +38,7 @@ async function main() {
   };
   const pendingRows = [];
   const failures = [];
+  const successfulProgramIds = new Set();
 
   for (let start = 0; start < programs.length; start += options.concurrency) {
     const batch = programs.slice(start, start + options.concurrency);
@@ -48,6 +52,8 @@ async function main() {
         failures.push(result.error);
         continue;
       }
+
+      successfulProgramIds.add(result.program.id);
 
       if (result.rows.length) {
         counters.withTopics += 1;
@@ -97,10 +103,13 @@ async function main() {
     await insertRows(pendingRows);
   }
 
+  const analytics = await runAnalyticsAfterImport(options, successfulProgramIds);
+
   console.log(
     JSON.stringify(
       {
         ...counters,
+        analytics,
         failures: failures.slice(0, 20),
       },
       null,
@@ -151,6 +160,7 @@ function parseArgs(argv) {
     programId: null,
     programIdsPath: null,
     keepExisting: false,
+    skipAnalytics: false,
     concurrency: defaultConcurrency,
   };
 
@@ -181,6 +191,11 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (value === "--skip-analytics") {
+      options.skipAnalytics = true;
+      continue;
+    }
+
     if (value === "--concurrency") {
       options.concurrency = Math.max(1, Number(next));
       index += 1;
@@ -206,8 +221,37 @@ Options:
   --program-id 364163  Process one program.
   --program-ids file   Process programs from CSV with a program_id column.
   --keep-existing      Do not delete previous rows before inserting new rows.
+  --skip-analytics     Do not rebuild normalized topics and classifications after import.
   --concurrency 4      Number of documents extracted in parallel.
 `);
+}
+
+async function runAnalyticsAfterImport(options, successfulProgramIds) {
+  const analyticsOptions = await createAnalyticsOptionsAfterImport(options, successfulProgramIds);
+  if (!analyticsOptions) return { skipped: true };
+  if (analyticsOptions.programIds && !analyticsOptions.programIds.length) {
+    return { skipped: true, reason: "no_changed_programs" };
+  }
+  return runTopicAnalytics(analyticsOptions);
+}
+
+async function createAnalyticsOptionsAfterImport(options, successfulProgramIds) {
+  if (options.skipAnalytics) return null;
+
+  const scoped = Boolean(options.programId || options.programIdsPath);
+  if (!scoped) {
+    return {};
+  }
+
+  if (options.keepExisting) {
+    return { programIds: [...successfulProgramIds] };
+  }
+
+  if (options.programId) {
+    return { programIds: [options.programId] };
+  }
+
+  return { programIds: await loadProgramIds(options) };
 }
 
 async function loadPrograms(options) {
@@ -218,8 +262,8 @@ async function loadPrograms(options) {
   const programIds = await loadProgramIds(options);
   if (options.programId) {
     where.push(`id = ${Number(options.programId)}`);
-  }
-  if (programIds.length) {
+  } else if (options.programIdsPath) {
+    if (!programIds.length) return [];
     where.push(`id IN (${programIds.map(Number).join(", ")})`);
   }
 
@@ -259,7 +303,8 @@ async function clearTargetRows(options) {
   }
 
   const programIds = await loadProgramIds(options);
-  if (programIds.length) {
+  if (options.programIdsPath) {
+    if (!programIds.length) return;
     await executeSql(
       `DELETE FROM pfdo_program_calendar_topics WHERE program_id IN (${programIds.map(Number).join(", ")});`,
       DATABASE_URL,
@@ -362,7 +407,14 @@ function decodeBase64(value) {
   return value ? Buffer.from(value, "base64").toString("utf-8") : "";
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  parseArgs,
+  createAnalyticsOptionsAfterImport,
+};

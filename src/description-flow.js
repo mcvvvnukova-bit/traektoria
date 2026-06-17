@@ -2,6 +2,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { SCENARIO_1 } = require("./flow");
+const { targetMetadata } = require("./target");
 const {
   createDescriptionSelectionState,
   ensureDescriptionSelectionState,
@@ -22,6 +23,14 @@ const {
 
 function isDescriptionStep(step) {
   return String(step || "").startsWith("s1_");
+}
+
+function isDescriptionTextStep(step) {
+  return [
+    "s1_wait_description",
+    "s1_wait_required_clarification",
+    "s1_wait_edit",
+  ].includes(String(step || ""));
 }
 
 function isDescriptionCallback(data) {
@@ -154,7 +163,7 @@ async function showDescriptionResults(context) {
     ...result,
     scenario: "description_selection",
     answers: buildHistoryPayload(state),
-  });
+  }, targetMetadata(target));
 
   const text = buildDescriptionResultMessage(state, result);
   for (const chunk of splitMessage(text)) {
@@ -227,6 +236,7 @@ function splitMessage(text, limit = 3500) {
 
 module.exports = {
   isDescriptionStep,
+  isDescriptionTextStep,
   isDescriptionCallback,
   startDescriptionFlow,
   handleDescriptionText,

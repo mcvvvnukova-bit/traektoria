@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const {
   makeTarget,
   normalizeTarget,
+  targetMetadata,
   targetFilePart,
   targetKey,
 } = require("../src/target");
@@ -40,6 +41,42 @@ test("normalizes object targets without dropping transport metadata", () => {
     id: "dm:user1",
     channelId: "dm-channel",
   });
+});
+
+test("extracts nullable user metadata without unrelated fields", () => {
+  assert.deepEqual(
+    targetMetadata({
+      platform: "telegram",
+      id: 248699702,
+      userId: 248699702,
+      username: null,
+      first_name: "Private",
+    }),
+    {
+      userId: "248699702",
+      username: null,
+    },
+  );
+});
+
+test("extracts Mattermost user and channel metadata", () => {
+  assert.deepEqual(
+    targetMetadata({
+      platform: "mattermost",
+      id: "channel:channel1:user:user1",
+      userId: "user1",
+      username: "alice",
+      channelId: "channel1",
+      channelType: "O",
+      postId: "post1",
+    }),
+    {
+      userId: "user1",
+      username: "alice",
+      channelId: "channel1",
+      channelType: "O",
+    },
+  );
 });
 
 test("builds safe file path fragments from string ids", () => {

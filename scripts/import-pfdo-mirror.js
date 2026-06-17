@@ -4,9 +4,6 @@ const { loadEnvFile } = require("../src/load-env");
 const { getProgramUrl, getOperatorId } = require("../src/pfdo-config");
 
 loadEnvFile();
-if (process.env.PFDO_MIRROR_DATABASE_URL) {
-  process.env.DATABASE_URL = process.env.PFDO_MIRROR_DATABASE_URL;
-}
 
 const { executeSql, executeSqlFile, jsonToSql, textToSql } = require("../src/db");
 const { fetchJson } = require("../src/pfdo");
@@ -22,8 +19,11 @@ const detailConcurrency = Math.max(1, Number(process.env.PFDO_IMPORT_CONCURRENCY
 const sqlFlushBytes = Math.max(256 * 1024, Number(process.env.PFDO_IMPORT_SQL_FLUSH_BYTES || 4 * 1024 * 1024));
 
 async function main() {
+  configureMirrorDatabaseUrl();
   await fs.mkdir(path.dirname(importSqlPath), { recursive: true });
-  await executeSqlFile(schemaPath);
+  if (process.env.PFDO_IMPORT_APPLY_SCHEMA !== "false") {
+    await executeSqlFile(schemaPath);
+  }
 
   const writer = new SqlBatchWriter(importSqlPath, sqlFlushBytes);
   await writer.init();
@@ -194,6 +194,12 @@ async function main() {
       2,
     ),
   );
+}
+
+function configureMirrorDatabaseUrl() {
+  if (process.env.PFDO_MIRROR_DATABASE_URL) {
+    process.env.DATABASE_URL = process.env.PFDO_MIRROR_DATABASE_URL;
+  }
 }
 
 async function fetchProgramsForMunicipality(municipalityId, writer, counters) {
@@ -414,6 +420,7 @@ function renderProgram(operatorIdValue, searchItem, detail) {
   const program = detail.program || {};
   const direction = detail.direction || searchItem.direction || null;
   const programId = requiredNumber(searchItem.id, "program.id");
+  const municipalityId = searchItem.municipality_id ?? program.mun;
 
   return `
 INSERT INTO pfdo_programs (
@@ -426,7 +433,7 @@ INSERT INTO pfdo_programs (
 VALUES (
   ${programId},
   ${requiredNumber(operatorIdValue, "operator_id")},
-  ${nullableNumber(searchItem.municipality_id)},
+  ${nullableNumber(municipalityId)},
   ${textToSql(searchItem.name)},
   ${nullableText(program.full_name)},
   ${nullableText(program.short_name)},
@@ -885,7 +892,28 @@ function byteLength(value) {
   return Buffer.byteLength(value, "utf-8") + 1;
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  SqlBatchWriter,
+  buildImportPreamble,
+  detailExpand,
+  fetchProgramsForMunicipality,
+  renderAddress,
+  renderDirection,
+  renderGroups,
+  renderOrganization,
+  renderPedagogue,
+  renderProgram,
+  renderProgramKeywords,
+  renderProgramLinks,
+  renderProgramModules,
+  renderRawDocument,
+  renderRegistryEntries,
+  stripRemovedProgramAttributes,
+};

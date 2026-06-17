@@ -6,13 +6,20 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 
-const { FLOW, SCENARIO_1, SCENARIO_2, SCENARIO_3 } = require("./flow");
+const { FLOW, SCENARIO_1, SCENARIO_2, SCENARIO_3, SCENARIO_4 } = require("./flow");
 const { getRecommendations } = require("./recommendations");
 const { createSelectionPdf } = require("./pdf-selection");
 const { analyzeFreeText } = require("./llm-router");
-const { createDescriptionSelectionState, ensureDescriptionSelectionState } = require("./description-selection");
+const {
+  createDescriptionSelectionState,
+  ensureDescriptionSelectionState,
+  applyDescriptionText,
+  applyLlmAnalysis,
+  recordLlmError,
+} = require("./description-selection");
 const {
   isDescriptionStep,
+  isDescriptionTextStep,
   isDescriptionCallback,
   startDescriptionFlow,
   handleDescriptionText,
@@ -20,10 +27,17 @@ const {
 } = require("./description-flow");
 const {
   createScenario3State,
-  analyzeCompletedProgramsFromText,
+  analyzeCompletedProgramsFromIds,
+  mergeScenario3Links,
   getDeepTrajectoryRecommendations,
+  buildCompletedProgramsReviewMessage,
+  buildCompletedProgramsTopicsMessage,
   buildDeepTrajectoryResultMessage,
+  buildScenario3PdfAnswers,
+  buildScenario3PdfResult,
   buildMunicipalityKeyboard,
+  findMunicipalityByName,
+  hasMeaningfulCompletedTopics,
 } = require("./deep-trajectory");
 const {
   loadSession,
@@ -34,8 +48,15 @@ const {
   logRecommendation,
 } = require("./session-store");
 const { initializeDatabase } = require("./database-init");
-const { makeTarget, normalizeTarget, targetKey, targetFilePart } = require("./target");
+const { makeTarget, normalizeTarget, targetKey, targetFilePart, targetMetadata } = require("./target");
 const { createMattermostTransport, replyMarkupOptions } = require("./mattermost-transport");
+const { TELEGRAM_BOT_COMMANDS, MAX_BOT_COMMANDS, parseBotCommand, buildHelpText } = require("./telegram-menu");
+const {
+  getMaxCallbackId,
+  getMaxCallbackMessageId,
+  getMaxCallbackPayload,
+  getMaxChatId,
+} = require("./max-update");
 
 const TELEGRAM_ENABLED = process.env.TELEGRAM_ENABLED !== "false";
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -139,10 +160,6 @@ function createScenario2State() {
     goalLabels: [],
     goal: null,
     goalLabel: "",
-    specialNeeds: [],
-    specialNeedLabels: [],
-    specialNeedsLabel: "",
-    specialNeedsOther: "",
     schedule: [],
     format: null,
     formatLabel: "",
@@ -160,16 +177,38 @@ function createScenario2State() {
   };
 }
 
+function normalizeScenario2State(state) {
+  const scenario2 = state || createScenario2State();
+  for (const key of ["special" + "Needs", "special" + "NeedLabels", "special" + "NeedsLabel", "special" + "NeedsOther"]) {
+    delete scenario2[key];
+  }
+  return scenario2;
+}
+
+function isObsoleteScenario2Step(step) {
+  return step === "s2_" + "special" || step === "s2_" + "special_other";
+}
+
 async function getSession(target) {
   const normalized = normalizeTarget(target);
   const key = targetKey(normalized);
-  if (sessions.has(key)) return sessions.get(key);
+  if (sessions.has(key)) {
+    const session = sessions.get(key);
+    session.scenario2 = normalizeScenario2State(session.scenario2);
+    if (isObsoleteScenario2Step(session.step)) {
+      session.step = "s2_schedule";
+    }
+    return session;
+  }
 
   const stored = await loadSession(normalized.platform, normalized.id);
   const session = stored || createSession();
   ensureDescriptionSelectionState(session);
-  if (!session.scenario2) session.scenario2 = createScenario2State();
+  session.scenario2 = normalizeScenario2State(session.scenario2);
   if (!session.scenario3) session.scenario3 = createScenario3State();
+  if (isObsoleteScenario2Step(session.step)) {
+    session.step = "s2_schedule";
+  }
   sessions.set(key, session);
   return session;
 }
@@ -177,7 +216,7 @@ async function getSession(target) {
 async function persistSession(target, session) {
   const normalized = normalizeTarget(target);
   sessions.set(targetKey(normalized), session);
-  await saveSession(normalized.platform, normalized.id, session);
+  await saveSession(normalized.platform, normalized.id, session, targetMetadata(normalized));
 }
 
 async function resetSession(target) {
@@ -185,7 +224,7 @@ async function resetSession(target) {
   const session = createSession();
   sessions.set(targetKey(normalized), session);
   await deleteSession(normalized.platform, normalized.id);
-  await saveSession(normalized.platform, normalized.id, session);
+  await saveSession(normalized.platform, normalized.id, session, targetMetadata(normalized));
   return session;
 }
 
@@ -229,7 +268,7 @@ async function maxApi(pathname, options = {}) {
   return data;
 }
 
-async function sendMessage(target, text, replyMarkup) {
+async function sendMessage(target, text, replyMarkup, options = {}) {
   const normalized = normalizeTarget(target);
   if (normalized.platform === "web") {
     return enqueueWebMessage(normalized, toWebMessage(text, replyMarkup));
@@ -248,6 +287,9 @@ async function sendMessage(target, text, replyMarkup) {
     text,
     disable_web_page_preview: true,
   };
+  if (options.parseMode) {
+    payload.parse_mode = options.parseMode;
+  }
   if (replyMarkup) {
     payload.reply_markup = replyMarkup;
   }
@@ -286,7 +328,7 @@ async function sendDocument(target, filePath, caption) {
   return data.result;
 }
 
-async function editMessage(target, messageId, text, replyMarkup) {
+async function editMessage(target, messageId, text, replyMarkup, options = {}) {
   const normalized = normalizeTarget(target);
   if (normalized.platform === "web") {
     return sendMessage(normalized, text, replyMarkup);
@@ -306,6 +348,9 @@ async function editMessage(target, messageId, text, replyMarkup) {
     text,
     disable_web_page_preview: true,
   };
+  if (options.parseMode) {
+    payload.parse_mode = options.parseMode;
+  }
   if (replyMarkup) {
     payload.reply_markup = replyMarkup;
   }
@@ -506,16 +551,10 @@ async function showEntry(chatId) {
   const session = await resetSession(chatId);
   session.step = "entry";
   await persistSession(chatId, session);
+  const textFormat = scenarioTextFormat(chatId);
+  const messageOptions = formattedTextMessageOptions(textFormat);
   await sendMessage(chatId, FLOW.entry.greetingText);
-  await sendMessage(chatId, FLOW.entry.text, FLOW.entry.keyboard);
-}
-
-async function selectScenario(chatId, scenario) {
-  const session = await getSession(chatId);
-  session.step = "scenarioSelected";
-  session.scenario = scenario;
-  await persistSession(chatId, session);
-  return sendMessage(chatId, `Вы выбрали сценарий: ${scenario.label}.`);
+  await sendMessage(chatId, entryTextForTarget(chatId), FLOW.entry.keyboard, messageOptions);
 }
 
 async function startScenario2(chatId) {
@@ -531,73 +570,261 @@ async function startScenario2(chatId) {
   return sendMessage(chatId, SCENARIO_2.age.text);
 }
 
-async function startScenario3(chatId) {
+function scenario3Flow(state) {
+  return state?.recommendationMode === "wide" ? SCENARIO_4 : SCENARIO_3;
+}
+
+function scenario3Label(mode) {
+  return mode === "wide" ? "Траектория новых интересов" : "Составить углубленную траекторию";
+}
+
+function scenario3Id(mode) {
+  return mode === "wide" ? "trajectory_new_interests" : "trajectory_deep";
+}
+
+function scenario3LogScenario(state) {
+  return state?.recommendationMode === "wide" ? "new_interests" : "deep_continuation";
+}
+
+function scenario3SearchMessage(state) {
+  return state?.recommendationMode === "wide"
+    ? "Ищу программы с новыми темами, которые не повторяют уже изученное..."
+    : "Ищу программы, которые могут быть углубленным продолжением...";
+}
+
+function scenario3PdfCaption(state) {
+  return state?.recommendationMode === "wide" ? "Подборка новых направлений" : "Подборка углубленных программ";
+}
+
+async function startScenario3(chatId, options = {}) {
+  const mode = options.mode === "wide" ? "wide" : "deep";
   const session = await getSession(chatId);
-  session.step = "s3_wait_links";
+  session.step = "s3_collect_links";
   session.scenario = {
-    id: "trajectory_deep",
-    label: "Составить углубленную траекторию",
+    id: scenario3Id(mode),
+    label: scenario3Label(mode),
   };
   session.scenario3 = createScenario3State();
+  session.scenario3.recommendationMode = mode;
+  session.scenario3.criteria = createDescriptionSelectionState();
   await persistSession(chatId, session);
-  return sendMessage(chatId, SCENARIO_3.intro);
+  return sendMessage(chatId, scenario3Flow(session.scenario3).intro);
+}
+
+async function startScenario4(chatId) {
+  return startScenario3(chatId, { mode: "wide" });
+}
+
+async function startScenarioFromCommand(chatId, command) {
+  if (command === "start") {
+    return showEntry(chatId);
+  }
+
+  if (command === "help") {
+    const session = await resetSession(chatId);
+    session.step = "entry";
+    await persistSession(chatId, session);
+    const textFormat = scenarioTextFormat(chatId);
+    const messageOptions = formattedTextMessageOptions(textFormat);
+    await sendMessage(chatId, buildHelpText({ format: textFormat }), undefined, messageOptions);
+    return sendMessage(chatId, entryTextForTarget(chatId), FLOW.entry.keyboard, messageOptions);
+  }
+
+  const session = await resetSession(chatId);
+  if (command === "text") {
+    return startDescriptionFlow({
+      target: chatId,
+      session,
+      persistSession,
+      sendMessage,
+    });
+  }
+
+  if (command === "quiz") {
+    return startScenario2(chatId);
+  }
+
+  if (command === "deep") {
+    return startScenario3(chatId);
+  }
+
+  if (command === "wide") {
+    return startScenario4(chatId);
+  }
+
+  return null;
 }
 
 async function handleScenario3Links(chatId, text, session) {
+  const flow = scenario3Flow(session.scenario3);
+  const merge = mergeScenario3Links(session.scenario3, text);
+  if (!merge.added.length && !session.scenario3.submittedProgramIds.length) {
+    await persistSession(chatId, session);
+    return sendMessage(chatId, flow.noLinks);
+  }
+
+  await persistSession(chatId, session);
+  if (merge.maxReached) {
+    return finalizeScenario3Links(chatId, session);
+  }
+
+  const lines = [];
+  if (merge.added.length) {
+    lines.push(`Добавил ссылок: ${merge.added.length}. Всего собрано: ${merge.total} из 5.`);
+  } else {
+    lines.push(`Новых ссылок не нашел. Сейчас собрано: ${merge.total} из 5.`);
+  }
+  if (merge.duplicates.length) lines.push("Повторяющиеся ссылки я не добавлял.");
+  if (merge.ignoredBecauseLimit) lines.push("Лишние ссылки сверх 5 не добавляю.");
+  if (merge.parsed.invalidLinks.length) lines.push("Сейчас поддерживаются только ссылки на программы 51.pfdo.ru.");
+  lines.push("", "Можете прислать еще ссылки или продолжить.");
+  return sendMessage(chatId, lines.join("\n"), flow.linkCollection.keyboard);
+}
+
+async function finalizeScenario3Links(chatId, session) {
+  const flow = scenario3Flow(session.scenario3);
+  if (!session.scenario3.submittedProgramIds?.length) {
+    return sendMessage(chatId, flow.noLinks);
+  }
+
   let analysis;
   try {
-    analysis = await analyzeCompletedProgramsFromText(text);
+    analysis = await analyzeCompletedProgramsFromIds(session.scenario3.submittedProgramIds, {
+      links: session.scenario3.links,
+      invalidLinks: session.scenario3.invalidLinks,
+      programLinks: session.scenario3.programLinks,
+    });
   } catch (error) {
     console.error("Scenario 3 link analysis failed:", error);
     return sendMessage(chatId, "Не удалось проверить ссылки в базе PFDO. Попробуйте отправить ссылки еще раз.");
   }
 
   if (!analysis.programIds.length) {
-    return sendMessage(chatId, SCENARIO_3.noLinks);
+    return sendMessage(chatId, flow.noLinks);
   }
 
   if (!analysis.programs.length) {
     return sendMessage(chatId, "Не нашел эти программы в локальном каталоге PFDO. Проверьте ссылки и отправьте их еще раз.");
   }
 
-  if (!analysis.municipalities.length) {
-    return sendMessage(chatId, "Нашел программы, но не смог определить населенный пункт. Попробуйте другие ссылки или начните заново через /start.");
-  }
-
   applyScenario3Analysis(session.scenario3, analysis);
-  if (analysis.municipalities.length > 1) {
-    session.step = "s3_choose_municipality";
-    await persistSession(chatId, session);
-    return sendMessage(
+  return showScenario3CompletedReview(chatId, session, analysis);
+}
+
+async function showScenario3CompletedReview(chatId, session, analysis = null) {
+  const flow = scenario3Flow(session.scenario3);
+  session.step = "s3_review_completed";
+  await persistSession(chatId, session);
+  const linkFormat = scenario3LinkFormat(chatId);
+  const messageOptions = scenario3MessageOptions(linkFormat);
+  const text = buildCompletedProgramsReviewMessage(session.scenario3, analysis, { linkFormat });
+  const chunks = splitMessage(text);
+  const hasMeaningfulTopics = hasMeaningfulCompletedTopics(session.scenario3, analysis);
+  for (let index = 0; index < chunks.length; index += 1) {
+    await sendMessage(
       chatId,
-      "Нашел программы из разных населенных пунктов. В каком населенном пункте искать продолжение?",
-      buildMunicipalityKeyboard(analysis.municipalities),
+      chunks[index],
+      index === chunks.length - 1 && hasMeaningfulTopics ? flow.completedTopics.keyboard : undefined,
+      messageOptions,
     );
   }
 
-  const municipality = analysis.municipalities[0];
-  if (municipality) {
-    session.scenario3.municipalityId = municipality.id;
-    session.scenario3.municipalityName = municipality.name;
-  }
-
-  return continueScenario3AfterContext(chatId, session);
+  return askScenario3Municipality(chatId, session);
 }
 
-async function continueScenario3AfterContext(chatId, session) {
-  if (!session.scenario3.ageYears) {
-    session.step = "s3_wait_age";
+async function continueScenario3AfterMunicipalitySelection(chatId, session) {
+  const flow = scenario3Flow(session.scenario3);
+  if (!hasMeaningfulCompletedTopics(session.scenario3)) {
+    if (!session.scenario3.criteria) {
+      session.scenario3.criteria = createDescriptionSelectionState();
+    }
+    session.step = "s3_wait_criteria_text";
     await persistSession(chatId, session);
-    return sendMessage(chatId, SCENARIO_3.age.text);
+    return sendMessage(chatId, flow.criteria.interestsFallbackText);
   }
 
+  session.step = "s3_criteria_choice";
+  await persistSession(chatId, session);
+  return sendMessage(chatId, flow.criteria.text, flow.criteria.keyboard);
+}
+
+async function handleScenario3CriteriaText(chatId, text, session) {
+  if (!session.scenario3.criteria) {
+    session.scenario3.criteria = createDescriptionSelectionState();
+  }
+  applyDescriptionText(session.scenario3.criteria, text, { mode: "edit" });
+  await enrichScenario3CriteriaWithLlm(session, text);
+  await persistSession(chatId, session);
   return showScenario3Results(chatId, session);
 }
 
+async function askScenario3CustomMunicipality(chatId, session) {
+  session.step = "s3_wait_municipality_text";
+  await persistSession(chatId, session);
+  return sendMessage(chatId, scenario3Flow(session.scenario3).municipality.customText);
+}
+
+async function askScenario3Municipality(chatId, session) {
+  const municipalityOptions = session.scenario3?.municipalityOptions || [];
+  if (!municipalityOptions.length) {
+    return askScenario3CustomMunicipality(chatId, session);
+  }
+
+  session.step = "s3_choose_municipality";
+  await persistSession(chatId, session);
+  return sendMessage(
+    chatId,
+    scenario3Flow(session.scenario3).municipality.text,
+    buildMunicipalityKeyboard(municipalityOptions),
+  );
+}
+
+async function handleScenario3MunicipalityText(chatId, text, session) {
+  const municipality = await findMunicipalityByName(text);
+  if (!municipality) {
+    return sendMessage(
+      chatId,
+      "Не нашел такой населенный пункт в каталоге PFDO. Напишите иначе или выберите один из найденных вариантов.",
+      buildMunicipalityKeyboard(session.scenario3?.municipalityOptions || []),
+    );
+  }
+
+  session.scenario3.municipalityId = municipality.id;
+  session.scenario3.municipalityName = municipality.name;
+  return continueScenario3AfterMunicipalitySelection(chatId, session);
+}
+
+async function enrichScenario3CriteriaWithLlm(session, text) {
+  if (!analyzeFreeText) return;
+  try {
+    const analysis = await analyzeFreeText({
+      scenario: "trajectory_deep",
+      mode: "edit",
+      current: session.scenario3.criteria,
+    }, text);
+    if (analysis) {
+      applyLlmAnalysis(session.scenario3.criteria, analysis, { mode: "edit" });
+    }
+  } catch (error) {
+    recordLlmError(session.scenario3.criteria, error);
+    console.warn("Scenario 3 criteria LLM analysis skipped:", error.message);
+  }
+}
+
 async function showScenario3Results(chatId, session) {
+  const criteriaFields = session.scenario3.criteria?.fields || {};
+  const criteriaAge = Number(criteriaFields.ageYears);
+  const hasCriteriaAge = Number.isFinite(criteriaAge) && criteriaAge >= 3 && criteriaAge <= 18;
+  const hasAgeRange = Boolean(session.scenario3.ageRangeYears);
+  if (!session.scenario3.ageYears && !hasAgeRange && !hasCriteriaAge && !criteriaFields.age) {
+    session.step = "s3_wait_age";
+    await persistSession(chatId, session);
+    return sendMessage(chatId, "Сколько лет ребенку?");
+  }
+
   session.step = "s3_results";
   await persistSession(chatId, session);
-  await sendMessage(chatId, "Ищу программы, которые могут быть углубленным продолжением...");
+  await sendMessage(chatId, scenario3SearchMessage(session.scenario3));
 
   let result;
   try {
@@ -612,15 +839,26 @@ async function showScenario3Results(chatId, session) {
   const target = normalizeTarget(chatId);
   await logRecommendation(target.platform, target.id, {
     ...result,
-    scenario: "deep_continuation",
+    scenario: scenario3LogScenario(session.scenario3),
     answers: session.scenario3,
-  });
+  }, targetMetadata(target));
 
-  const text = buildDeepTrajectoryResultMessage(null, session.scenario3, result);
+  const linkFormat = scenario3LinkFormat(chatId);
+  const messageOptions = scenario3MessageOptions(linkFormat);
+  const text = buildDeepTrajectoryResultMessage(null, session.scenario3, result, { linkFormat });
   for (const chunk of splitMessage(text)) {
-    await sendMessage(chatId, chunk);
+    await sendMessage(chatId, chunk, undefined, messageOptions);
   }
-  return sendMessage(chatId, "Чтобы построить новую траекторию, нажмите /start.");
+  if (!result.items.length) {
+    return sendMessage(chatId, "Готово. Новую подборку можно начать в любой момент через меню бота.");
+  }
+  session.step = "s3_pdf";
+  await persistSession(chatId, session);
+  return sendMessage(
+    chatId,
+    scenario3Flow(session.scenario3).pdfDownload.text,
+    scenario3Flow(session.scenario3).pdfDownload.keyboard,
+  );
 }
 
 async function askScenario2Interests(chatId, session) {
@@ -637,22 +875,6 @@ async function askScenario2Goal(chatId, session) {
     SCENARIO_2.goal.text,
     multiSelectKeyboard("goal", SCENARIO_2.goal.options, session.scenario2.goals || []),
   );
-}
-
-async function askScenario2SpecialNeeds(chatId, session) {
-  session.step = "s2_special";
-  await persistSession(chatId, session);
-  return sendMessage(
-    chatId,
-    SCENARIO_2.specialNeeds.text,
-    multiSelectKeyboard("special", SCENARIO_2.specialNeeds.options, selectedSpecialNeeds(session.scenario2)),
-  );
-}
-
-async function askScenario2SpecialNeedsOther(chatId, session) {
-  session.step = "s2_special_other";
-  await persistSession(chatId, session);
-  return sendMessage(chatId, SCENARIO_2.specialNeedsOther.text);
 }
 
 async function askScenario2Schedule(chatId, session) {
@@ -731,7 +953,7 @@ async function showScenario2Results(chatId, session) {
     ...result,
     scenario: "agent_selection",
     answers: session.scenario2,
-  });
+  }, targetMetadata(target));
 
   const text = buildScenario2ResultMessage(result);
   for (const chunk of splitMessage(text)) {
@@ -743,6 +965,10 @@ async function showScenario2Results(chatId, session) {
 async function handleText(message) {
   const chatId = incomingMessageTarget(message);
   const text = (message.text || "").trim();
+  const botCommand = chatId.platform === "mattermost" ? null : parseBotCommand(text);
+  if (botCommand) {
+    return startScenarioFromCommand(chatId, botCommand);
+  }
 
   if (text === "/start" || text === RESTART_BUTTON_TEXT) {
     return showEntry(chatId);
@@ -753,7 +979,7 @@ async function handleText(message) {
   if (!session.scenario2) session.scenario2 = createScenario2State();
   if (!session.scenario3) session.scenario3 = createScenario3State();
 
-  if (isDescriptionStep(session.step)) {
+  if (isDescriptionTextStep(session.step)) {
     return handleDescriptionText({
       target: chatId,
       text,
@@ -767,8 +993,27 @@ async function handleText(message) {
     });
   }
 
-  if (session.step === "s3_wait_links") {
+  if (isDescriptionStep(session.step)) {
+    if (chatId.platform === "mattermost") {
+      return sendMessage(chatId, "Отправьте номер одного из предложенных вариантов или напишите «начать», чтобы начать заново.");
+    }
+    return sendMessage(chatId, "Выберите один из предложенных вариантов или нажмите /start, чтобы начать заново.");
+  }
+
+  if (session.step === "s3_collect_links" || session.step === "s3_wait_links") {
     return handleScenario3Links(chatId, text, session);
+  }
+
+  if (session.step === "s3_wait_criteria_text") {
+    return handleScenario3CriteriaText(chatId, text, session);
+  }
+
+  if (session.step === "s3_choose_municipality") {
+    return handleScenario3MunicipalityText(chatId, text, session);
+  }
+
+  if (session.step === "s3_wait_municipality_text") {
+    return handleScenario3MunicipalityText(chatId, text, session);
   }
 
   if (session.step === "s3_wait_age") {
@@ -779,6 +1024,7 @@ async function handleText(message) {
     }
     session.scenario3.age = String(age);
     session.scenario3.ageYears = age;
+    session.scenario3.ageRangeYears = null;
     return showScenario3Results(chatId, session);
   }
 
@@ -796,11 +1042,6 @@ async function handleText(message) {
     session.scenario2.interestsText = text;
     session.scenario2.interests = detectInterests(text);
     return askScenario2Goal(chatId, session);
-  }
-
-  if (session.step === "s2_special_other") {
-    session.scenario2.specialNeedsOther = text;
-    return askScenario2Schedule(chatId, session);
   }
 
   if (session.step === "s2_place") {
@@ -823,6 +1064,9 @@ async function handleText(message) {
     return askScenario2Direction(chatId, session);
   }
 
+  if (chatId.platform === "mattermost") {
+    return sendMessage(chatId, "Напишите «начать», чтобы открыть список сценариев, затем отправьте номер пункта.");
+  }
   return sendMessage(chatId, "Нажмите /start и выберите один из сценариев кнопкой.");
 }
 
@@ -875,15 +1119,73 @@ async function handleCallback(callbackQuery) {
     return startScenario3(chatId);
   }
 
-  const scenarios = {
-    "scenario:new_interests": {
-      id: "trajectory_new_interests",
-      label: "Траектория новых интересов",
-    },
-  };
+  if (data === "scenario:new_interests") {
+    return startScenario4(chatId);
+  }
 
-  if (scenarios[data]) {
-    return selectScenario(chatId, scenarios[data]);
+  if (data === "s3:links:add") {
+    session.step = "s3_collect_links";
+    await persistSession(chatId, session);
+    return sendMessage(chatId, "Пришлите еще одну ссылку на программу 51.pfdo.ru.");
+  }
+
+  if (data === "s3:links:done") {
+    return finalizeScenario3Links(chatId, session);
+  }
+
+  if (data === "s3:criteria:edit") {
+    if (!session.scenario3.criteria) {
+      session.scenario3.criteria = createDescriptionSelectionState();
+    }
+    session.step = "s3_wait_criteria_text";
+    await persistSession(chatId, session);
+    return sendMessage(chatId, scenario3Flow(session.scenario3).criteria.editText);
+  }
+
+  if (data === "s3:criteria:skip") {
+    return showScenario3Results(chatId, session);
+  }
+
+  if (data === "s3:topics:all") {
+    const programs = session.scenario3.completedPrograms || [];
+    if (!programs.length) {
+      return sendMessage(chatId, "Не нашел сохраненный список пройденных программ. Начните заново через /start.");
+    }
+    if (!hasMeaningfulCompletedTopics(session.scenario3)) {
+      session.step = "s3_wait_criteria_text";
+      await persistSession(chatId, session);
+      return sendMessage(chatId, scenario3Flow(session.scenario3).criteria.interestsFallbackText);
+    }
+    const linkFormat = scenario3LinkFormat(chatId);
+    const messageOptions = scenario3MessageOptions(linkFormat);
+    const text = buildCompletedProgramsTopicsMessage(session.scenario3, null, { linkFormat });
+    for (const chunk of splitMessage(text)) {
+      await sendMessage(chatId, chunk, undefined, messageOptions);
+    }
+    if (!session.scenario3.municipalityId) {
+      return askScenario3Municipality(chatId, session);
+    }
+    return sendMessage(
+      chatId,
+      scenario3Flow(session.scenario3).completedTopics.followupText,
+      scenario3Flow(session.scenario3).criteria.keyboard,
+    );
+  }
+
+  if (data === "s3:pdf:yes") {
+    session.scenario3.pdfRequested = true;
+    await persistSession(chatId, session);
+    return sendScenario3Pdf(chatId, session);
+  }
+
+  if (data === "s3:pdf:no") {
+    session.scenario3.pdfRequested = false;
+    await persistSession(chatId, session);
+    return sendMessage(chatId, "Готово. Новую подборку можно начать в любой момент через меню бота.");
+  }
+
+  if (data === "s3:municipality:custom") {
+    return askScenario3CustomMunicipality(chatId, session);
   }
 
   if (data.startsWith("s3:municipality:")) {
@@ -894,7 +1196,7 @@ async function handleCallback(callbackQuery) {
     }
     session.scenario3.municipalityId = municipality.id;
     session.scenario3.municipalityName = municipality.name;
-    return continueScenario3AfterContext(chatId, session);
+    return continueScenario3AfterMunicipalitySelection(chatId, session);
   }
 
   if (data.startsWith("s2:goal:")) {
@@ -916,35 +1218,6 @@ async function handleCallback(callbackQuery) {
   if (data === "s2:goal_continue") {
     if (!Array.isArray(session.scenario2.goals) || !session.scenario2.goals.length) {
       return sendMessage(chatId, "Выберите хотя бы одну цель обучения.");
-    }
-    return askScenario2SpecialNeeds(chatId, session);
-  }
-
-  if (data.startsWith("s2:special:")) {
-    const value = data.split(":")[2];
-    session.scenario2.specialNeeds = selectedSpecialNeeds(session.scenario2);
-    toggleSelected(session.scenario2.specialNeeds, value, value === "none", ["none"]);
-    session.scenario2.specialNeedLabels = labelsForSelected(SCENARIO_2.specialNeeds.options, session.scenario2.specialNeeds);
-    session.scenario2.specialNeedsLabel = session.scenario2.specialNeedLabels[0] || "";
-    if (!session.scenario2.specialNeeds.includes("other")) {
-      session.scenario2.specialNeedsOther = "";
-    }
-    await persistSession(chatId, session);
-    return editMessage(
-      chatId,
-      messageId,
-      SCENARIO_2.specialNeeds.text,
-      multiSelectKeyboard("special", SCENARIO_2.specialNeeds.options, session.scenario2.specialNeeds),
-    );
-  }
-
-  if (data === "s2:special_continue") {
-    const selected = selectedSpecialNeeds(session.scenario2);
-    if (!selected.length) {
-      return sendMessage(chatId, "Выберите хотя бы один вариант особенностей.");
-    }
-    if (selected.includes("other") && !String(session.scenario2.specialNeedsOther || "").trim()) {
-      return askScenario2SpecialNeedsOther(chatId, session);
     }
     return askScenario2Schedule(chatId, session);
   }
@@ -1061,9 +1334,39 @@ async function sendScenario2Pdf(chatId, session) {
   }
 }
 
+async function sendScenario3Pdf(chatId, session) {
+  const result = session.scenario3.lastResult;
+  if (!result?.items?.length) {
+    return sendMessage(chatId, "Не нашел последнюю подборку. Начните новую траекторию через /start.");
+  }
+
+  try {
+    await sendMessage(chatId, "Готовлю PDF-файл с подборкой...");
+    const target = normalizeTarget(chatId);
+    const outputPath = path.join(
+      process.env.PDF_OUTPUT_DIR || path.join(os.tmpdir(), "telegram-bot-pdfs"),
+      `selection-${targetFilePart(target)}-${Date.now()}.pdf`,
+    );
+    await createSelectionPdf({
+      outputPath,
+      answers: buildScenario3PdfAnswers(session.scenario3),
+      result: buildScenario3PdfResult(result),
+    });
+    session.scenario3.pdfPath = outputPath;
+    await persistSession(chatId, session);
+    return sendDocument(chatId, outputPath, scenario3PdfCaption(session.scenario3));
+  } catch (error) {
+    console.error("Scenario 3 PDF delivery failed:", error);
+    return sendMessage(chatId, "Не удалось подготовить PDF-файл. Попробуйте нажать кнопку скачивания еще раз.");
+  }
+}
+
 function incomingMessageTarget(message) {
   const chat = message.chat || {};
-  return makeTarget(message.platform || "telegram", chat.id ?? message.chat_id, chat);
+  return makeTarget(message.platform || "telegram", chat.id ?? message.chat_id, {
+    ...chat,
+    ...incomingUserMetadata(message),
+  });
 }
 
 function incomingCallbackTarget(callbackQuery) {
@@ -1071,8 +1374,38 @@ function incomingCallbackTarget(callbackQuery) {
   return makeTarget(
     callbackQuery.platform || callbackQuery.message?.platform || "telegram",
     chat.id ?? callbackQuery.chat_id,
-    chat,
+    {
+      ...chat,
+      ...incomingUserMetadata(callbackQuery),
+    },
   );
+}
+
+function incomingUserMetadata(message) {
+  const user = firstObject(message.from, message.sender, message.user);
+  const userId = firstDefined(message.userId, message.user_id, user?.id, user?.user_id);
+  const metadata = {};
+
+  if (userId !== undefined) {
+    metadata.userId = userId;
+  }
+
+  const username = firstDefined(message.username, user?.username);
+  if (username !== undefined) {
+    metadata.username = username || null;
+  } else if (user && userId !== undefined) {
+    metadata.username = null;
+  }
+
+  return metadata;
+}
+
+function firstObject(...values) {
+  return values.find((value) => value && typeof value === "object") || null;
+}
+
+function firstDefined(...values) {
+  return values.find((value) => value !== undefined);
 }
 
 function inlineKeyboard(options, columns = 1) {
@@ -1123,16 +1456,14 @@ function labelsForSelected(options, selected) {
     .filter(Boolean);
 }
 
-function selectedSpecialNeeds(state) {
-  if (Array.isArray(state.specialNeeds)) return state.specialNeeds;
-  return state.specialNeeds ? [state.specialNeeds] : [];
-}
-
 function applyScenario3Analysis(state, analysis) {
   state.links = analysis.links;
+  state.programLinks = analysis.programLinks || state.programLinks || [];
+  state.submittedProgramIds = analysis.programIds || state.submittedProgramIds || [];
   state.invalidLinks = analysis.invalidLinks;
   state.completedProgramIds = analysis.programs.map((program) => Number(program.id));
   state.missingProgramIds = analysis.missingProgramIds;
+  state.pendingTopicProgramIds = analysis.pendingTopicProgramIds || [];
   state.completedPrograms = analysis.programs.map((program) => ({
     id: program.id,
     name: program.name,
@@ -1141,13 +1472,27 @@ function applyScenario3Analysis(state, analysis) {
     directionName: program.directionName,
     ageMinMonths: program.ageMinMonths,
     ageMaxMonths: program.ageMaxMonths,
+    ageLabel: program.ageLabel,
+    price: program.price,
+    schedule: program.schedule,
+    period: program.period,
+    availableGroups: program.availableGroups,
+    availablePlaces: program.availablePlaces,
+    enrollment: program.enrollment,
     sourceUrl: program.sourceUrl,
+    documentStatus: program.documentStatus,
+    topicsStatus: program.topicsStatus,
+    topics: program.topics || [],
   }));
   state.municipalityOptions = analysis.municipalities;
   state.completedTopicProfile = analysis.topicProfile;
+  state.ageRangeYears = analysis.inferredAgeRange || null;
   if (analysis.inferredAge) {
     state.ageYears = analysis.inferredAge;
     state.age = String(analysis.inferredAge);
+  } else {
+    state.ageYears = null;
+    state.age = null;
   }
   state.lastResult = null;
 }
@@ -1253,6 +1598,29 @@ function splitMessage(text, limit = 3500) {
   return chunks;
 }
 
+function scenario3LinkFormat(target) {
+  const platform = normalizeTarget(target).platform;
+  if (platform === "telegram") return "html";
+  if (platform === "max" || platform === "mattermost") return "markdown";
+  return "plain";
+}
+
+function scenario3MessageOptions(linkFormat) {
+  return linkFormat === "html" ? { parseMode: "HTML" } : {};
+}
+
+function scenarioTextFormat(target) {
+  return normalizeTarget(target).platform === "telegram" ? "html" : "plain";
+}
+
+function formattedTextMessageOptions(format) {
+  return format === "html" ? { parseMode: "HTML" } : {};
+}
+
+function entryTextForTarget(target) {
+  return scenarioTextFormat(target) === "html" ? FLOW.entry.htmlText : FLOW.entry.text;
+}
+
 function detectAgeBucket(text) {
   const match = String(text).match(/(\d{1,2})/);
   if (!match) return null;
@@ -1299,7 +1667,11 @@ async function processMaxUpdate(update) {
   if (updateType === "bot_started") {
     const chatId = getMaxChatId(update);
     if (chatId != null) {
-      await handleText({ platform: "max", chat: { id: chatId }, text: "/start" });
+      await handleText({
+        platform: "max",
+        chat: { id: chatId, ...getMaxUserMetadata(update) },
+        text: "/start",
+      });
     }
     return;
   }
@@ -1308,32 +1680,31 @@ async function processMaxUpdate(update) {
     const chatId = getMaxChatId(update);
     const text = getMaxMessageText(update);
     if (chatId != null && text) {
-      await handleText({ platform: "max", chat: { id: chatId }, text });
+      await handleText({
+        platform: "max",
+        chat: { id: chatId, ...getMaxUserMetadata(update) },
+        text,
+      });
     }
     return;
   }
 
   if (updateType === "message_callback") {
-    const callback = update.callback || update.message_callback || {};
     const chatId = getMaxChatId(update);
-    const data = callback.payload || callback.callback_data || callback.data || update.payload;
+    const data = getMaxCallbackPayload(update);
     if (chatId != null && data) {
       await handleCallback({
         platform: "max",
-        id: callback.callback_id || update.callback_id,
+        id: getMaxCallbackId(update),
         data,
         message: {
           platform: "max",
-          chat: { id: chatId },
-          message_id: callback.message?.message_id || callback.message_id || update.message?.message_id,
+          chat: { id: chatId, ...getMaxUserMetadata(update) },
+          message_id: getMaxCallbackMessageId(update),
         },
       });
     }
   }
-}
-
-function getMaxChatId(update) {
-  return update.chat_id || update.message?.chat_id || update.message?.recipient?.chat_id || update.callback?.chat_id;
 }
 
 function getMaxMessageText(update) {
@@ -1346,24 +1717,57 @@ function getMaxMessageText(update) {
   ).trim();
 }
 
+function getMaxUserMetadata(update) {
+  const callback = update.callback || update.message_callback || {};
+  const user = firstObject(
+    update.message?.sender,
+    update.message?.from,
+    update.sender,
+    update.from,
+    update.user,
+    callback.sender,
+    callback.user,
+    callback.message?.sender,
+    callback.message?.from,
+  );
+  if (!user) return {};
+
+  const metadata = {};
+  const userId = firstDefined(user.user_id, user.id, update.user_id, update.sender_id);
+  if (userId !== undefined) metadata.userId = userId;
+  metadata.username = firstDefined(user.username, update.username) || null;
+  return metadata;
+}
+
 async function processMattermostText(target, text) {
   const trimmed = String(text || "").trim().slice(0, WEB_CHAT_MESSAGE_MAX_LENGTH);
   if (!trimmed) return;
 
+  if (isMattermostStartText(trimmed)) {
+    await handleText({
+      platform: "mattermost",
+      chat: target,
+      text: "/start",
+    });
+    return;
+  }
+
   if (trimmed !== "/start" && trimmed !== RESTART_BUTTON_TEXT) {
     const session = await getSession(target);
-    const callbackData = mattermostCallbackForSession(session, trimmed);
-    if (callbackData) {
-      await handleCallback({
-        platform: "mattermost",
-        id: null,
-        data: callbackData,
-        message: {
+    const callbacks = mattermostCallbacksForSession(session, trimmed);
+    if (callbacks.length) {
+      for (const callbackData of callbacks) {
+        await handleCallback({
           platform: "mattermost",
-          chat: target,
-          message_id: null,
-        },
-      });
+          id: null,
+          data: callbackData,
+          message: {
+            platform: "mattermost",
+            chat: target,
+            message_id: null,
+          },
+        });
+      }
       return;
     }
     if (session.step === "entry") {
@@ -1383,23 +1787,45 @@ async function processMattermostText(target, text) {
   });
 }
 
-function mattermostCallbackForSession(session, text) {
+function isMattermostStartText(text) {
+  const value = normalizeChoiceText(text).replace(/^\/+/, "");
+  return [
+    "start",
+    "старт",
+    "menu",
+    "меню",
+    "начать",
+    "начать заново",
+  ].includes(value);
+}
+
+function mattermostCallbacksForSession(session, text) {
   const replyMarkup = mattermostReplyMarkupForSession(session);
-  return matchReplyMarkupChoice(replyMarkup, text);
+  return matchReplyMarkupChoices(replyMarkup, text, {
+    allowMultiple: isMattermostMultiSelectStep(session?.step),
+  });
+}
+
+function isMattermostMultiSelectStep(step) {
+  return [
+    "s2_goal",
+    "s2_schedule",
+    "s2_avoidances",
+  ].includes(step);
 }
 
 function mattermostReplyMarkupForSession(session) {
   if (!session || session.step === "entry") return FLOW.entry.keyboard;
   if (session.step === "s1_confirm_summary") return SCENARIO_1.confirmation.keyboard;
   if (session.step === "s1_pdf") return SCENARIO_1.pdfDownload.keyboard;
+  if (session.step === "s3_collect_links") return scenario3Flow(session.scenario3).linkCollection.keyboard;
   if (session.step === "s3_choose_municipality") {
     return buildMunicipalityKeyboard(session.scenario3?.municipalityOptions || []);
   }
+  if (session.step === "s3_criteria_choice") return scenario3Flow(session.scenario3).criteria.keyboard;
+  if (session.step === "s3_pdf") return scenario3Flow(session.scenario3).pdfDownload.keyboard;
   if (session.step === "s2_goal") {
     return multiSelectKeyboard("goal", SCENARIO_2.goal.options, session.scenario2?.goals || []);
-  }
-  if (session.step === "s2_special") {
-    return multiSelectKeyboard("special", SCENARIO_2.specialNeeds.options, selectedSpecialNeeds(session.scenario2 || {}));
   }
   if (session.step === "s2_schedule") {
     return multiSelectKeyboard("schedule", SCENARIO_2.schedule.options, session.scenario2?.schedule || []);
@@ -1416,17 +1842,47 @@ function mattermostReplyMarkupForSession(session) {
 }
 
 function matchReplyMarkupChoice(replyMarkup, text) {
+  return matchReplyMarkupChoices(replyMarkup, text)[0] || null;
+}
+
+function matchReplyMarkupChoices(replyMarkup, text, { allowMultiple = false } = {}) {
   const options = replyMarkupOptions(replyMarkup);
-  if (!options.length) return null;
+  if (!options.length) return [];
 
   const value = normalizeChoiceText(text);
   const number = value.match(/^\d+$/) ? Number(value) : null;
   if (number && number >= 1 && number <= options.length) {
-    return options[number - 1].data;
+    return [options[number - 1].data];
+  }
+
+  const numbers = allowMultiple ? parseMattermostNumberChoices(value) : [];
+  if (numbers.length > 1 && numbers.every((item) => item >= 1 && item <= options.length)) {
+    return orderedMattermostCallbacks(numbers.map((item) => options[item - 1].data));
   }
 
   const exact = options.find((option) => normalizeChoiceText(option.label) === value);
-  return exact?.data || null;
+  return exact?.data ? [exact.data] : [];
+}
+
+function parseMattermostNumberChoices(value) {
+  const tokens = String(value || "")
+    .split(/[\s,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (tokens.length < 2 || tokens.some((item) => !/^\d+$/.test(item))) return [];
+  return tokens.map(Number);
+}
+
+function orderedMattermostCallbacks(callbacks) {
+  const unique = [];
+  for (const callback of callbacks) {
+    if (callback && !unique.includes(callback)) unique.push(callback);
+  }
+  return unique.sort((left, right) => {
+    const leftContinue = left.endsWith("_continue") ? 1 : 0;
+    const rightContinue = right.endsWith("_continue") ? 1 : 0;
+    return leftContinue - rightContinue;
+  });
 }
 
 function normalizeChoiceText(text) {
@@ -1441,7 +1897,8 @@ async function processWebChatText(target, text) {
   const trimmed = String(text || "").trim().slice(0, WEB_CHAT_MESSAGE_MAX_LENGTH);
   if (!trimmed) return;
 
-  if (trimmed !== "/start" && trimmed !== RESTART_BUTTON_TEXT) {
+  const botCommand = parseBotCommand(trimmed);
+  if (!botCommand && trimmed !== "/start" && trimmed !== RESTART_BUTTON_TEXT) {
     const session = await getSession(target);
     if (session.step === "entry") {
       await handleCallback({
@@ -1653,6 +2110,22 @@ function sleep(ms) {
 async function configureTelegramPollingMode() {
   await telegramApi("deleteWebhook", {
     drop_pending_updates: false,
+  });
+}
+
+async function configureTelegramBotMenu() {
+  await telegramApi("setMyCommands", {
+    commands: TELEGRAM_BOT_COMMANDS,
+  });
+  await telegramApi("setChatMenuButton", {
+    menu_button: { type: "commands" },
+  });
+}
+
+async function configureMaxBotMenu() {
+  await maxApi("/me", {
+    method: "PATCH",
+    body: { commands: MAX_BOT_COMMANDS },
   });
 }
 
@@ -1896,6 +2369,12 @@ async function bootstrap() {
     if (runtimeState?.updateOffset) {
       updateOffset = Number(runtimeState.updateOffset);
     }
+
+    try {
+      await configureTelegramBotMenu();
+    } catch (error) {
+      console.warn("Telegram bot menu configuration skipped:", error.message);
+    }
   }
 
   if (TELEGRAM_ENABLED && TELEGRAM_TRANSPORT === "webhook") {
@@ -1903,6 +2382,11 @@ async function bootstrap() {
   }
 
   if (MAX_ENABLED) {
+    try {
+      await configureMaxBotMenu();
+    } catch (error) {
+      console.warn("MAX bot menu configuration skipped:", error.message);
+    }
     await configureMaxWebhookMode();
   }
 
