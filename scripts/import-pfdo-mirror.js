@@ -306,6 +306,7 @@ function buildImportPreamble() {
     "  pfdo_program_groups,",
     "  pfdo_program_registry_entries,",
     "  pfdo_program_modules,",
+    "  pfdo_program_keyword_links,",
     "  pfdo_program_activities,",
     "  pfdo_program_project_links,",
     "  pfdo_program_activity_links,",
