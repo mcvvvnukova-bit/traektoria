@@ -151,3 +151,19 @@ test("stale callback does not run inactive flow", async () => {
 
   assert.match(harness.messages[0].text, /больше не активен/);
 });
+
+test("MAX description flow restart prompts can include visible main menu button", async () => {
+  const harness = createHarness({ step: "s1_pdf" });
+  const target = { platform: "max", id: 123 };
+
+  await handleDescriptionCallback(harness.context({
+    target,
+    data: "s1:pdf:no",
+    restartKeyboard: () => ({
+      inline_keyboard: [[{ text: "Главное меню", callback_data: "menu:start" }]],
+    }),
+  }));
+
+  assert.match(harness.messages[0].text, /главное меню/);
+  assert.equal(harness.messages[0].replyMarkup.inline_keyboard[0][0].callback_data, "menu:start");
+});

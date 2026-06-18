@@ -102,7 +102,7 @@ async function handleDescriptionCallback(context) {
   const { target, data, session, persistSession, sendMessage } = context;
   ensureDescriptionSelectionState(session);
   if (!isDescriptionStep(session.step)) {
-    return sendMessage(target, "Этот сценарий больше не активен. Нажмите /start и выберите доступный вариант.");
+    return sendRestartMessage(context, "Этот сценарий больше не активен. Откройте главное меню и выберите доступный вариант.");
   }
 
   if (data === "s1:confirm") {
@@ -122,10 +122,10 @@ async function handleDescriptionCallback(context) {
   if (data === "s1:pdf:no") {
     session.descriptionSelection.pdfRequested = false;
     await persistSession(target, session);
-    return sendMessage(target, "Хорошо. Чтобы начать новый подбор, нажмите /start.");
+    return sendRestartMessage(context, "Хорошо. Чтобы начать новый подбор, откройте главное меню.");
   }
 
-  return sendMessage(target, "Этот сценарий больше не активен. Нажмите /start и выберите доступный вариант.");
+  return sendRestartMessage(context, "Этот сценарий больше не активен. Откройте главное меню и выберите доступный вариант.");
 }
 
 async function showDescriptionResults(context) {
@@ -152,7 +152,7 @@ async function showDescriptionResults(context) {
     });
   } catch (error) {
     console.error("Description selection recommendations failed:", error);
-    return sendMessage(target, "Не удалось подобрать программы по этим данным. Попробуйте начать заново через /start.");
+    return sendRestartMessage(context, "Не удалось подобрать программы по этим данным. Попробуйте начать заново через главное меню.");
   }
 
   state.lastResult = result;
@@ -171,7 +171,7 @@ async function showDescriptionResults(context) {
   }
 
   if (!result.items?.length) {
-    return sendMessage(target, "Чтобы изменить критерии, нажмите /start и начните подбор заново.");
+    return sendRestartMessage(context, "Чтобы изменить критерии, откройте главное меню и начните подбор заново.");
   }
 
   session.step = "s1_pdf";
@@ -192,7 +192,7 @@ async function sendDescriptionPdf(context) {
   const state = ensureDescriptionSelectionState(session);
   const result = state.lastResult;
   if (!result?.items?.length) {
-    return sendMessage(target, "Не нашел последнюю подборку. Начните новый подбор через /start.");
+    return sendRestartMessage(context, "Не нашел последнюю подборку. Начните новый подбор через главное меню.");
   }
 
   try {
@@ -232,6 +232,13 @@ function splitMessage(text, limit = 3500) {
   }
   if (current) chunks.push(current);
   return chunks;
+}
+
+function sendRestartMessage(context, text) {
+  const replyMarkup = typeof context.restartKeyboard === "function"
+    ? context.restartKeyboard(context.target)
+    : undefined;
+  return context.sendMessage(context.target, text, replyMarkup);
 }
 
 module.exports = {

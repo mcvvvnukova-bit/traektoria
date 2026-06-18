@@ -139,6 +139,10 @@ const webRateLimits = new Map();
 let updateOffset = 0;
 let mattermostTransport = null;
 const RESTART_BUTTON_TEXT = "Начать заново";
+const MAIN_MENU_CALLBACK = "menu:start";
+const MAIN_MENU_KEYBOARD = {
+  inline_keyboard: [[{ text: "Главное меню", callback_data: MAIN_MENU_CALLBACK }]],
+};
 
 function createSession() {
   return {
@@ -557,6 +561,14 @@ async function showEntry(chatId) {
   await sendMessage(chatId, entryTextForTarget(chatId), FLOW.entry.keyboard, messageOptions);
 }
 
+function restartKeyboardForTarget(target) {
+  return normalizeTarget(target).platform === "max" ? MAIN_MENU_KEYBOARD : undefined;
+}
+
+function sendRestartMessage(target, text) {
+  return sendMessage(target, text, restartKeyboardForTarget(target));
+}
+
 async function startScenario2(chatId) {
   const session = await getSession(chatId);
   session.step = "s2_age";
@@ -831,7 +843,7 @@ async function showScenario3Results(chatId, session) {
     result = await getDeepTrajectoryRecommendations(session.scenario3, { limit: 10 });
   } catch (error) {
     console.error("Scenario 3 recommendations failed:", error);
-    return sendMessage(chatId, "Не удалось подобрать продолжение по этим данным. Попробуйте начать заново через /start.");
+    return sendRestartMessage(chatId, "Не удалось подобрать продолжение по этим данным. Попробуйте начать заново.");
   }
 
   session.scenario3.lastResult = result;
@@ -850,7 +862,7 @@ async function showScenario3Results(chatId, session) {
     await sendMessage(chatId, chunk, undefined, messageOptions);
   }
   if (!result.items.length) {
-    return sendMessage(chatId, "Готово. Новую подборку можно начать в любой момент через меню бота.");
+    return sendRestartMessage(chatId, "Готово. Новую подборку можно начать в любой момент через главное меню.");
   }
   session.step = "s3_pdf";
   await persistSession(chatId, session);
@@ -959,6 +971,9 @@ async function showScenario2Results(chatId, session) {
   for (const chunk of splitMessage(text)) {
     await sendMessage(chatId, chunk);
   }
+  if (!result.items.length) {
+    return sendRestartMessage(chatId, "Чтобы изменить критерии, откройте главное меню и начните подбор заново.");
+  }
   return sendMessage(chatId, SCENARIO_2.pdfDownload.text, inlineKeyboard(SCENARIO_2.pdfDownload.options));
 }
 
@@ -986,6 +1001,7 @@ async function handleText(message) {
       session,
       persistSession,
       sendMessage,
+      restartKeyboard: restartKeyboardForTarget,
       getRecommendations,
       analyzeFreeText,
       logRecommendation,
@@ -997,7 +1013,7 @@ async function handleText(message) {
     if (chatId.platform === "mattermost") {
       return sendMessage(chatId, "Отправьте номер одного из предложенных вариантов или напишите «начать», чтобы начать заново.");
     }
-    return sendMessage(chatId, "Выберите один из предложенных вариантов или нажмите /start, чтобы начать заново.");
+    return sendRestartMessage(chatId, "Выберите один из предложенных вариантов или откройте главное меню, чтобы начать заново.");
   }
 
   if (session.step === "s3_collect_links" || session.step === "s3_wait_links") {
@@ -1067,7 +1083,7 @@ async function handleText(message) {
   if (chatId.platform === "mattermost") {
     return sendMessage(chatId, "Напишите «начать», чтобы открыть список сценариев, затем отправьте номер пункта.");
   }
-  return sendMessage(chatId, "Нажмите /start и выберите один из сценариев кнопкой.");
+  return sendRestartMessage(chatId, "Откройте главное меню и выберите один из сценариев кнопкой.");
 }
 
 async function handleCallback(callbackQuery) {
@@ -1086,6 +1102,10 @@ async function handleCallback(callbackQuery) {
   if (!session.scenario2) session.scenario2 = createScenario2State();
   if (!session.scenario3) session.scenario3 = createScenario3State();
 
+  if (data === MAIN_MENU_CALLBACK) {
+    return showEntry(chatId);
+  }
+
   if (data === "scenario:description") {
     return startDescriptionFlow({
       target: chatId,
@@ -1103,6 +1123,7 @@ async function handleCallback(callbackQuery) {
       session,
       persistSession,
       sendMessage,
+      restartKeyboard: restartKeyboardForTarget,
       sendDocument,
       createSelectionPdf,
       getRecommendations,
@@ -1149,7 +1170,7 @@ async function handleCallback(callbackQuery) {
   if (data === "s3:topics:all") {
     const programs = session.scenario3.completedPrograms || [];
     if (!programs.length) {
-      return sendMessage(chatId, "Не нашел сохраненный список пройденных программ. Начните заново через /start.");
+      return sendRestartMessage(chatId, "Не нашел сохраненный список пройденных программ. Начните заново через главное меню.");
     }
     if (!hasMeaningfulCompletedTopics(session.scenario3)) {
       session.step = "s3_wait_criteria_text";
@@ -1181,7 +1202,7 @@ async function handleCallback(callbackQuery) {
   if (data === "s3:pdf:no") {
     session.scenario3.pdfRequested = false;
     await persistSession(chatId, session);
-    return sendMessage(chatId, "Готово. Новую подборку можно начать в любой момент через меню бота.");
+    return sendRestartMessage(chatId, "Готово. Новую подборку можно начать в любой момент через главное меню.");
   }
 
   if (data === "s3:municipality:custom") {
@@ -1192,7 +1213,7 @@ async function handleCallback(callbackQuery) {
     const municipalityId = Number(data.split(":")[2]);
     const municipality = session.scenario3.municipalityOptions.find((item) => Number(item.id) === municipalityId);
     if (!municipality) {
-      return sendMessage(chatId, "Не нашел выбранный населенный пункт в текущем сценарии. Начните заново через /start.");
+      return sendRestartMessage(chatId, "Не нашел выбранный населенный пункт в текущем сценарии. Начните заново через главное меню.");
     }
     session.scenario3.municipalityId = municipality.id;
     session.scenario3.municipalityName = municipality.name;
@@ -1301,16 +1322,16 @@ async function handleCallback(callbackQuery) {
   if (data === "s2:pdf:no") {
     session.scenario2.pdfRequested = false;
     await persistSession(chatId, session);
-    return sendMessage(chatId, "Хорошо. Чтобы начать новый подбор, нажмите /start.");
+    return sendRestartMessage(chatId, "Хорошо. Чтобы начать новый подбор, откройте главное меню.");
   }
 
-  return sendMessage(chatId, "Этот сценарий больше не активен. Нажмите /start и выберите доступный вариант.");
+  return sendRestartMessage(chatId, "Этот сценарий больше не активен. Откройте главное меню и выберите доступный вариант.");
 }
 
 async function sendScenario2Pdf(chatId, session) {
   const result = session.scenario2.lastResult;
   if (!result) {
-    return sendMessage(chatId, "Не нашел последнюю подборку. Начните новый подбор через /start.");
+    return sendRestartMessage(chatId, "Не нашел последнюю подборку. Начните новый подбор через главное меню.");
   }
 
   try {
@@ -1337,7 +1358,7 @@ async function sendScenario2Pdf(chatId, session) {
 async function sendScenario3Pdf(chatId, session) {
   const result = session.scenario3.lastResult;
   if (!result?.items?.length) {
-    return sendMessage(chatId, "Не нашел последнюю подборку. Начните новую траекторию через /start.");
+    return sendRestartMessage(chatId, "Не нашел последнюю подборку. Начните новую траекторию через главное меню.");
   }
 
   try {
@@ -1569,7 +1590,7 @@ function buildScenario2ResultMessage(result) {
   if (!result.items.length) {
     return (
       "Сейчас точных совпадений не нашлось.\n\n" +
-      "Попробуйте расширить место занятий, бюджет или расписание и начать подбор заново через /start."
+      "Попробуйте расширить место занятий, бюджет или расписание и начать подбор заново через главное меню."
     );
   }
 
