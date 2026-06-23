@@ -12,6 +12,7 @@ test("landing web chat exposes scenario command menu", () => {
   assert.match(landingHtml, /data-chat-label="Подобрать по описанию"/);
   assert.match(landingHtml, /data-chat-label="Подобрать с AI агентом"/);
   assert.match(landingHtml, /data-chat-label="Составить углубленную траекторию"/);
+  assert.match(landingHtml, />\s*Углубленная траектория\s*</);
   assert.match(landingHtml, /data-chat-label="Траектория новых интересов"/);
 });
 
