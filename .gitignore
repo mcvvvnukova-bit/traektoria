@@ -19,6 +19,7 @@ __pycache__/
 tmp/
 exports/
 .cache/
+.superpowers/
 .obsidian/
 .DS_Store
 *.log
