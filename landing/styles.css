@@ -790,6 +790,7 @@ a {
   border: 0;
   scrollbar-width: thin;
   scrollbar-color: rgba(80, 66, 225, 0.28) transparent;
+  scroll-behavior: smooth;
 }
 
 .chat-card.has-conversation .chat-stream {
