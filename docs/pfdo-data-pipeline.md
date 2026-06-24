@@ -1,6 +1,6 @@
 # PFDO-пайплайн данных
 
-Статус: первый рабочий черновик от 2026-06-13.
+Статус: обновлено 2026-06-17 с учетом доработок за 2026-06-15 - 2026-06-17.
 
 Документ описывает, как данные PFDO попадают в локальное зеркало, как из документов программ извлекаются темы и как эти данные становятся доступными для рекомендаций.
 
@@ -23,13 +23,14 @@
 flowchart LR
   API["PFDO API"] --> Mirror["import-pfdo-mirror.js"]
   Mirror --> DB["pfdo_51_mirror"]
+  DB --> SyncState["pfdo_sync_runs / pfdo_program_sync_state"]
   DB --> Docs["download-pfdo-program-documents.js"]
   Docs --> Files["tmp/program_docs"]
   Files --> Calendar["import-pfdo-calendar-topics.js"]
   Calendar --> Topics["pfdo_program_calendar_topics"]
   Topics --> Analytics["build-pfdo-topic-analytics.js"]
   Analytics --> Derived["normalizations / aggregates / classifications / review_queue"]
-  Derived --> Bot["deep-trajectory recommendations"]
+  Derived --> Bot["scenario 3 / scenario 4 recommendations"]
 ```
 
 ## Шаг 1. Импорт зеркала PFDO
@@ -64,7 +65,17 @@ node scripts/import-pfdo-mirror.js
 npm run pfdo:sync
 ```
 
-Этот orchestrator запускает импорт PFDO, обновляет `pfdo_sync_runs` и `pfdo_program_sync_state`, скачивает документы, извлекает календарные темы и обновляет аналитику тем.
+Этот orchestrator запускает импорт PFDO, обновляет `pfdo_sync_runs` и `pfdo_program_sync_state`, скачивает документы, извлекает календарные темы и обновляет статусы обработки. Он используется для nightly sync на сервере.
+
+Доступные параметры orchestrator:
+
+```bash
+node scripts/sync-pfdo-programs.js --trigger manual
+node scripts/sync-pfdo-programs.js --trigger timer
+node scripts/sync-pfdo-programs.js --skip-documents
+node scripts/sync-pfdo-programs.js --skip-topics
+node scripts/sync-pfdo-programs.js --concurrency 4
+```
 
 Проверка после импорта:
 
@@ -131,6 +142,7 @@ node scripts/import-pfdo-calendar-topics.js --concurrency 4
 - ищет календарно-тематические и учебно-тематические планы;
 - записывает строки в `pfdo_program_calendar_topics`;
 - сохраняет source excerpt, метод извлечения, формат документа и confidence.
+- после успешного импорта запускает частичную пересборку аналитики тем для обработанных программ, если не указан `--skip-analytics`.
 
 Полезные режимы:
 
@@ -139,6 +151,7 @@ node scripts/import-pfdo-calendar-topics.js --limit 100
 node scripts/import-pfdo-calendar-topics.js --program-id 364163
 node scripts/import-pfdo-calendar-topics.js --program-ids exports/program_ids.csv
 node scripts/import-pfdo-calendar-topics.js --keep-existing
+node scripts/import-pfdo-calendar-topics.js --skip-analytics
 ```
 
 Если `--keep-existing` не указан, скрипт удаляет старые строки для выбранного диапазона перед вставкой новых.
@@ -167,6 +180,17 @@ node scripts/build-pfdo-topic-analytics.js
 - классифицирует агрегаты;
 - создает очередь ручной проверки;
 - пишет CSV/JSON-экспорты в `exports/`.
+
+Скрипт поддерживает частичную пересборку:
+
+```bash
+node scripts/build-pfdo-topic-analytics.js --program-id 364163
+node scripts/build-pfdo-topic-analytics.js --program-ids exports/program_ids.csv
+node scripts/build-pfdo-topic-analytics.js --skip-exports
+node scripts/build-pfdo-topic-analytics.js --skip-schema
+```
+
+При частичной пересборке удаляются и создаются заново только записи выбранных программ в таблицах нормализаций, агрегатов, классификаций и очереди проверки.
 
 Производные таблицы:
 
@@ -244,7 +268,9 @@ node scripts/update-pfdo-program-parser.js \
 - `pfdo_program_topic_aggregates`;
 - `pfdo_program_topic_classifications`.
 
-Если аналитический слой тем пустой, обычный подбор продолжит работать, но углубленная траектория станет менее точной или невозможной.
+Траектория новых интересов использует те же таблицы тем, но ищет не углубление, а новые содержательные категории.
+
+Если аналитический слой тем пустой, обычный подбор продолжит работать, но сценарии 3 и 4 станут менее точными или попросят пользователя вручную уточнить интересы.
 
 ## Рекомендуемый порядок полного обновления
 
@@ -265,17 +291,17 @@ npm test
 
 ```bash
 node scripts/import-pfdo-calendar-topics.js --program-id 364163
-node scripts/build-pfdo-topic-analytics.js
+node scripts/build-pfdo-topic-analytics.js --program-id 364163
 ```
 
 Для списка программ:
 
 ```bash
 node scripts/import-pfdo-calendar-topics.js --program-ids exports/program_ids.csv
-node scripts/build-pfdo-topic-analytics.js
+node scripts/build-pfdo-topic-analytics.js --program-ids exports/program_ids.csv
 ```
 
-После частичного импорта аналитический слой сейчас пересобирается целиком.
+Частичная пересборка удобна после on-demand импорта отдельных карточек или ручной проверки небольшого набора программ.
 
 ## Типовые сбои
 
@@ -286,6 +312,7 @@ node scripts/build-pfdo-topic-analytics.js
 | Нет тем | Документ не содержит распознаваемый план или парсер не справился | `source_excerpt`, `extraction_method`, warnings extractor-а. |
 | Много `unknown_content` | Нужна донастройка классификатора или golden labels | `pfdo_program_topic_review_queue`. |
 | Углубленная траектория пустая | Нет тем, нет совпадений по возрасту или муниципалитету | topic aggregates, program age range, municipality id. |
+| Траектория новых интересов пустая | Все кандидаты повторяют изученную категорию или нет содержательных тем | level 2/level 1 классификации, `pfdo_program_topic_classifications`. |
 
 ## Что не хранить в репозитории
 

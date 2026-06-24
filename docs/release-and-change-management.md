@@ -1,6 +1,6 @@
 # Релизы и управление изменениями
 
-Статус: первый рабочий черновик от 2026-06-13.
+Статус: обновлено 2026-06-17 с учетом доработок за 2026-06-15 - 2026-06-17.
 
 Документ описывает, как безопасно выпускать изменения в проекте «Траектория талантов».
 
@@ -18,6 +18,7 @@
 | Транспорт | Telegram, MAX, web-chat, Mattermost, Алиса | канал перестанет отвечать |
 | Конфигурация | env, nginx, systemd | сервис не стартует |
 | PDF | верстка, шрифты, доставка | пользователь не получит файл |
+| Landing | web-chat, footer-ссылки, Метрика | сайт не ведет в нужный канал или собирает лишние данные |
 | Схема БД | `telegram_bot`, `pfdo_51_mirror` | несовместимость данных |
 | Документация | runbook, guides | команда будет действовать по старым инструкциям |
 
@@ -34,12 +35,13 @@
 | Изменение | Документы |
 | --- | --- |
 | Новый пользовательский сценарий | `docs/product-overview.md`, `docs/scenario-*.md`, `docs/index.md` |
-| Изменение рекомендаций | `docs/recommendation-engine.md`, тесты |
+| Изменение рекомендаций | `docs/recommendation-engine.md`, `docs/Скоринговая модель.md`, тесты |
 | Новая env-переменная | `.env.example`, `deploy/env.production.example`, `docs/configuration-reference.md` |
 | Изменение деплоя | `docs/deploy-runbook.md`, `docs/operator-guide.md` |
 | Изменение PFDO pipeline | `docs/pfdo-data-pipeline.md`, `docs/pfdo-database-schema.md` |
 | Изменение безопасности | `docs/security-and-privacy.md` |
 | Изменение приемки | `docs/qa-and-acceptance.md` |
+| Изменение landing или web-chat UI | `README.md`, `docs/architecture-overview.md`, `docs/qa-and-acceptance.md`, `docs/security-and-privacy.md` |
 
 ## Локальная проверка
 
@@ -115,12 +117,13 @@ sudo systemctl reload nginx
 1. `systemctl is-active traektoria51-bot`.
 2. `GET /health`.
 3. Telegram `/start`.
-4. MAX, если включен.
-5. Web-chat, если включен.
-6. Mattermost, если включен.
-7. PDF-выгрузку.
-8. Один пользовательский happy path.
-9. Логи за последние 50-100 строк.
+4. Telegram `/text`, `/quiz`, `/deep`, `/wide`, если менялись меню или сценарии.
+5. MAX, если включен.
+6. Web-chat и landing-меню, если включены.
+7. Mattermost, если включен.
+8. PDF-выгрузку.
+9. Один пользовательский happy path.
+10. Логи за последние 50-100 строк.
 
 ## Rollback
 
