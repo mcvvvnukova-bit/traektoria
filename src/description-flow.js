@@ -2,7 +2,8 @@ const os = require("node:os");
 const path = require("node:path");
 
 const { SCENARIO_1 } = require("./flow");
-const { targetMetadata } = require("./target");
+const { normalizeTarget, targetMetadata } = require("./target");
+const { buildScenario1CriteriaRecognitionRecord } = require("./scenario1-criteria-recognition");
 const {
   createDescriptionSelectionState,
   ensureDescriptionSelectionState,
@@ -59,7 +60,8 @@ async function handleDescriptionText(context) {
       : "description";
 
   applyDescriptionText(state, text, { mode });
-  await enrichDescriptionWithLlm(context, state, text, mode);
+  const llmRecognition = await enrichDescriptionWithLlm(context, state, text, mode);
+  await logCriteriaRecognition(context, state, text, llmRecognition);
   const missing = getMissingRequiredFields(state);
   if (missing.length) {
     session.step = "s1_wait_required_clarification";
@@ -80,8 +82,8 @@ async function handleDescriptionText(context) {
 }
 
 async function enrichDescriptionWithLlm(context, state, text, mode) {
-  if (!context.analyzeFreeText) return;
-  if (!shouldUseLlmForDescription(state, text)) return;
+  if (!context.analyzeFreeText) return { attempted: false, applied: false };
+  if (!shouldUseLlmForDescription(state, text)) return { attempted: false, applied: false };
 
   try {
     const analysis = await context.analyzeFreeText({
@@ -90,11 +92,35 @@ async function enrichDescriptionWithLlm(context, state, text, mode) {
       current: state,
     }, text);
     if (analysis) {
-      applyLlmAnalysis(state, analysis, { mode: mode === "edit" ? "edit" : "llm" });
+      const applied = applyLlmAnalysis(state, analysis, { mode: mode === "edit" ? "edit" : "llm" });
+      return { attempted: true, applied };
     }
   } catch (error) {
     recordLlmError(state, error);
     console.warn("Description selection LLM analysis skipped:", error.message);
+    return { attempted: true, applied: false, error };
+  }
+  return { attempted: true, applied: false };
+}
+
+async function logCriteriaRecognition(context, state, text, llmRecognition = {}) {
+  if (typeof context.logCriteriaRecognition !== "function") return;
+
+  const normalizedTarget = normalizeTarget(context.target);
+  const metadata = targetMetadata(context.target);
+  const record = buildScenario1CriteriaRecognitionRecord({
+    platform: normalizedTarget.platform,
+    sessionId: normalizedTarget.id,
+    metadata,
+    inputText: text,
+    recognitionMethod: llmRecognition.attempted ? "LLM" : "regexp",
+    state,
+  });
+
+  try {
+    await context.logCriteriaRecognition(normalizedTarget.platform, normalizedTarget.id, record, metadata);
+  } catch (error) {
+    console.warn("Description selection criteria recognition logging skipped:", error.message);
   }
 }
 
@@ -250,4 +276,5 @@ module.exports = {
   handleDescriptionCallback,
   splitMessage,
   enrichDescriptionWithLlm,
+  logCriteriaRecognition,
 };

@@ -13,6 +13,7 @@ function createHarness(session = {}) {
   const messages = [];
   const documents = [];
   const logs = [];
+  const criteriaLogs = [];
   const target = { platform: "telegram", id: 123 };
   const fullSession = {
     step: "entry",
@@ -26,6 +27,7 @@ function createHarness(session = {}) {
     messages,
     documents,
     logs,
+    criteriaLogs,
     context(extra = {}) {
       return {
         target,
@@ -47,6 +49,7 @@ function createHarness(session = {}) {
           }],
         }),
         logRecommendation: async (_platform, _id, payload) => logs.push(payload),
+        logCriteriaRecognition: async (_platform, _id, payload) => criteriaLogs.push(payload),
         createSelectionPdf: async ({ outputPath }) => outputPath,
         normalizeTarget: (value) => value,
         ...extra,
@@ -86,6 +89,9 @@ test("complete request goes directly to recommendations and PDF prompt", async (
   assert.doesNotMatch(harness.messages[1].text, /Темы:/);
   assert.match(harness.messages[2].text, /PDF-файлом/);
   assert.equal(harness.logs[0].scenario, "description_selection");
+  assert.equal(harness.criteriaLogs.length, 1);
+  assert.equal(harness.criteriaLogs[0].recognitionMethod, "regexp");
+  assert.equal(harness.criteriaLogs[0].criteria.criterion_03_age.value.ageYears, 10);
 });
 
 test("missing required data asks one combined clarification", async () => {
@@ -115,6 +121,8 @@ test("enriches incomplete request with llm slots before deciding next step", asy
   assert.match(harness.messages[0].text, /Подбираю программы/);
   assert.equal(harness.session.descriptionSelection.llm.attempted, true);
   assert.equal(harness.session.descriptionSelection.llm.applied, true);
+  assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
+  assert.equal(harness.criteriaLogs[0].criteria.criterion_01_municipality.value, "Мурманск");
 });
 
 test("falls back to clarification when llm enrichment fails", async () => {
@@ -130,6 +138,7 @@ test("falls back to clarification when llm enrichment fails", async () => {
   assert.equal(harness.session.step, "s1_wait_required_clarification");
   assert.match(harness.messages[0].text, /где искать занятия/);
   assert.equal(harness.session.descriptionSelection.llm.error, "llm down");
+  assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
 });
 
 test("ambiguous request asks for summary confirmation", async () => {

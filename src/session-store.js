@@ -1,4 +1,5 @@
 const { executeSql, queryRows, jsonToSql, textToSql, decodeJsonCell } = require("./db");
+const { SCENARIO_1_CRITERIA_COLUMNS } = require("./scenario1-criteria-recognition");
 
 async function loadSession(platform, chatId) {
   const rows = await queryRows(`
@@ -76,6 +77,46 @@ async function logRecommendation(platform, chatId, result, metadata = {}) {
   `);
 }
 
+async function logScenario1CriteriaRecognition(platform, sessionId, record, metadata = {}) {
+  const criteria = record?.criteria || {};
+  const criterionColumns = SCENARIO_1_CRITERIA_COLUMNS;
+  const columns = [
+    "platform",
+    "session_id",
+    "channel",
+    "channel_id",
+    "channel_type",
+    "input_text",
+    "recognition_method",
+    "recognition_confidence",
+    ...criterionColumns,
+    "metadata",
+  ];
+  const normalizedPlatform = normalizePlatform(platform || record?.platform);
+  const normalizedSessionId = normalizeChatId(sessionId || record?.sessionId);
+  const mergedMetadata = {
+    ...normalizeMetadata(metadata),
+    ...(record?.metadata && typeof record.metadata === "object" ? normalizeMetadata(record.metadata) : {}),
+  };
+  const values = [
+    textToSql(normalizedPlatform),
+    textToSql(normalizedSessionId),
+    textToSql(record?.channel || normalizedPlatform),
+    nullableTextToSql(record?.channelId),
+    nullableTextToSql(record?.channelType),
+    textToSql(record?.inputText || ""),
+    textToSql(record?.recognitionMethod === "LLM" ? "LLM" : "regexp"),
+    confidenceToSql(record?.recognitionConfidence),
+    ...criterionColumns.map((column) => jsonToSql(criteria[column] || {})),
+    jsonToSql(mergedMetadata),
+  ];
+
+  await executeSql(`
+    INSERT INTO scenario1_criteria_recognition_log (${columns.join(", ")})
+    VALUES (${values.join(", ")});
+  `);
+}
+
 function normalizePlatform(platform) {
   return platform || "telegram";
 }
@@ -94,6 +135,17 @@ function normalizeMetadata(metadata) {
   );
 }
 
+function nullableTextToSql(value) {
+  if (value === null || value === undefined || value === "") return "NULL";
+  return textToSql(value);
+}
+
+function confidenceToSql(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "0";
+  return String(Math.max(0, Math.min(1, Math.round(number * 1000) / 1000)));
+}
+
 module.exports = {
   loadSession,
   saveSession,
@@ -101,4 +153,5 @@ module.exports = {
   saveRuntimeState,
   loadRuntimeState,
   logRecommendation,
+  logScenario1CriteriaRecognition,
 };

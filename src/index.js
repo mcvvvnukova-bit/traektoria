@@ -46,6 +46,7 @@ const {
   saveRuntimeState,
   loadRuntimeState,
   logRecommendation,
+  logScenario1CriteriaRecognition,
 } = require("./session-store");
 const { initializeDatabase } = require("./database-init");
 const { makeTarget, normalizeTarget, targetKey, targetFilePart, targetMetadata } = require("./target");
@@ -1005,6 +1006,7 @@ async function handleText(message) {
       getRecommendations,
       analyzeFreeText,
       logRecommendation,
+      logCriteriaRecognition: logScenario1CriteriaRecognition,
       normalizeTarget,
     });
   }
