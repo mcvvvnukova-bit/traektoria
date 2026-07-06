@@ -27,6 +27,11 @@ function isEnabled() {
   return LOCAL_LLM_ENABLED;
 }
 
+function isScenario1LlmOnly(session) {
+  return process.env.SCENARIO1_LLM_ONLY === "true" &&
+    session?.scenario === "description_selection";
+}
+
 async function analyzeFreeText(session, text) {
   if (!LOCAL_LLM_ENABLED) return null;
   if (!text || !text.trim()) return null;
@@ -68,6 +73,7 @@ async function analyzeFreeText(session, text) {
 
     const parsed = extractJson(content);
     const analysis = normalizeAnalysis(parsed);
+    if (isScenario1LlmOnly(session)) return analysis;
     return applyHeuristics(text, analysis);
   } finally {
     clearTimeout(timer);

@@ -125,6 +125,70 @@ test("enriches incomplete request with llm slots before deciding next step", asy
   assert.equal(harness.criteriaLogs[0].criteria.criterion_01_municipality.value, "Мурманск");
 });
 
+test("scenario 1 llm-only sends unparsed state to llm", async (t) => {
+  const previous = process.env.SCENARIO1_LLM_ONLY;
+  process.env.SCENARIO1_LLM_ONLY = "true";
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.SCENARIO1_LLM_ONLY;
+    } else {
+      process.env.SCENARIO1_LLM_ONLY = previous;
+    }
+  });
+  const harness = createHarness({ step: "s1_wait_description" });
+  let llmCurrentFields = null;
+
+  await handleDescriptionText(harness.context({
+    text: "Сыну 10 лет, Североморск, робототехника после школы",
+    analyzeFreeText: async (session) => {
+      llmCurrentFields = JSON.parse(JSON.stringify(session.current.fields));
+      return {
+        filledSlots: {
+          age: "10-12",
+          location: "Мурманск",
+          interests: ["building"],
+        },
+      };
+    },
+  }));
+
+  assert.equal(llmCurrentFields.age, null);
+  assert.equal(llmCurrentFields.place, "");
+  assert.deepEqual(llmCurrentFields.interests, []);
+  assert.equal(harness.session.descriptionSelection.originalText, "Сыну 10 лет, Североморск, робототехника после школы");
+  assert.equal(harness.session.descriptionSelection.fields.place, "Мурманск");
+  assert.equal(harness.session.descriptionSelection.fields.age, "10-12");
+  assert.equal(harness.session.step, "s1_confirm_summary");
+  assert.match(harness.messages[0].text, /Я понял запрос так/);
+  assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
+});
+
+test("scenario 1 llm-only reports unavailable llm without regexp fallback", async (t) => {
+  const previous = process.env.SCENARIO1_LLM_ONLY;
+  process.env.SCENARIO1_LLM_ONLY = "true";
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.SCENARIO1_LLM_ONLY;
+    } else {
+      process.env.SCENARIO1_LLM_ONLY = previous;
+    }
+  });
+  const harness = createHarness({ step: "s1_wait_description" });
+
+  await handleDescriptionText(harness.context({
+    text: "Сыну 10 лет, Североморск, робототехника после школы",
+    analyzeFreeText: async () => null,
+  }));
+
+  assert.equal(harness.session.step, "s1_wait_description");
+  assert.match(harness.messages[0].text, /AI-анализ текста недоступен/);
+  assert.equal(harness.session.descriptionSelection.fields.age, null);
+  assert.equal(harness.session.descriptionSelection.fields.place, "");
+  assert.equal(harness.logs.length, 0);
+  assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
+  assert.equal(harness.criteriaLogs[0].criteria.criterion_03_age.status, "missing_required");
+});
+
 test("falls back to clarification when llm enrichment fails", async () => {
   const harness = createHarness({ step: "s1_wait_description" });
 

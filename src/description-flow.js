@@ -22,6 +22,13 @@ const {
   buildDescriptionResultMessage,
 } = require("./description-selection");
 
+const SCENARIO_1_LLM_ONLY_UNAVAILABLE_MESSAGE =
+  "Сейчас AI-анализ текста недоступен. В тестовом режиме без regexp я не могу разобрать запрос. Попробуйте позже.";
+
+function isScenario1LlmOnly() {
+  return process.env.SCENARIO1_LLM_ONLY === "true";
+}
+
 function isDescriptionStep(step) {
   return String(step || "").startsWith("s1_");
 }
@@ -59,9 +66,23 @@ async function handleDescriptionText(context) {
       ? "clarification"
       : "description";
 
-  applyDescriptionText(state, text, { mode });
-  const llmRecognition = await enrichDescriptionWithLlm(context, state, text, mode);
+  const llmOnly = isScenario1LlmOnly();
+  if (llmOnly) {
+    rememberDescriptionText(state, text, mode);
+  } else {
+    applyDescriptionText(state, text, { mode });
+  }
+
+  const llmRecognition = await enrichDescriptionWithLlm(context, state, text, mode, {
+    force: llmOnly,
+  });
   await logCriteriaRecognition(context, state, text, llmRecognition);
+
+  if (llmOnly && llmRecognition.unavailable) {
+    await persistSession(target, session);
+    return sendMessage(target, SCENARIO_1_LLM_ONLY_UNAVAILABLE_MESSAGE);
+  }
+
   const missing = getMissingRequiredFields(state);
   if (missing.length) {
     session.step = "s1_wait_required_clarification";
@@ -81,9 +102,33 @@ async function handleDescriptionText(context) {
   return showDescriptionResults(context);
 }
 
-async function enrichDescriptionWithLlm(context, state, text, mode) {
-  if (!context.analyzeFreeText) return { attempted: false, applied: false };
-  if (!shouldUseLlmForDescription(state, text)) return { attempted: false, applied: false };
+function rememberDescriptionText(state, text, mode) {
+  const value = String(text || "").trim();
+  if (!value) return;
+
+  if (mode === "description" && !state.originalText) {
+    state.originalText = value;
+  } else if (mode === "edit") {
+    state.edits.push(value);
+  } else {
+    state.clarifications.push(value);
+  }
+
+  state.lastResult = null;
+}
+
+async function enrichDescriptionWithLlm(context, state, text, mode, options = {}) {
+  if (!String(text || "").trim()) return { attempted: false, applied: false };
+  if (!context.analyzeFreeText) {
+    return {
+      attempted: false,
+      applied: false,
+      unavailable: Boolean(options.force),
+    };
+  }
+  if (!options.force && !shouldUseLlmForDescription(state, text)) {
+    return { attempted: false, applied: false };
+  }
 
   try {
     const analysis = await context.analyzeFreeText({
@@ -98,9 +143,18 @@ async function enrichDescriptionWithLlm(context, state, text, mode) {
   } catch (error) {
     recordLlmError(state, error);
     console.warn("Description selection LLM analysis skipped:", error.message);
-    return { attempted: true, applied: false, error };
+    return {
+      attempted: true,
+      applied: false,
+      unavailable: Boolean(options.force),
+      error,
+    };
   }
-  return { attempted: true, applied: false };
+  return {
+    attempted: true,
+    applied: false,
+    unavailable: Boolean(options.force),
+  };
 }
 
 async function logCriteriaRecognition(context, state, text, llmRecognition = {}) {
@@ -113,7 +167,7 @@ async function logCriteriaRecognition(context, state, text, llmRecognition = {})
     sessionId: normalizedTarget.id,
     metadata,
     inputText: text,
-    recognitionMethod: llmRecognition.attempted ? "LLM" : "regexp",
+    recognitionMethod: llmRecognition.attempted || isScenario1LlmOnly() ? "LLM" : "regexp",
     state,
   });
 

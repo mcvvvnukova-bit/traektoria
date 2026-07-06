@@ -94,6 +94,7 @@ node src/index.js
 Для включения локальной модели дополнительно используются:
 
 - `LOCAL_LLM_ENABLED=true`
+- `SCENARIO1_LLM_ONLY=true` — тестовый режим сценария 1 без regexp-разбора до LLM
 - `LOCAL_LLM_API_URL=http://127.0.0.1:8012/v1/chat/completions`
 - `LOCAL_LLM_MODEL=qwen2.5-3b-instruct-q4_k_m`
 - `LOCAL_LLM_TIMEOUT_MS=20000`
