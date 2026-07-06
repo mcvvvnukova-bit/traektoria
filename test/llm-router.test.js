@@ -126,7 +126,7 @@ test("scenario 1 prompt and parser keep exact specific interests", async (t) => 
               scenario: "ready_to_recommend",
               message_for_user: "",
               filled_slots: {
-                age: "13+",
+                age: "13 лет",
                 experience: null,
                 interests: ["sports"],
                 specificInterests: ["баскетбол"],
@@ -156,6 +156,7 @@ test("scenario 1 prompt and parser keep exact specific interests", async (t) => 
   assert.match(systemPrompt, /баскетбол.*sports/s);
   assert.match(systemPrompt, /13 лет.*13\+/s);
   assert.match(systemPrompt, /9 лет.*7-9/s);
+  assert.equal(result.filledSlots.age, "13+");
   assert.deepEqual(result.filledSlots.interests, ["sports"]);
   assert.deepEqual(result.filledSlots.specificInterests, ["баскетбол"]);
 });

@@ -184,7 +184,7 @@ function normalizeAnalysis(parsed) {
     scenario: normalizeScenario(parsed?.scenario),
     messageForUser: normalizeShortText(parsed?.message_for_user),
     filledSlots: {
-      age: normalizeEnum(filled.age, ALLOWED_AGES),
+      age: normalizeAge(filled.age),
       experience: normalizeEnum(filled.experience, ALLOWED_EXPERIENCE),
       interests: normalizeArray(filled.interests, ALLOWED_INTERESTS),
       specificInterests: normalizeTextArray(filled.specificInterests || filled.specific_interests),
@@ -206,6 +206,21 @@ function normalizeScenario(value) {
 
 function normalizeEnum(value, allowed) {
   return allowed.has(value) ? value : null;
+}
+
+function normalizeAge(value) {
+  const enumValue = normalizeEnum(value, ALLOWED_AGES);
+  if (enumValue) return enumValue;
+
+  const text = String(value ?? "").trim();
+  const range = text.match(/(\d{1,2})\s*[-–]\s*(\d{1,2})/);
+  if (range) {
+    return ageBucketFromYears(Math.round((Number(range[1]) + Number(range[2])) / 2));
+  }
+
+  const numeric = text.match(/(\d{1,2})/);
+  if (!numeric) return null;
+  return ageBucketFromYears(Number(numeric[1]));
 }
 
 function normalizeArray(value, allowed) {
@@ -236,6 +251,10 @@ function detectAgeBucket(text) {
   const match = text.match(/(\d{1,2})\s*(?:лет|года|год|л\.)/i);
   if (!match) return null;
   const age = Number(match[1]);
+  return ageBucketFromYears(age);
+}
+
+function ageBucketFromYears(age) {
   if (age >= 3 && age <= 4) return "3-4";
   if (age >= 5 && age <= 6) return "5-6";
   if (age >= 7 && age <= 9) return "7-9";
