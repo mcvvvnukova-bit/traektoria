@@ -110,6 +110,47 @@ test("uses llm slots as validated enrichment for missing required fields", () =>
   assert.equal(state.fields.scheduleText, "вечером");
 });
 
+test("uses llm specific interests as exact recommendation terms", () => {
+  const state = createDescriptionSelectionState();
+
+  applyLlmAnalysis(state, {
+    filledSlots: {
+      age: "13+",
+      location: "Оленегорск",
+      interests: ["sports"],
+      specificInterests: ["баскетбол"],
+    },
+  });
+
+  assert.deepEqual(getMissingRequiredFields(state), []);
+  assert.equal(state.fields.age, "13+");
+  assert.equal(state.fields.place, "Оленегорск");
+  assert.ok(state.fields.interests.includes("sports"));
+  assert.equal(state.fields.interestsText, "баскетбол");
+  assert.deepEqual(state.fields.specificInterestLabels, ["баскетбол"]);
+  assert.ok(state.fields.specificInterestTerms.includes("баскетбол"));
+  assert.ok(state.fields.specificInterestTerms.includes("баскет"));
+
+  const profile = buildRecommendationProfile(state);
+  assert.ok(profile.interests.includes("sports"));
+  assert.deepEqual(profile.specificInterestLabels, ["баскетбол"]);
+  assert.ok(profile.specificInterestTerms.includes("баскетбол"));
+});
+
+test("keeps unknown llm specific interests as raw exact terms", () => {
+  const state = createDescriptionSelectionState();
+
+  applyLlmAnalysis(state, {
+    filledSlots: {
+      specificInterests: ["флорбол"],
+    },
+  });
+
+  assert.equal(state.fields.interestsText, "флорбол");
+  assert.deepEqual(state.fields.specificInterestLabels, ["флорбол"]);
+  assert.deepEqual(state.fields.specificInterestTerms, ["флорбол"]);
+});
+
 test("does not extract child special needs from free-text requests", () => {
   const state = createDescriptionSelectionState();
   applyDescriptionText(state, "Сыну 10 лет, Мурманск, робототехника, ОВЗ, СДВГ");

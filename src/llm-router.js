@@ -99,6 +99,9 @@ function buildSystemPrompt() {
     "Допустимые значения age: 3-4, 5-6, 7-9, 10-12, 13+",
     "Допустимые значения experience: none, tried, active, new",
     "Допустимые interests: creative, building, sports, social, logic, calm",
+    "interests — это широкие категории. Конкретное занятие пользователя возвращай отдельно в specificInterests.",
+    "Например: 'баскетбол' -> interests: ['sports'], specificInterests: ['баскетбол']; 'робототехника' -> interests: ['building','logic'], specificInterests: ['робототехника'].",
+    "Если пользователь назвал конкретное занятие, например футбол, баскетбол, рисование, робототехника, шахматы, обязательно заполни specificInterests.",
     "Допустимые avoidances: noise, strict, stage, routine, intense, unknown",
     "Допустимые adaptation: fast, careful, soft, depends",
     "Допустимые goal: interest, first_try, strengths, social, discipline, discover",
@@ -110,7 +113,7 @@ function buildSystemPrompt() {
     "Если новое сообщение состоит только из населенного пункта, например 'Оленегорск' или 'Мурманск', это тоже location.",
     "Если указан район, организация или неясное место без населенного пункта, например 'центр города', оставь location: null.",
     "JSON-формат:",
-    '{"scenario":"fallback","message_for_user":"","filled_slots":{"age":null,"experience":null,"interests":[],"avoidances":[],"adaptation":null,"goal":null,"location":null,"budget":null,"schedule":null,"clarifyGroup":null,"clarifyFocus":null}}',
+    '{"scenario":"fallback","message_for_user":"","filled_slots":{"age":null,"experience":null,"interests":[],"specificInterests":[],"avoidances":[],"adaptation":null,"goal":null,"location":null,"budget":null,"schedule":null,"clarifyGroup":null,"clarifyFocus":null}}',
     "message_for_user: короткая реплика на русском, максимум 18 слов. Если сказать нечего, верни пустую строку.",
   ].join("\n");
 }
@@ -180,6 +183,7 @@ function normalizeAnalysis(parsed) {
       age: normalizeEnum(filled.age, ALLOWED_AGES),
       experience: normalizeEnum(filled.experience, ALLOWED_EXPERIENCE),
       interests: normalizeArray(filled.interests, ALLOWED_INTERESTS),
+      specificInterests: normalizeTextArray(filled.specificInterests || filled.specific_interests),
       avoidances: normalizeArray(filled.avoidances, ALLOWED_AVOIDANCES),
       adaptation: normalizeEnum(filled.adaptation, ALLOWED_ADAPTATION),
       goal: normalizeEnum(filled.goal, ALLOWED_GOALS),
@@ -203,6 +207,14 @@ function normalizeEnum(value, allowed) {
 function normalizeArray(value, allowed) {
   const list = Array.isArray(value) ? value : [];
   return [...new Set(list.filter((item) => allowed.has(item)))];
+}
+
+function normalizeTextArray(value) {
+  const list = Array.isArray(value) ? value : [];
+  return [...new Set(list
+    .map((item) => normalizeFreeText(item))
+    .filter(Boolean))]
+    .slice(0, 6);
 }
 
 function normalizeShortText(value) {
@@ -298,11 +310,18 @@ function detectScenario(text, slots) {
   if (/(траектор|план на год|годовой план)/i.test(text)) return "build_trajectory";
   if (slots.experience === "active" || slots.experience === "new") return "switch_program";
   if (slots.location || slots.budget || slots.schedule) {
-    if (slots.interests.length || slots.goal) return "first_time_selection";
+    if (hasInterestSignal(slots) || slots.goal) return "first_time_selection";
     return "clarify_constraints";
   }
-  if (slots.interests.length || slots.goal || slots.age) return "clarify_preferences";
+  if (hasInterestSignal(slots) || slots.goal || slots.age) return "clarify_preferences";
   return "fallback";
+}
+
+function hasInterestSignal(slots) {
+  return Boolean(
+    slots?.interests?.length ||
+    slots?.specificInterests?.length,
+  );
 }
 
 module.exports = {

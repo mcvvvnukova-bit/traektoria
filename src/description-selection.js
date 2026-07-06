@@ -200,6 +200,23 @@ function applyLlmAnalysis(state, analysis, options = {}) {
     patch.broadInterest = false;
   }
 
+  const specificInterestPatch = buildSpecificInterestPatch(slots.specificInterests);
+  if (specificInterestPatch.specificInterestTerms?.length) {
+    patch.specificInterestTerms = specificInterestPatch.specificInterestTerms;
+    patch.specificInterestLabels = specificInterestPatch.specificInterestLabels;
+    patch.interestsText = specificInterestPatch.specificInterestLabels.join(", ");
+    patch.broadInterest = false;
+
+    if (specificInterestPatch.interests.length) {
+      patch.interests = [...new Set([...(patch.interests || []), ...specificInterestPatch.interests])];
+      patch.interestLabels = labelsForInterests(patch.interests);
+    }
+    if (specificInterestPatch.direction && !state.fields.direction) {
+      patch.direction = specificInterestPatch.direction;
+      patch.directionLabel = specificInterestPatch.directionLabel;
+    }
+  }
+
   if (Array.isArray(slots.avoidances) && slots.avoidances.length) {
     patch.avoidances = slots.avoidances.filter((item) => item !== "unknown");
     patch.avoidanceLabels = labelsForAvoidances(patch.avoidances);
@@ -235,6 +252,61 @@ function applyLlmAnalysis(state, analysis, options = {}) {
   state.ambiguities = buildAmbiguities(state);
   state.llm.applied = Object.keys(patch).length > 0;
   return state.llm.applied;
+}
+
+function buildSpecificInterestPatch(value) {
+  const specificInterests = normalizeSpecificInterestInputs(value);
+  if (!specificInterests.length) {
+    return {
+      interests: [],
+      specificInterestTerms: [],
+      specificInterestLabels: [],
+      direction: null,
+      directionLabel: "",
+    };
+  }
+
+  const interests = new Set();
+  const terms = new Set();
+  const labels = new Set();
+  const directions = new Map();
+
+  for (const item of specificInterests) {
+    const termCount = terms.size;
+    const labelCount = labels.size;
+    const queryInterests = analyzeQueryInterests(`хочет ${item}`);
+    for (const interest of queryInterests.broadInterests || []) interests.add(interest);
+    for (const term of queryInterests.specificInterestTerms || []) terms.add(term);
+    for (const label of queryInterests.specificInterestLabels || []) labels.add(label);
+    if (queryInterests.direction) directions.set(queryInterests.direction, queryInterests.directionLabel);
+
+    const normalized = normalizeText(item).trim();
+    if (!normalized) continue;
+    if (terms.size === termCount) terms.add(normalized);
+    if (labels.size === labelCount) labels.add(normalized);
+  }
+
+  const [direction, directionLabel] = directions.size === 1
+    ? [...directions.entries()][0]
+    : [null, ""];
+
+  return {
+    interests: [...interests],
+    specificInterestTerms: [...terms],
+    specificInterestLabels: [...labels],
+    direction,
+    directionLabel,
+  };
+}
+
+function normalizeSpecificInterestInputs(value) {
+  const list = Array.isArray(value) ? value : [];
+  return [...new Set(list
+    .map((item) => String(item || "")
+      .replace(/[.,;:!?]+$/g, "")
+      .trim())
+    .filter(Boolean))]
+    .slice(0, 6);
 }
 
 function recordLlmError(state, error) {

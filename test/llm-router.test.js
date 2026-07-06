@@ -112,3 +112,48 @@ test("scenario 1 prompt explains Murmansk region location extraction", async (t)
   assert.match(systemPrompt, /новое сообщение состоит только из населенного пункта/);
   assert.match(systemPrompt, /центр города/);
 });
+
+test("scenario 1 prompt and parser keep exact specific interests", async (t) => {
+  let requestBody = null;
+  const { analyzeFreeText } = setupEnabledLlm(t, async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return {
+      ok: true,
+      json: async () => ({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              scenario: "ready_to_recommend",
+              message_for_user: "",
+              filled_slots: {
+                age: "13+",
+                experience: null,
+                interests: ["sports"],
+                specificInterests: ["баскетбол"],
+                avoidances: [],
+                adaptation: null,
+                goal: null,
+                location: "Оленегорск",
+                budget: null,
+                schedule: null,
+                clarifyGroup: null,
+                clarifyFocus: null,
+              },
+            }),
+          },
+        }],
+      }),
+    };
+  });
+
+  const result = await analyzeFreeText(
+    { scenario: "description_selection", mode: "description", current: {} },
+    "мальчик 13 лет хочет играть в баскетбол в оленегорске",
+  );
+
+  const systemPrompt = requestBody.messages[0].content;
+  assert.match(systemPrompt, /specificInterests/);
+  assert.match(systemPrompt, /баскетбол.*sports/s);
+  assert.deepEqual(result.filledSlots.interests, ["sports"]);
+  assert.deepEqual(result.filledSlots.specificInterests, ["баскетбол"]);
+});
