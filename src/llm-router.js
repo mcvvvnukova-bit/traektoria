@@ -105,8 +105,6 @@ function buildSystemPrompt() {
     "interests — это широкие категории. Конкретное занятие пользователя возвращай отдельно в specificInterests.",
     "Например: 'баскетбол' -> interests: ['sports'], specificInterests: ['баскетбол']; 'робототехника' -> interests: ['building','logic'], specificInterests: ['робототехника'].",
     "Если пользователь назвал конкретное занятие, например футбол, баскетбол, рисование, робототехника, шахматы, обязательно заполни specificInterests.",
-    "Пример полного разбора: 'мальчик 13 лет хочет играть в баскетбол в оленегорске' -> age: '13+', interests: ['sports'], specificInterests: ['баскетбол'], location: 'Оленегорск'.",
-    "Пример полного разбора: 'девочка 9 лет хочет рисовать в мурманске' -> age: '7-9', interests: ['creative'], specificInterests: ['рисование'], location: 'Мурманск'.",
     "Допустимые avoidances: noise, strict, stage, routine, intense, unknown",
     "Допустимые adaptation: fast, careful, soft, depends",
     "Допустимые goal: interest, first_try, strengths, social, discipline, discover",
@@ -165,6 +163,7 @@ function buildUserPrompt(session, text) {
   return [
     `Текущее состояние сессии: ${JSON.stringify(session)}`,
     `Новое сообщение пользователя: ${JSON.stringify(text)}`,
+    "Извлекай данные из нового сообщения. Не копируй null из текущего состояния, если новое сообщение содержит значение.",
     "Верни только JSON.",
   ].join("\n");
 }
