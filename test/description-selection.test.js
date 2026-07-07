@@ -158,6 +158,23 @@ test("keeps unknown llm specific interests as raw exact terms", () => {
   assert.deepEqual(state.fields.specificInterestTerms, ["флорбол"]);
 });
 
+test("stores only explicit llm criterion confidences", () => {
+  const state = createDescriptionSelectionState();
+
+  applyLlmAnalysis(state, {
+    filledSlots: {},
+    criterionConfidences: {
+      criterion_03_age: "0.82",
+      criterion_01_municipality: 1.2,
+      criterion_09_direction: "unknown",
+    },
+  });
+
+  assert.deepEqual(state.llm.criterionConfidences, {
+    criterion_03_age: 0.82,
+  });
+});
+
 test("does not extract child special needs from free-text requests", () => {
   const state = createDescriptionSelectionState();
   applyDescriptionText(state, "Сыну 10 лет, Мурманск, робототехника, ОВЗ, СДВГ");

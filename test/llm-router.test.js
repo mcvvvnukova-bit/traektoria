@@ -12,50 +12,67 @@ function restoreEnv(name, value) {
 function setupEnabledLlm(t, fetchMock) {
   const previousEnabled = process.env.LOCAL_LLM_ENABLED;
   const previousOnly = process.env.SCENARIO1_LLM_ONLY;
+  const previousLlmEnabled = process.env.LLM_ENABLED;
+  const previousProvider = process.env.LLM_PROVIDER;
   const previousFetch = global.fetch;
-  const modulePath = require.resolve("../src/llm-router");
+  const routerPath = require.resolve("../src/llm-router");
+  const clientPath = require.resolve("../src/llm-client");
 
   process.env.LOCAL_LLM_ENABLED = "true";
   process.env.SCENARIO1_LLM_ONLY = "true";
-  delete require.cache[modulePath];
+  delete process.env.LLM_ENABLED;
+  process.env.LLM_PROVIDER = "local";
+  delete require.cache[routerPath];
+  delete require.cache[clientPath];
   global.fetch = fetchMock;
 
   t.after(() => {
     restoreEnv("LOCAL_LLM_ENABLED", previousEnabled);
     restoreEnv("SCENARIO1_LLM_ONLY", previousOnly);
+    restoreEnv("LLM_ENABLED", previousLlmEnabled);
+    restoreEnv("LLM_PROVIDER", previousProvider);
     global.fetch = previousFetch;
-    delete require.cache[modulePath];
+    delete require.cache[routerPath];
+    delete require.cache[clientPath];
   });
 
   return require("../src/llm-router");
 }
 
-test("scenario 1 llm-only skips llm-router post heuristics", async (t) => {
-  const { analyzeFreeText } = setupEnabledLlm(t, async () => ({
+function llmResponse(content) {
+  return {
     ok: true,
-    json: async () => ({
+    text: async () => JSON.stringify({
       choices: [{
         message: {
-          content: JSON.stringify({
-            scenario: "fallback",
-            message_for_user: "",
-            filled_slots: {
-              age: null,
-              experience: null,
-              interests: [],
-              avoidances: [],
-              adaptation: null,
-              goal: null,
-              location: null,
-              budget: null,
-              schedule: null,
-              clarifyGroup: null,
-              clarifyFocus: null,
-            },
-          }),
+          content: JSON.stringify(content),
         },
       }],
     }),
+  };
+}
+
+test("scenario 1 llm-only skips llm-router post heuristics", async (t) => {
+  const { analyzeFreeText } = setupEnabledLlm(t, async () => llmResponse({
+    scenario: "fallback",
+    message_for_user: "",
+    filled_slots: {
+      age: null,
+      experience: null,
+      interests: [],
+      avoidances: [],
+      adaptation: null,
+      goal: null,
+      location: null,
+      budget: null,
+      schedule: null,
+      clarifyGroup: null,
+      clarifyFocus: null,
+    },
+    criterion_confidences: {
+      criterion_03_age: 0.83,
+      criterion_01_municipality_confidence: 0.94,
+    },
   }));
 
   const result = await analyzeFreeText(
@@ -66,38 +83,33 @@ test("scenario 1 llm-only skips llm-router post heuristics", async (t) => {
   assert.equal(result.filledSlots.age, null);
   assert.deepEqual(result.filledSlots.interests, []);
   assert.equal(result.filledSlots.schedule, null);
+  assert.deepEqual(result.criterionConfidences, {
+    criterion_01_municipality: 0.94,
+    criterion_03_age: 0.83,
+  });
 });
 
 test("scenario 1 prompt explains Murmansk region location extraction", async (t) => {
   let requestBody = null;
   const { analyzeFreeText } = setupEnabledLlm(t, async (_url, options) => {
     requestBody = JSON.parse(options.body);
-    return {
-      ok: true,
-      json: async () => ({
-        choices: [{
-          message: {
-            content: JSON.stringify({
-              scenario: "fallback",
-              message_for_user: "",
-              filled_slots: {
-                age: null,
-                experience: null,
-                interests: [],
-                avoidances: [],
-                adaptation: null,
-                goal: null,
-                location: "Оленегорск",
-                budget: null,
-                schedule: null,
-                clarifyGroup: null,
-                clarifyFocus: null,
-              },
-            }),
-          },
-        }],
-      }),
-    };
+    return llmResponse({
+      scenario: "fallback",
+      message_for_user: "",
+      filled_slots: {
+        age: null,
+        experience: null,
+        interests: [],
+        avoidances: [],
+        adaptation: null,
+        goal: null,
+        location: "Оленегорск",
+        budget: null,
+        schedule: null,
+        clarifyGroup: null,
+        clarifyFocus: null,
+      },
+    });
   });
 
   await analyzeFreeText(
@@ -111,39 +123,31 @@ test("scenario 1 prompt explains Murmansk region location extraction", async (t)
   assert.match(systemPrompt, /Мурманск/);
   assert.match(systemPrompt, /новое сообщение состоит только из населенного пункта/);
   assert.match(systemPrompt, /центр города/);
+  assert.match(systemPrompt, /criterion_confidences/);
 });
 
 test("scenario 1 prompt and parser keep exact specific interests", async (t) => {
   let requestBody = null;
   const { analyzeFreeText } = setupEnabledLlm(t, async (_url, options) => {
     requestBody = JSON.parse(options.body);
-    return {
-      ok: true,
-      json: async () => ({
-        choices: [{
-          message: {
-            content: JSON.stringify({
-              scenario: "ready_to_recommend",
-              message_for_user: "",
-              filled_slots: {
-                age: "13 лет",
-                experience: null,
-                interests: ["sports"],
-                specificInterests: ["баскетбол"],
-                avoidances: [],
-                adaptation: null,
-                goal: null,
-                location: "Оленегорск",
-                budget: null,
-                schedule: null,
-                clarifyGroup: null,
-                clarifyFocus: null,
-              },
-            }),
-          },
-        }],
-      }),
-    };
+    return llmResponse({
+      scenario: "ready_to_recommend",
+      message_for_user: "",
+      filled_slots: {
+        age: "13 лет",
+        experience: null,
+        interests: ["sports"],
+        specificInterests: ["баскетбол"],
+        avoidances: [],
+        adaptation: null,
+        goal: null,
+        location: "Оленегорск",
+        budget: null,
+        schedule: null,
+        clarifyGroup: null,
+        clarifyFocus: null,
+      },
+    });
   });
 
   const result = await analyzeFreeText(

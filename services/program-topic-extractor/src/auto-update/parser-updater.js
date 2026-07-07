@@ -4,6 +4,7 @@ const { parseCsv, stringifyCsv } = require("../csv");
 const { createOpenAIClient, DEFAULT_MODEL, isOpenAIQuotaExceededError } = require("./openai-client");
 const { verifyCurrentProgram, verifyRegressionCases } = require("./verification");
 const { executeSql, jsonToSql, queryRows, textToSql } = require("../../../../src/db");
+const { resolveLlmConfig } = require("../../../../src/llm-client");
 
 const REPO_ROOT = path.resolve(__dirname, "../../../..");
 const DEFAULT_DATABASE_URL = "postgresql://localhost:5432/pfdo_51_mirror";
@@ -120,10 +121,10 @@ Options:
   --program-ids <path>   CSV file with a program_id column.
   --apply                Run active mode: reload stale DB rows locally and create repair plans for parser mismatches.
   --max-attempts <n>     Compatibility option. Parser fixes now produce one repair plan instead of GPT patches.
-  --model <model>        OpenAI model override. Default: env or ${DEFAULT_MODEL}.
+  --model <model>        LLM model override. Default: env or ${DEFAULT_MODEL}.
   --out-dir <path>       Artifact directory. Default: ${DEFAULT_OUT_DIR}.
-  --openai-cache-dir <path> Cache OpenAI responses under this path. Default: ${DEFAULT_OPENAI_CACHE_DIR}.
-  --no-openai-cache      Disable OpenAI response cache.
+  --openai-cache-dir <path> Cache LLM responses under this legacy path. Default: ${DEFAULT_OPENAI_CACHE_DIR}.
+  --no-openai-cache      Disable LLM response cache.
   --limit <n>            Process only first N program IDs.
   --no-db-refresh        Do not rewrite pfdo_program_calendar_topics after accepted parser changes.
   --help                 Show this help.
@@ -150,14 +151,23 @@ async function runParserUpdater(rawOptions = {}, deps = {}) {
   const openaiClient =
     deps.openaiClient ||
     createOpenAIClient({
-      apiKey: options.openAiApiKey || process.env.OPENAI_API_KEY,
+      apiKey: options.openAiApiKey,
       model: options.model,
+      provider: options.provider,
       cacheDir: options.openAiCache ? resolveInsideRepo(repoRoot, options.openAiCacheDir) : "",
       fetchImpl: deps.fetchImpl,
     });
 
-  if (!deps.openaiClient && !process.env.OPENAI_API_KEY && !options.openAiApiKey) {
-    throw new Error("Missing OPENAI_API_KEY");
+  if (!deps.openaiClient) {
+    const llmConfig = resolveLlmConfig("pfdo_parser_evaluation", {
+      provider: options.provider,
+      defaultProvider: "openrouter",
+      model: options.model,
+      apiKey: options.openAiApiKey,
+    });
+    if (llmConfig.provider === "openrouter" && !llmConfig.apiKey) {
+      throw new Error("Missing OPENROUTER_API_KEY");
+    }
   }
 
   const programIds = await loadProgramIdsFromCsv(resolveInsideRepo(repoRoot, options.programIdsPath), {
@@ -322,7 +332,7 @@ async function tryLocalDatabaseRefresh(input) {
     match: !context.options.dryRun,
     confidence: candidate.quality.confidence,
     failureMode: context.options.dryRun ? candidate.reason : "",
-    recommendation: context.options.dryRun ? "Apply mode can refresh database topics from fresh parser output without an OpenAI call." : "",
+    recommendation: context.options.dryRun ? "Apply mode can refresh database topics from fresh parser output without an LLM call." : "",
   });
 
   if (context.options.dryRun) {

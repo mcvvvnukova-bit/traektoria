@@ -117,6 +117,7 @@ function createDescriptionSelectionState() {
       attempted: false,
       applied: false,
       error: "",
+      criterionConfidences: {},
     },
     lastResult: null,
     pdfPath: "",
@@ -135,6 +136,14 @@ function ensureDescriptionSelectionState(session) {
   }
   if (!Array.isArray(session.descriptionSelection.edits)) {
     session.descriptionSelection.edits = [];
+  }
+  if (!session.descriptionSelection.llm || typeof session.descriptionSelection.llm !== "object") {
+    session.descriptionSelection.llm = createDescriptionSelectionState().llm;
+  }
+  if (!session.descriptionSelection.llm.criterionConfidences ||
+    typeof session.descriptionSelection.llm.criterionConfidences !== "object" ||
+    Array.isArray(session.descriptionSelection.llm.criterionConfidences)) {
+    session.descriptionSelection.llm.criterionConfidences = {};
   }
   return session.descriptionSelection;
 }
@@ -177,6 +186,12 @@ function applyLlmAnalysis(state, analysis, options = {}) {
     attempted: true,
     applied: false,
     error: "",
+    criterionConfidences: normalizeCriterionConfidences(
+      analysis?.criterionConfidences ||
+        analysis?.criterion_confidences ||
+        analysis?.criteriaConfidences ||
+        analysis?.criteria_confidences,
+    ),
   };
 
   const slots = analysis?.filledSlots || analysis?.filled_slots || {};
@@ -318,7 +333,28 @@ function recordLlmError(state, error) {
     attempted: true,
     applied: false,
     error: error?.message || String(error || "unknown_error"),
+    criterionConfidences: {},
   };
+}
+
+function normalizeCriterionConfidences(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const result = {};
+  for (const [key, raw] of Object.entries(source)) {
+    const confidence = normalizeConfidence(raw);
+    if (confidence !== null) result[key] = confidence;
+  }
+  return result;
+}
+
+function normalizeConfidence(value) {
+  const raw = value && typeof value === "object" && !Array.isArray(value)
+    ? value.confidence
+    : value;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const number = typeof raw === "string" ? Number(raw.trim().replace(",", ".")) : Number(raw);
+  if (!Number.isFinite(number) || number < 0 || number > 1) return null;
+  return Math.round(number * 1000) / 1000;
 }
 
 function parseDescriptionText(text) {

@@ -162,6 +162,7 @@ const SCENARIO_1_CRITERIA = [
     scenarios: ["С4"],
   },
 ];
+const SCENARIO_1_CRITERIA_COLUMNS = SCENARIO_1_CRITERIA.map((criterion) => criterion.column);
 
 const SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS = [
   ["criterion_01_municipality_status", "text"],
@@ -467,6 +468,10 @@ function buildScenario1CriteriaDetails(state = {}, options = {}) {
     note: "The final mismatch decision is made during scoring against PFDO topic data.",
   });
 
+  if (recognitionMethod === "LLM") {
+    applyModelCriterionConfidences(result, state.llm?.criterionConfidences);
+  }
+
   return result;
 }
 
@@ -624,6 +629,37 @@ function normalizeConfidenceValue(value) {
   return Number.isFinite(value) ? value : null;
 }
 
+function applyModelCriterionConfidences(criteria, rawConfidences = {}) {
+  const confidences = normalizeModelCriterionConfidences(rawConfidences);
+  for (const column of SCENARIO_1_CRITERIA_COLUMNS) {
+    if (!criteria[column]) continue;
+    criteria[column].confidence = Object.prototype.hasOwnProperty.call(confidences, column)
+      ? confidences[column]
+      : null;
+  }
+  return criteria;
+}
+
+function normalizeModelCriterionConfidences(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const result = {};
+  for (const column of SCENARIO_1_CRITERIA_COLUMNS) {
+    const confidence = normalizeModelConfidence(source[column] ?? source[`${column}_confidence`]);
+    if (confidence !== null) result[column] = confidence;
+  }
+  return result;
+}
+
+function normalizeModelConfidence(value) {
+  const raw = value && typeof value === "object" && !Array.isArray(value)
+    ? value.confidence
+    : value;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const number = typeof raw === "string" ? Number(raw.trim().replace(",", ".")) : Number(raw);
+  if (!Number.isFinite(number) || number < 0 || number > 1) return null;
+  return Math.round(number * 1000) / 1000;
+}
+
 function numberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
@@ -693,10 +729,13 @@ function roundConfidence(value) {
 
 module.exports = {
   SCENARIO_1_CRITERIA,
+  SCENARIO_1_CRITERIA_COLUMNS,
   SCENARIO_1_CRITERIA_LOG_ARRAY_COLUMNS,
   SCENARIO_1_CRITERIA_LOG_COLUMNS,
   SCENARIO_1_CRITERIA_LOG_CONFIDENCE_COLUMNS,
   SCENARIO_1_CRITERIA_LOG_NUMBER_COLUMNS,
+  buildScenario1CriteriaDetails,
   buildScenario1CriteriaRecognitionRecord,
+  buildScenario1CriteriaSnapshot: buildScenario1CriteriaDetails,
   calculateRecognitionConfidence,
 };

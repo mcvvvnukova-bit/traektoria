@@ -2,9 +2,16 @@ const crypto = require("node:crypto");
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { setTimeout: sleep } = require("node:timers/promises");
+const {
+  DEFAULT_OPENROUTER_API_URL,
+  DEFAULT_OPENROUTER_MODEL,
+  createChatCompletion,
+  extractChatCompletionText,
+  resolveLlmConfig,
+} = require("../../../../src/llm-client");
 
-const DEFAULT_API_URL = "https://api.openai.com/v1/responses";
-const DEFAULT_MODEL = "gpt-5.2";
+const DEFAULT_API_URL = DEFAULT_OPENROUTER_API_URL;
+const DEFAULT_MODEL = DEFAULT_OPENROUTER_MODEL;
 const DEFAULT_MAX_RETRIES = 4;
 
 const EVALUATION_SCHEMA = {
@@ -73,9 +80,11 @@ const REPAIR_PLAN_SCHEMA = {
 };
 
 function createOpenAIClient(options = {}) {
-  const apiKey = options.apiKey || process.env.OPENAI_API_KEY;
-  const model = options.model || process.env.PFDO_PARSER_UPDATER_MODEL || process.env.OPENAI_MODEL || DEFAULT_MODEL;
-  const apiUrl = options.apiUrl || DEFAULT_API_URL;
+  const modelOverride =
+    (options.model && options.model !== DEFAULT_MODEL ? options.model : "") ||
+    process.env.PFDO_PARSER_UPDATER_MODEL ||
+    process.env.OPENAI_MODEL ||
+    "";
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   const cacheDir = options.cacheDir || process.env.PFDO_PARSER_UPDATER_OPENAI_CACHE_DIR || "";
   const parsedMaxRetries =
@@ -88,12 +97,26 @@ function createOpenAIClient(options = {}) {
     throw new Error("Global fetch is unavailable. Use Node.js 18+ or inject fetchImpl.");
   }
 
-  async function createResponse(payload) {
-    if (!apiKey) {
-      throw new Error("Missing OPENAI_API_KEY");
-    }
+  function resolveStepConfig(step) {
+    return resolveLlmConfig(step, {
+      provider: options.provider,
+      defaultProvider: "openrouter",
+      model: modelOverride || undefined,
+      apiKey: options.apiKey,
+      apiUrl: options.apiUrl,
+      timeoutMs: options.timeoutMs,
+      fetchImpl,
+    });
+  }
 
-    const cacheKey = cacheDir ? cacheKeyForPayload(payload) : "";
+  async function createResponse(payload, step) {
+    const config = resolveStepConfig(step);
+
+    const cacheKey = cacheDir ? cacheKeyForPayload({
+      provider: config.provider,
+      apiUrl: config.apiUrl,
+      payload,
+    }) : "";
     if (cacheKey) {
       const cached = await readCachedResponse(cacheDir, cacheKey);
       if (cached) return cached;
@@ -102,36 +125,13 @@ function createOpenAIClient(options = {}) {
     let lastError = null;
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
       try {
-        const response = await fetchImpl(apiUrl, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
+        const body = await createChatCompletion({
+          ...config,
+          step,
+          temperature: 0.1,
+          maxTokens: parserUpdaterMaxTokens(),
+          messages: responseRequestToMessages(payload),
         });
-
-        const text = await response.text();
-        let body;
-        try {
-          body = text ? JSON.parse(text) : {};
-        } catch (error) {
-          throw new Error(`OpenAI API returned non-JSON response: ${String(text).slice(0, 300)}`);
-        }
-
-        if (!response.ok) {
-          const message = body.error && body.error.message ? body.error.message : text;
-          const error = new Error(`OpenAI API request failed: ${message}`);
-          error.status = response.status;
-          error.code = body.error && body.error.code ? body.error.code : "";
-          error.type = body.error && body.error.type ? body.error.type : "";
-          if (attempt < maxRetries && isRetryableOpenAIError(error)) {
-            lastError = error;
-            await sleep(backoffMs(attempt));
-            continue;
-          }
-          throw error;
-        }
 
         if (cacheKey) {
           await writeCachedResponse(cacheDir, cacheKey, body);
@@ -147,14 +147,17 @@ function createOpenAIClient(options = {}) {
       }
     }
 
-    throw lastError || new Error("OpenAI API request failed after retries");
+    throw lastError || new Error("LLM API request failed after retries");
   }
 
+  const initialConfig = resolveStepConfig("pfdo_parser_evaluation");
+
   return {
-    model,
+    model: initialConfig.model,
     async evaluateProgram(input) {
-      const request = buildEvaluationRequest({ model, ...input });
-      const rawResponse = await createResponse(request);
+      const config = resolveStepConfig("pfdo_parser_evaluation");
+      const request = buildEvaluationRequest({ model: config.model, ...input });
+      const rawResponse = await createResponse(request, "pfdo_parser_evaluation");
       const outputText = extractResponseText(rawResponse);
       const evaluation = parseEvaluationJson(outputText);
       return {
@@ -165,8 +168,9 @@ function createOpenAIClient(options = {}) {
       };
     },
     async requestPatch(input) {
-      const request = buildPatchRequest({ model, ...input });
-      const rawResponse = await createResponse(request);
+      const config = resolveStepConfig("pfdo_parser_patch");
+      const request = buildPatchRequest({ model: config.model, ...input });
+      const rawResponse = await createResponse(request, "pfdo_parser_patch");
       const patchText = extractResponseText(rawResponse).trim();
       return {
         request,
@@ -175,8 +179,9 @@ function createOpenAIClient(options = {}) {
       };
     },
     async requestRepairPlan(input) {
-      const request = buildRepairPlanRequest({ model, ...input });
-      const rawResponse = await createResponse(request);
+      const config = resolveStepConfig("pfdo_parser_repair_plan");
+      const request = buildRepairPlanRequest({ model: config.model, ...input });
+      const rawResponse = await createResponse(request, "pfdo_parser_repair_plan");
       const outputText = extractResponseText(rawResponse);
       const repairPlan = parseRepairPlanJson(outputText);
       return {
@@ -339,6 +344,52 @@ function buildRepairPlanRequest({
   };
 }
 
+function responseRequestToMessages(request) {
+  const systemParts = [];
+  if (request.instructions) {
+    systemParts.push(String(request.instructions));
+  }
+  if (request.text?.format?.schema) {
+    systemParts.push([
+      "Return a JSON object that matches this JSON Schema.",
+      JSON.stringify(request.text.format.schema, null, 2),
+    ].join("\n"));
+  }
+
+  const messages = [];
+  if (systemParts.length) {
+    messages.push({
+      role: "system",
+      content: systemParts.join("\n\n"),
+    });
+  }
+
+  for (const item of request.input || []) {
+    messages.push({
+      role: item.role || "user",
+      content: responseInputContentToText(item.content),
+    });
+  }
+
+  return messages;
+}
+
+function parserUpdaterMaxTokens() {
+  const parsed = Number(process.env.PFDO_PARSER_UPDATER_MAX_TOKENS || 4000);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 4000;
+}
+
+function responseInputContentToText(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((item) => {
+    if (typeof item === "string") return item;
+    if (typeof item?.text === "string") return item.text;
+    if (typeof item?.input_text === "string") return item.input_text;
+    return "";
+  }).join("\n");
+}
+
 function compactTopicRows(rows) {
   return rows.slice(0, 250).map((row) => ({
     topic_order: row.topic_order ?? row.topicOrder ?? null,
@@ -476,26 +527,7 @@ function backoffMs(attempt) {
 }
 
 function extractResponseText(response) {
-  if (typeof response.output_text === "string") {
-    return response.output_text;
-  }
-
-  const chunks = [];
-  for (const outputItem of response.output || []) {
-    for (const contentItem of outputItem.content || []) {
-      if (typeof contentItem.text === "string") {
-        chunks.push(contentItem.text);
-      } else if (typeof contentItem.output_text === "string") {
-        chunks.push(contentItem.output_text);
-      }
-    }
-  }
-
-  if (!chunks.length) {
-    throw new Error("OpenAI response did not include text output");
-  }
-
-  return chunks.join("");
+  return extractChatCompletionText(response);
 }
 
 function parseEvaluationJson(text) {

@@ -1,8 +1,5 @@
-const LOCAL_LLM_ENABLED = process.env.LOCAL_LLM_ENABLED === "true";
-const LOCAL_LLM_API_URL =
-  process.env.LOCAL_LLM_API_URL || "http://127.0.0.1:8012/v1/chat/completions";
-const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || "qwen2.5-3b-instruct-q4_k_m";
-const LOCAL_LLM_TIMEOUT_MS = Number(process.env.LOCAL_LLM_TIMEOUT_MS || 20000);
+const { createChatCompletionText, isLlmEnabled } = require("./llm-client");
+const { SCENARIO_1_CRITERIA } = require("./scenario1-criteria-recognition");
 
 const ALLOWED_SCENARIOS = new Set([
   "first_time_selection",
@@ -22,9 +19,12 @@ const ALLOWED_ADAPTATION = new Set(["fast", "careful", "soft", "depends"]);
 const ALLOWED_GOALS = new Set(["interest", "first_try", "strengths", "social", "discipline", "discover"]);
 const ALLOWED_CLARIFY_GROUP = new Set(["small_calm", "active_group", "structured", "free"]);
 const ALLOWED_CLARIFY_FOCUS = new Set(["hands", "logic", "social", "mixed"]);
+const SCENARIO_1_CRITERION_CONFIDENCE_KEYS = SCENARIO_1_CRITERIA.map((criterion) => criterion.column);
 
 function isEnabled() {
-  return LOCAL_LLM_ENABLED;
+  return isLlmEnabled("free_text") ||
+    isLlmEnabled("description_selection") ||
+    isLlmEnabled("trajectory_deep");
 }
 
 function isScenario1LlmOnly(session) {
@@ -33,51 +33,39 @@ function isScenario1LlmOnly(session) {
 }
 
 async function analyzeFreeText(session, text) {
-  if (!LOCAL_LLM_ENABLED) return null;
+  const step = llmStepForSession(session);
+  if (!isLlmEnabled(step)) return null;
   if (!text || !text.trim()) return null;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), LOCAL_LLM_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(LOCAL_LLM_API_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        model: LOCAL_LLM_MODEL,
-        temperature: 0.1,
-        max_tokens: 400,
-        messages: [
-          {
-            role: "system",
-            content: buildSystemPrompt(),
-          },
-          {
-            role: "user",
-            content: buildUserPrompt(session, text),
-          },
-        ],
-      }),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Local LLM HTTP ${response.status}`);
-    }
-
-    const payload = await response.json();
-    const content = payload?.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new Error("Local LLM returned empty content");
-    }
-
-    const parsed = extractJson(content);
-    const analysis = normalizeAnalysis(parsed);
-    if (isScenario1LlmOnly(session)) return analysis;
-    return applyHeuristics(text, analysis);
-  } finally {
-    clearTimeout(timer);
+  const content = await createChatCompletionText({
+    step,
+    temperature: 0.1,
+    maxTokens: 400,
+    messages: [
+      {
+        role: "system",
+        content: buildSystemPrompt(),
+      },
+      {
+        role: "user",
+        content: buildUserPrompt(session, text),
+      },
+    ],
+  });
+  if (!content) {
+    throw new Error("LLM returned empty content");
   }
+
+  const parsed = extractJson(content);
+  const analysis = normalizeAnalysis(parsed);
+  if (isScenario1LlmOnly(session)) return analysis;
+  return applyHeuristics(text, analysis);
+}
+
+function llmStepForSession(session) {
+  if (session?.scenario === "trajectory_deep") return "trajectory_deep";
+  if (session?.scenario === "description_selection") return "description_selection";
+  return "free_text";
 }
 
 function buildSystemPrompt() {
@@ -115,8 +103,12 @@ function buildSystemPrompt() {
     "Нормализуй location к именительному падежу из списка: 'в Оленегорске' -> 'Оленегорск', 'в Мурманске' -> 'Мурманск'.",
     "Если новое сообщение состоит только из населенного пункта, например 'Оленегорск' или 'Мурманск', это тоже location.",
     "Если указан район, организация или неясное место без населенного пункта, например 'центр города', оставь location: null.",
+    "Для scenario=description_selection верни criterion_confidences: объект с confidence распознавания по критериям С1.",
+    `Ключи criterion_confidences: ${SCENARIO_1_CRITERION_CONFIDENCE_KEYS.join(", ")}`,
+    "Значение confidence: число от 0 до 1 только если ты явно оценил критерий по сообщению пользователя.",
+    "Если confidence по критерию нет, не выдумывай: поставь null или не включай этот ключ.",
     "JSON-формат:",
-    '{"scenario":"fallback","message_for_user":"","filled_slots":{"age":null,"ageYears":null,"ageText":"","experience":null,"interests":[],"specificInterests":[],"avoidances":[],"adaptation":null,"goal":null,"location":null,"budget":null,"schedule":null,"clarifyGroup":null,"clarifyFocus":null}}',
+    '{"scenario":"fallback","message_for_user":"","filled_slots":{"age":null,"ageYears":null,"ageText":"","experience":null,"interests":[],"specificInterests":[],"avoidances":[],"adaptation":null,"goal":null,"location":null,"budget":null,"schedule":null,"clarifyGroup":null,"clarifyFocus":null},"criterion_confidences":{}}',
     "message_for_user: короткая реплика на русском, максимум 18 слов. Если сказать нечего, верни пустую строку.",
   ].join("\n");
 }
@@ -200,6 +192,12 @@ function normalizeAnalysis(parsed) {
       clarifyGroup: normalizeEnum(filled.clarifyGroup, ALLOWED_CLARIFY_GROUP),
       clarifyFocus: normalizeEnum(filled.clarifyFocus, ALLOWED_CLARIFY_FOCUS),
     },
+    criterionConfidences: normalizeCriterionConfidences(
+      parsed?.criterion_confidences ||
+        parsed?.criteria_confidences ||
+        parsed?.criterionConfidences ||
+        parsed?.criteriaConfidences,
+    ),
   };
 }
 
@@ -282,6 +280,26 @@ function normalizeFreeText(value) {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
   return normalized || null;
+}
+
+function normalizeCriterionConfidences(value) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const result = {};
+  for (const key of SCENARIO_1_CRITERION_CONFIDENCE_KEYS) {
+    const confidence = normalizeConfidence(source[key] ?? source[`${key}_confidence`]);
+    if (confidence !== null) result[key] = confidence;
+  }
+  return result;
+}
+
+function normalizeConfidence(value) {
+  const raw = value && typeof value === "object" && !Array.isArray(value)
+    ? value.confidence
+    : value;
+  if (raw === null || raw === undefined || raw === "") return null;
+  const number = typeof raw === "string" ? Number(raw.trim().replace(",", ".")) : Number(raw);
+  if (!Number.isFinite(number) || number < 0 || number > 1) return null;
+  return Math.round(number * 1000) / 1000;
 }
 
 function detectAgeBucket(text) {

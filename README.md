@@ -8,7 +8,7 @@
 - поддерживает быстрый подбор по свободному описанию с обязательными параметрами: возраст, место и интересы или направленность;
 - собирает базовый профиль ребенка и ограничения семьи;
 - задает 1-2 уточняющих вопроса, если уверенность низкая;
-- умеет разбирать свободный текст пользователя через локальную small language model и сводить его к ограниченному набору сценариев;
+- умеет разбирать свободный текст пользователя через LLM-провайдер `openrouter` или `local` и сводить его к ограниченному набору сценариев;
 - читает каталог из локальной базы `pfdo_51_mirror`;
 - объясняет, почему варианты подходят;
 - показывает, что спросить на пробном занятии и как понять, что кружок подходит.
@@ -91,13 +91,29 @@ MAX_WEBHOOK_REGISTER=false
 node src/index.js
 ```
 
-Для включения локальной модели дополнительно используются:
+Для включения LLM-анализа используются:
 
-- `LOCAL_LLM_ENABLED=true`
-- `SCENARIO1_LLM_ONLY=true` — тестовый режим сценария 1 без regexp-разбора до LLM
-- `LOCAL_LLM_API_URL=http://127.0.0.1:8012/v1/chat/completions`
+- `LLM_ENABLED=true`
+- `LLM_PROVIDER=openrouter` или `LLM_PROVIDER=local`
+- `LLM_DEFAULT_MODEL=openai/gpt-5.2`
+- `OPENROUTER_API_KEY=...` — для провайдера `openrouter`
+- `LOCAL_LLM_API_URL=http://127.0.0.1:8012/v1/chat/completions` — для провайдера `local`
 - `LOCAL_LLM_MODEL=qwen2.5-3b-instruct-q4_k_m`
-- `LOCAL_LLM_TIMEOUT_MS=20000`
+- `LLM_PROVIDER_DESCRIPTION_SELECTION=local`
+- `LLM_MODEL_DESCRIPTION_SELECTION=qwen2.5-3b-instruct-q4_k_m`
+- `LLM_PROVIDER_TRAJECTORY_DEEP=local`
+- `LLM_MODEL_TRAJECTORY_DEEP=qwen2.5-3b-instruct-q4_k_m`
+- `SCENARIO1_LLM_ONLY=true` — тестовый режим сценария 1 без regexp-разбора до LLM
+- `LOCAL_LLM_ENABLED=true` — legacy-флаг, поддерживается для совместимости
+
+Parser auto-updater использует те же переменные маршрутизации и отдельные шаги:
+
+- `LLM_PROVIDER_PFDO_PARSER_EVALUATION=openrouter`
+- `LLM_MODEL_PFDO_PARSER_EVALUATION=openai/gpt-5.2`
+- `LLM_PROVIDER_PFDO_PARSER_REPAIR_PLAN=openrouter`
+- `LLM_MODEL_PFDO_PARSER_REPAIR_PLAN=openai/gpt-5.2`
+
+Старые `LOCAL_LLM_ENABLED`, `LOCAL_LLM_API_URL`, `LOCAL_LLM_MODEL`, `LOCAL_LLM_TIMEOUT_MS` продолжают поддерживаться для совместимости локального runtime.
 
 ## PostgreSQL schema
 

@@ -71,7 +71,9 @@ test("evaluation client sends structured output request", async () => {
       capturedPayload = JSON.parse(request.body);
       return {
         ok: true,
-        text: async () => JSON.stringify({ output_text: JSON.stringify(validEvaluation) }),
+        text: async () => JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(validEvaluation) } }],
+        }),
       };
     },
   });
@@ -87,8 +89,11 @@ test("evaluation client sends structured output request", async () => {
   });
 
   assert.equal(result.evaluation.match, true);
-  assert.equal(capturedPayload.text.format.type, "json_schema");
-  assert.equal(capturedPayload.text.format.name, "pfdo_parser_evaluation");
+  assert.equal(capturedPayload.model, "gpt-test");
+  assert.equal(capturedPayload.messages[0].role, "system");
+  assert.match(capturedPayload.messages[0].content, /JSON Schema/);
+  assert.match(capturedPayload.messages[0].content, /missing_topics/);
+  assert.match(capturedPayload.messages[1].content, /Учебно-тематический план/);
 });
 
 test("patch client returns raw patch text", async () => {
@@ -125,7 +130,9 @@ test("repair plan client sends structured output request", async () => {
       capturedPayload = JSON.parse(request.body);
       return {
         ok: true,
-        text: async () => JSON.stringify({ output_text: JSON.stringify(validRepairPlan) }),
+        text: async () => JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(validRepairPlan) } }],
+        }),
       };
     },
   });
@@ -146,8 +153,48 @@ test("repair plan client sends structured output request", async () => {
   });
 
   assert.equal(result.repairPlan.summary, validRepairPlan.summary);
-  assert.equal(capturedPayload.text.format.type, "json_schema");
-  assert.equal(capturedPayload.text.format.name, "pfdo_parser_repair_plan");
+  assert.equal(capturedPayload.model, "gpt-test");
+  assert.equal(capturedPayload.messages[0].role, "system");
+  assert.match(capturedPayload.messages[0].content, /JSON Schema/);
+  assert.match(capturedPayload.messages[0].content, /database_action/);
+});
+
+test("evaluation client can use step-specific provider and model from env", async (t) => {
+  const previousProvider = process.env.LLM_PROVIDER_PFDO_PARSER_EVALUATION;
+  const previousModel = process.env.LLM_MODEL_PFDO_PARSER_EVALUATION;
+  process.env.LLM_PROVIDER_PFDO_PARSER_EVALUATION = "local";
+  process.env.LLM_MODEL_PFDO_PARSER_EVALUATION = "local-eval-model";
+  t.after(() => {
+    if (previousProvider === undefined) delete process.env.LLM_PROVIDER_PFDO_PARSER_EVALUATION;
+    else process.env.LLM_PROVIDER_PFDO_PARSER_EVALUATION = previousProvider;
+    if (previousModel === undefined) delete process.env.LLM_MODEL_PFDO_PARSER_EVALUATION;
+    else process.env.LLM_MODEL_PFDO_PARSER_EVALUATION = previousModel;
+  });
+
+  let capturedPayload = null;
+  const client = createOpenAIClient({
+    fetchImpl: async (_url, request) => {
+      capturedPayload = JSON.parse(request.body);
+      return {
+        ok: true,
+        text: async () => JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(validEvaluation) } }],
+        }),
+      };
+    },
+  });
+
+  await client.evaluateProgram({
+    context: {
+      program: { id: 1, name: "Program" },
+      documentExcerpt: "Учебно-тематический план",
+      databaseTopics: [],
+      freshTopics: [],
+      warnings: [],
+    },
+  });
+
+  assert.equal(capturedPayload.model, "local-eval-model");
 });
 
 test("OpenAI client caches identical responses", async () => {
@@ -161,7 +208,9 @@ test("OpenAI client caches identical responses", async () => {
       fetchCalls += 1;
       return {
         ok: true,
-        text: async () => JSON.stringify({ output_text: JSON.stringify(validEvaluation) }),
+        text: async () => JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(validEvaluation) } }],
+        }),
       };
     },
   });

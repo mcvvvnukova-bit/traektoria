@@ -91,9 +91,9 @@ Technical-direction exports:
 
 ## Parser auto-updater
 
-The parser auto-updater audits selected programs with OpenAI, refreshes stale `pfdo_program_calendar_topics` rows locally when fresh parser output already matches the document, and creates a structured repair plan when the parser itself needs work.
+The parser auto-updater audits selected programs with the configured LLM provider, refreshes stale `pfdo_program_calendar_topics` rows locally when fresh parser output already matches the document, and creates a structured repair plan when the parser itself needs work.
 
-OpenAI is not allowed to generate or apply code patches in the active updater flow. For parser mismatches it returns strict JSON with diagnosis, target parser files/functions, a change plan, database action, verification plan, and risk level. Local code changes are then made by the coding agent or engineer and verified with tests/regression before database rows are reloaded.
+The LLM is not allowed to generate or apply code patches in the active updater flow. For parser mismatches it returns strict JSON with diagnosis, target parser files/functions, a change plan, database action, verification plan, and risk level. Local code changes are then made by the coding agent or engineer and verified with tests/regression before database rows are reloaded.
 
 Repair plans may target only parser/extractor implementation:
 
@@ -120,12 +120,13 @@ node scripts/update-pfdo-program-parser.js \
 
 Required environment:
 
-- `OPENAI_API_KEY`
+- `OPENROUTER_API_KEY` when `LLM_PROVIDER_PFDO_PARSER_EVALUATION=openrouter`
+- `LOCAL_LLM_API_URL` when the PFDO parser steps use `LLM_PROVIDER_PFDO_PARSER_EVALUATION=local`
 - `PFDO_MIRROR_DATABASE_URL` when the local default `postgresql://localhost:5432/pfdo_51_mirror` is not correct
 
 Optional flags:
 
-- `--model <model>` overrides the OpenAI model.
+- `--model <model>` overrides the LLM model for all parser auto-updater steps.
 - `--out-dir <path>` changes the artifact directory from `tmp/parser-updater`.
 - `--limit <n>` processes only the first N program IDs.
 - `--no-db-refresh` keeps apply mode from rewriting `pfdo_program_calendar_topics`.
@@ -140,8 +141,8 @@ Outputs:
 Safety rules:
 
 - dry-run is the default;
-- OpenAI repair plans are advisory JSON, not executable patches;
-- OpenAI cannot change database structure or database access code through the updater;
+- LLM repair plans are advisory JSON, not executable patches;
+- the LLM cannot change database structure or database access code through the updater;
 - topic rows are snapshotted before refresh, and failed current-program or regression verification restores the database snapshot;
 - regression verification uses `services/program-topic-extractor/regression/checked-programs.csv`.
 

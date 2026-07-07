@@ -140,6 +140,7 @@ async function enrichDescriptionWithLlm(context, state, text, mode, options = {}
       const applied = applyLlmAnalysis(state, analysis, { mode: mode === "edit" ? "edit" : "llm" });
       return { attempted: true, applied };
     }
+    applyLlmAnalysis(state, null, { mode: mode === "edit" ? "edit" : "llm" });
   } catch (error) {
     recordLlmError(state, error);
     console.warn("Description selection LLM analysis skipped:", error.message);
