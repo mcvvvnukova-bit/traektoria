@@ -116,6 +116,8 @@ test("uses llm specific interests as exact recommendation terms", () => {
   applyLlmAnalysis(state, {
     filledSlots: {
       age: "13+",
+      ageYears: 13,
+      ageText: "13 лет",
       location: "Оленегорск",
       interests: ["sports"],
       specificInterests: ["баскетбол"],
@@ -124,6 +126,8 @@ test("uses llm specific interests as exact recommendation terms", () => {
 
   assert.deepEqual(getMissingRequiredFields(state), []);
   assert.equal(state.fields.age, "13+");
+  assert.equal(state.fields.ageYears, 13);
+  assert.equal(state.fields.ageText, "13 лет");
   assert.equal(state.fields.place, "Оленегорск");
   assert.ok(state.fields.interests.includes("sports"));
   assert.equal(state.fields.interestsText, "баскетбол");
@@ -132,6 +136,9 @@ test("uses llm specific interests as exact recommendation terms", () => {
   assert.ok(state.fields.specificInterestTerms.includes("баскет"));
 
   const profile = buildRecommendationProfile(state);
+  assert.equal(profile.age, "13+");
+  assert.equal(profile.ageYears, 13);
+  assert.equal(profile.ageText, "13 лет");
   assert.ok(profile.interests.includes("sports"));
   assert.deepEqual(profile.specificInterestLabels, ["баскетбол"]);
   assert.ok(profile.specificInterestTerms.includes("баскетбол"));

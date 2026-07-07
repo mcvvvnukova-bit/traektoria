@@ -86,8 +86,8 @@ function buildSystemPrompt() {
     "Твоя задача: свести свободный текст к ограниченному набору сценариев и заполненных слотов.",
     "Нельзя придумывать факты. Если данных нет, ставь null или пустой массив.",
     "Не заполняй avoidances, adaptation, clarifyGroup и clarifyFocus без прямых словесных сигналов в сообщении.",
-    "Не выводи возраст как число. Возвращай только один из диапазонов.",
-    "Если в сообщении есть числовой возраст со словом 'лет', 'года', 'год' или 'л.', обязательно заполни age.",
+    "age возвращай как диапазон, а точный числовой возраст пользователя возвращай отдельно в ageYears.",
+    "Если в сообщении есть числовой возраст со словом 'лет', 'года', 'год' или 'л.', обязательно заполни age и ageYears.",
     "Правила age: 3-4 года -> '3-4'; 5-6 лет -> '5-6'; 7-9 лет -> '7-9'; 10-12 лет -> '10-12'; 13 лет и старше -> '13+'.",
     "Примеры age: '13 лет' -> '13+', '9 лет' -> '7-9', '10 лет' -> '10-12'.",
     "Отвечай только JSON-объектом без markdown и пояснений.",
@@ -116,7 +116,7 @@ function buildSystemPrompt() {
     "Если новое сообщение состоит только из населенного пункта, например 'Оленегорск' или 'Мурманск', это тоже location.",
     "Если указан район, организация или неясное место без населенного пункта, например 'центр города', оставь location: null.",
     "JSON-формат:",
-    '{"scenario":"fallback","message_for_user":"","filled_slots":{"age":null,"experience":null,"interests":[],"specificInterests":[],"avoidances":[],"adaptation":null,"goal":null,"location":null,"budget":null,"schedule":null,"clarifyGroup":null,"clarifyFocus":null}}',
+    '{"scenario":"fallback","message_for_user":"","filled_slots":{"age":null,"ageYears":null,"ageText":"","experience":null,"interests":[],"specificInterests":[],"avoidances":[],"adaptation":null,"goal":null,"location":null,"budget":null,"schedule":null,"clarifyGroup":null,"clarifyFocus":null}}',
     "message_for_user: короткая реплика на русском, максимум 18 слов. Если сказать нечего, верни пустую строку.",
   ].join("\n");
 }
@@ -180,11 +180,14 @@ function extractJson(content) {
 
 function normalizeAnalysis(parsed) {
   const filled = parsed?.filled_slots || {};
+  const age = normalizeAge(filled.age, filled.ageYears || filled.age_years, filled.ageText || filled.age_text);
   return {
     scenario: normalizeScenario(parsed?.scenario),
     messageForUser: normalizeShortText(parsed?.message_for_user),
     filledSlots: {
-      age: normalizeAge(filled.age),
+      age: age.age,
+      ageYears: age.ageYears,
+      ageText: age.ageText,
       experience: normalizeEnum(filled.experience, ALLOWED_EXPERIENCE),
       interests: normalizeArray(filled.interests, ALLOWED_INTERESTS),
       specificInterests: normalizeTextArray(filled.specificInterests || filled.specific_interests),
@@ -208,19 +211,53 @@ function normalizeEnum(value, allowed) {
   return allowed.has(value) ? value : null;
 }
 
-function normalizeAge(value) {
-  const enumValue = normalizeEnum(value, ALLOWED_AGES);
-  if (enumValue) return enumValue;
-
+function normalizeAge(value, yearsValue, textValue) {
   const text = String(value ?? "").trim();
+  const ageText = normalizeFreeText(textValue);
+  const enumValue = normalizeEnum(value, ALLOWED_AGES);
+  const explicitYears = normalizeAgeYears(yearsValue);
+  if (enumValue) {
+    return {
+      age: enumValue,
+      ageYears: explicitYears,
+      ageText: ageText || (explicitYears ? `${explicitYears} лет` : ""),
+    };
+  }
+
   const range = text.match(/(\d{1,2})\s*[-–]\s*(\d{1,2})/);
   if (range) {
-    return ageBucketFromYears(Math.round((Number(range[1]) + Number(range[2])) / 2));
+    const first = Number(range[1]);
+    const second = Number(range[2]);
+    const ageYears = explicitYears || Math.round((first + second) / 2);
+    return {
+      age: ageBucketFromYears(ageYears),
+      ageYears,
+      ageText: ageText || `${first}-${second} лет`,
+    };
   }
 
   const numeric = text.match(/(\d{1,2})/);
-  if (!numeric) return null;
-  return ageBucketFromYears(Number(numeric[1]));
+  const ageYears = explicitYears || (numeric ? Number(numeric[1]) : null);
+  if (!ageYears) {
+    return {
+      age: null,
+      ageYears: null,
+      ageText: ageText || "",
+    };
+  }
+  return {
+    age: ageBucketFromYears(ageYears),
+    ageYears,
+    ageText: ageText || `${ageYears} лет`,
+  };
+}
+
+function normalizeAgeYears(value) {
+  const text = String(value ?? "").trim();
+  const match = text.match(/(\d{1,2})/);
+  if (!match) return null;
+  const years = Number(match[1]);
+  return ageBucketFromYears(years) ? years : null;
 }
 
 function normalizeArray(value, allowed) {

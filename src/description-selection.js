@@ -184,7 +184,10 @@ function applyLlmAnalysis(state, analysis, options = {}) {
 
   if (slots.age && (!state.fields.age || isApproximateAgeText(state.fields.ageText))) {
     patch.age = slots.age;
-    patch.ageText = AGE_LABELS[slots.age] || slots.age;
+    if (Number.isFinite(Number(slots.ageYears))) {
+      patch.ageYears = Number(slots.ageYears);
+    }
+    patch.ageText = slots.ageText || (patch.ageYears ? `${patch.ageYears} лет` : AGE_LABELS[slots.age] || slots.age);
   }
 
   if (slots.location && !state.fields.place) {
@@ -499,6 +502,8 @@ function buildRecommendationProfile(state) {
 
   return {
     age: fields.age || "7-9",
+    ageYears: fields.ageYears || null,
+    ageText: fields.ageText || "",
     experience: "new",
     interests: [...interests],
     avoidances: (fields.avoidances || []).filter((item) => item !== "unknown"),

@@ -154,9 +154,12 @@ test("scenario 1 prompt and parser keep exact specific interests", async (t) => 
   const systemPrompt = requestBody.messages[0].content;
   assert.match(systemPrompt, /specificInterests/);
   assert.match(systemPrompt, /баскетбол.*sports/s);
+  assert.match(systemPrompt, /ageYears/);
   assert.match(systemPrompt, /13 лет.*13\+/s);
   assert.match(systemPrompt, /9 лет.*7-9/s);
   assert.equal(result.filledSlots.age, "13+");
+  assert.equal(result.filledSlots.ageYears, 13);
+  assert.equal(result.filledSlots.ageText, "13 лет");
   assert.deepEqual(result.filledSlots.interests, ["sports"]);
   assert.deepEqual(result.filledSlots.specificInterests, ["баскетбол"]);
 });
