@@ -97,6 +97,7 @@ node src/index.js
 - `LLM_PROVIDER=openrouter` или `LLM_PROVIDER=local`
 - `LLM_DEFAULT_MODEL=openai/gpt-5.2`
 - `OPENROUTER_API_KEY=...` — для провайдера `openrouter`
+- `OPENROUTER_PROXY_URL=socks5://127.0.0.1:1080` — опционально, только для запросов к OpenRouter
 - `LOCAL_LLM_API_URL=http://127.0.0.1:8012/v1/chat/completions` — для провайдера `local`
 - `LOCAL_LLM_MODEL=qwen2.5-3b-instruct-q4_k_m`
 - `LLM_PROVIDER_DESCRIPTION_SELECTION=local`

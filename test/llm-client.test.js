@@ -2,6 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  createChatCompletion,
   createChatCompletionText,
   isLlmEnabled,
   resolveLlmConfig,
@@ -22,6 +23,7 @@ test("resolves step-specific provider and model", () => {
   assert.equal(config.provider, "local");
   assert.equal(config.model, "qwen-local");
   assert.equal(config.apiUrl, "http://127.0.0.1:9000/v1/chat/completions");
+  assert.equal(config.proxyUrl, "");
 });
 
 test("uses OpenRouter key and attribution headers", async () => {
@@ -55,6 +57,69 @@ test("uses OpenRouter key and attribution headers", async () => {
   assert.equal(capturedRequest.headers["HTTP-Referer"], "https://bot.example.test");
   assert.equal(capturedRequest.headers["X-OpenRouter-Title"], "Traektoria Test");
   assert.equal(body.model, "google/gemini-test");
+});
+
+test("uses OpenRouter proxy dispatcher only for OpenRouter provider", async () => {
+  let openrouterRequest = null;
+  const openrouterPayload = await createChatCompletion({
+    step: "description_selection",
+    provider: "openrouter",
+    model: "qwen-test",
+    apiKey: "test-openrouter-key",
+    proxyUrl: "socks5://127.0.0.1:1080",
+    messages: [{ role: "user", content: "hello" }],
+    fetchImpl: async (_url, request) => {
+      openrouterRequest = request;
+      return {
+        ok: true,
+        text: async () => JSON.stringify({
+          choices: [{ message: { content: "ok" } }],
+        }),
+      };
+    },
+  });
+
+  let localRequest = null;
+  const localPayload = await createChatCompletion({
+    step: "description_selection",
+    provider: "local",
+    model: "local-model",
+    apiUrl: "http://localhost:8012/v1/chat/completions",
+    proxyUrl: "socks5://127.0.0.1:1080",
+    messages: [{ role: "user", content: "hello" }],
+    fetchImpl: async (_url, request) => {
+      localRequest = request;
+      return {
+        ok: true,
+        text: async () => JSON.stringify({
+          choices: [{ message: { content: "local ok" } }],
+        }),
+      };
+    },
+  });
+
+  assert.ok(openrouterRequest.dispatcher);
+  assert.equal(openrouterPayload._request.proxied, true);
+  assert.equal(localRequest.dispatcher, undefined);
+  assert.equal(localPayload._request.proxied, false);
+});
+
+test("resolves OpenRouter proxy URL from environment only for OpenRouter", () => {
+  const env = {
+    LLM_PROVIDER: "openrouter",
+    OPENROUTER_API_KEY: "test-key",
+    OPENROUTER_PROXY_URL: "socks5://127.0.0.1:1080",
+    LOCAL_LLM_API_URL: "http://127.0.0.1:8012/v1/chat/completions",
+  };
+
+  assert.equal(resolveLlmConfig("description_selection", { env }).proxyUrl, "socks5://127.0.0.1:1080");
+  assert.equal(resolveLlmConfig("description_selection", {
+    env: {
+      ...env,
+      LLM_PROVIDER_DESCRIPTION_SELECTION: "local",
+      LLM_MODEL_DESCRIPTION_SELECTION: "local-model",
+    },
+  }).proxyUrl, "");
 });
 
 test("local provider does not require an API key", async () => {

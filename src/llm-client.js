@@ -3,6 +3,7 @@ const DEFAULT_OPENROUTER_MODEL = "openai/gpt-5.2";
 const DEFAULT_LOCAL_API_URL = "http://127.0.0.1:8012/v1/chat/completions";
 const DEFAULT_LOCAL_MODEL = "qwen2.5-3b-instruct-q4_k_m";
 const DEFAULT_TIMEOUT_MS = 20000;
+let undiciProxyAgents;
 
 function isLlmEnabled(step, env = process.env) {
   const stepName = normalizeStepName(step);
@@ -63,6 +64,13 @@ function resolveLlmConfig(step, options = {}) {
     apiUrl,
     apiKey,
     timeoutMs,
+    proxyUrl: provider === "openrouter" ? firstNonEmpty(
+      options.proxyUrl,
+      env[`OPENROUTER_PROXY_URL_${stepName}`],
+      env.OPENROUTER_PROXY_URL,
+      env.LLM_OPENROUTER_PROXY_URL,
+      "",
+    ) : "",
     step: stepName.toLowerCase(),
     fetchImpl: options.fetchImpl || globalThis.fetch,
     appTitle: firstNonEmpty(options.appTitle, env.OPENROUTER_APP_TITLE, env.LLM_APP_TITLE, "Traektoria51 Bot"),
@@ -97,12 +105,16 @@ async function createChatCompletion(options) {
     if (options.responseFormat) body.response_format = options.responseFormat;
     Object.assign(body, options.extraBody || {});
 
-    const response = await config.fetchImpl(config.apiUrl, {
+    const request = {
       method: "POST",
       headers: buildHeaders(config),
       body: JSON.stringify(body),
       signal,
-    });
+    };
+    const dispatcher = buildProxyDispatcher(config);
+    if (dispatcher) request.dispatcher = dispatcher;
+
+    const response = await config.fetchImpl(config.apiUrl, request);
 
     const text = await response.text();
     let payload;
@@ -123,6 +135,7 @@ async function createChatCompletion(options) {
         apiUrl: config.apiUrl,
         model: config.model,
         body,
+        proxied: Boolean(config.proxyUrl),
       },
     };
   } finally {
@@ -147,6 +160,34 @@ function buildHeaders(config) {
     if (config.appTitle) headers["X-OpenRouter-Title"] = config.appTitle;
   }
   return headers;
+}
+
+function buildProxyDispatcher(config) {
+  if (config.provider !== "openrouter" || !config.proxyUrl) return null;
+  if (!undiciProxyAgents) {
+    undiciProxyAgents = require("undici");
+  }
+  const normalized = String(config.proxyUrl).trim();
+  if (/^socks5h?:\/\//i.test(normalized) || /^socks:\/\//i.test(normalized)) {
+    return new undiciProxyAgents.Socks5ProxyAgent(normalized);
+  }
+  if (/^https?:\/\//i.test(normalized)) {
+    return new undiciProxyAgents.ProxyAgent(normalized);
+  }
+  throw new Error(`Unsupported OpenRouter proxy URL: ${redactProxyUrl(normalized)}`);
+}
+
+function redactProxyUrl(value) {
+  try {
+    const url = new URL(value);
+    if (url.username || url.password) {
+      url.username = "***";
+      url.password = "***";
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
 }
 
 function extractChatCompletionText(payload) {
