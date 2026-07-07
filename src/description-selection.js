@@ -118,6 +118,7 @@ function createDescriptionSelectionState() {
       applied: false,
       error: "",
       criterionConfidences: {},
+      criteria: {},
     },
     lastResult: null,
     pdfPath: "",
@@ -144,6 +145,11 @@ function ensureDescriptionSelectionState(session) {
     typeof session.descriptionSelection.llm.criterionConfidences !== "object" ||
     Array.isArray(session.descriptionSelection.llm.criterionConfidences)) {
     session.descriptionSelection.llm.criterionConfidences = {};
+  }
+  if (!session.descriptionSelection.llm.criteria ||
+    typeof session.descriptionSelection.llm.criteria !== "object" ||
+    Array.isArray(session.descriptionSelection.llm.criteria)) {
+    session.descriptionSelection.llm.criteria = {};
   }
   return session.descriptionSelection;
 }
@@ -191,6 +197,13 @@ function applyLlmAnalysis(state, analysis, options = {}) {
         analysis?.criterion_confidences ||
         analysis?.criteriaConfidences ||
         analysis?.criteria_confidences,
+    ),
+    criteria: normalizeModelCriteria(
+      analysis?.criteria ||
+        analysis?.criterionResults ||
+        analysis?.criterion_results ||
+        analysis?.criterionValues ||
+        analysis?.criterion_values,
     ),
   };
 
@@ -334,7 +347,13 @@ function recordLlmError(state, error) {
     applied: false,
     error: error?.message || String(error || "unknown_error"),
     criterionConfidences: {},
+    criteria: {},
   };
+}
+
+function normalizeModelCriteria(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return JSON.parse(JSON.stringify(value));
 }
 
 function normalizeCriterionConfidences(value) {

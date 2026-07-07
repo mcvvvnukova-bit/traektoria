@@ -107,8 +107,25 @@ function buildSystemPrompt() {
     `Ключи criterion_confidences: ${SCENARIO_1_CRITERION_CONFIDENCE_KEYS.join(", ")}`,
     "Значение confidence: число от 0 до 1 только если ты явно оценил критерий по сообщению пользователя.",
     "Если confidence по критерию нет, не выдумывай: поставь null или не включай этот ключ.",
+    "Для scenario=description_selection также верни criteria: объект с найденными критериями С1.",
+    "criteria используется для записи в плоскую таблицу логирования. Не копируй значения из filled_slots автоматически: распознавай каждый критерий отдельно по сообщению пользователя.",
+    "Если критерий распознан, обязательно укажи status, найденное значение в полях критерия и confidence от 0 до 1.",
+    "Если критерий не распознан по сообщению пользователя, можешь не включать его в criteria.",
+    "Формат criteria:",
+    '"criterion_01_municipality":{"status":"recognized","value":"Мурманск","confidence":0.95}',
+    '"criterion_03_age":{"status":"recognized","age_bucket":"5-6","age_years":5,"age_text":"5 лет","confidence":1}',
+    '"criterion_04_cost":{"status":"recognized","value":"бесплатно","confidence":0.8}',
+    '"criterion_06_education_form":{"status":"recognized","format":"offline","format_label":"Очно","confidence":0.8}',
+    '"criterion_07_schedule":{"status":"recognized","schedule_text":"по выходным","schedule_values":["weekends"],"confidence":0.75}',
+    '"criterion_09_direction":{"status":"recognized","direction":"science","direction_label":"Естественно-научная","confidence":0.8}',
+    '"criterion_10_group_size":{"status":"recognized","value":"маленькая группа","confidence":0.7}',
+    '"criterion_12_exact_interest_topic":{"status":"recognized","terms":["шахматы"],"labels":["шахматы"],"confidence":0.95}',
+    '"criterion_13_interest_level2_category":{"status":"recognized","values":["logic"],"labels":["логика и программирование"],"confidence":0.9}',
+    '"criterion_14_interest_level1_section":{"status":"recognized","direction":"science","direction_label":"Естественно-научная","confidence":0.9}',
+    '"criterion_15_fallback_text_keywords":{"status":"recognized","value":"шахматы","confidence":0.8}',
+    '"criterion_16_interest_without_thematic_match":{"status":"pending_scoring","interests":["logic"],"specific_terms":["шахматы"],"interests_text":"шахматы","direction":"science","confidence":0.7}',
     "JSON-формат:",
-    '{"scenario":"fallback","message_for_user":"","filled_slots":{"age":null,"ageYears":null,"ageText":"","experience":null,"interests":[],"specificInterests":[],"avoidances":[],"adaptation":null,"goal":null,"location":null,"budget":null,"schedule":null,"clarifyGroup":null,"clarifyFocus":null},"criterion_confidences":{}}',
+    '{"scenario":"fallback","message_for_user":"","filled_slots":{"age":null,"ageYears":null,"ageText":"","experience":null,"interests":[],"specificInterests":[],"avoidances":[],"adaptation":null,"goal":null,"location":null,"budget":null,"schedule":null,"clarifyGroup":null,"clarifyFocus":null},"criterion_confidences":{},"criteria":{}}',
     "message_for_user: короткая реплика на русском, максимум 18 слов. Если сказать нечего, верни пустую строку.",
   ].join("\n");
 }
@@ -198,7 +215,19 @@ function normalizeAnalysis(parsed) {
         parsed?.criterionConfidences ||
         parsed?.criteriaConfidences,
     ),
+    criteria: normalizeCriteria(
+      parsed?.criteria ||
+        parsed?.criterion_results ||
+        parsed?.criterionResults ||
+        parsed?.criterion_values ||
+        parsed?.criterionValues,
+    ),
   };
+}
+
+function normalizeCriteria(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return JSON.parse(JSON.stringify(value));
 }
 
 function normalizeScenario(value) {

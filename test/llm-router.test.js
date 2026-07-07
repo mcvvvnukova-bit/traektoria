@@ -73,6 +73,13 @@ test("scenario 1 llm-only skips llm-router post heuristics", async (t) => {
       criterion_03_age: 0.83,
       criterion_01_municipality_confidence: 0.94,
     },
+    criteria: {
+      criterion_01_municipality: {
+        status: "recognized",
+        value: "Мурманск",
+        confidence: 0.94,
+      },
+    },
   }));
 
   const result = await analyzeFreeText(
@@ -86,6 +93,13 @@ test("scenario 1 llm-only skips llm-router post heuristics", async (t) => {
   assert.deepEqual(result.criterionConfidences, {
     criterion_01_municipality: 0.94,
     criterion_03_age: 0.83,
+  });
+  assert.deepEqual(result.criteria, {
+    criterion_01_municipality: {
+      status: "recognized",
+      value: "Мурманск",
+      confidence: 0.94,
+    },
   });
 });
 
@@ -124,6 +138,9 @@ test("scenario 1 prompt explains Murmansk region location extraction", async (t)
   assert.match(systemPrompt, /новое сообщение состоит только из населенного пункта/);
   assert.match(systemPrompt, /центр города/);
   assert.match(systemPrompt, /criterion_confidences/);
+  assert.match(systemPrompt, /criteria: объект с найденными критериями С1/);
+  assert.match(systemPrompt, /criterion_01_municipality/);
+  assert.match(systemPrompt, /criterion_03_age/);
 });
 
 test("scenario 1 prompt and parser keep exact specific interests", async (t) => {

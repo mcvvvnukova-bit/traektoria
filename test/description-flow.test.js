@@ -117,6 +117,13 @@ test("enriches incomplete request with llm slots before deciding next step", asy
       criterionConfidences: {
         criterion_01_municipality: 0.91,
       },
+      criteria: {
+        criterion_01_municipality: {
+          status: "recognized",
+          value: "Мурманск",
+          confidence: 0.91,
+        },
+      },
     }),
   }));
 
@@ -128,6 +135,30 @@ test("enriches incomplete request with llm slots before deciding next step", asy
   assert.equal(harness.criteriaLogs[0].criterion_01_municipality_value, "Мурманск");
   assert.equal(harness.criteriaLogs[0].criterion_01_municipality_confidence, 0.91);
   assert.equal(harness.criteriaLogs[0].criterion_03_age_confidence, null);
+});
+
+test("llm slots enrich dialog state but do not fill criteria log without model criteria", async () => {
+  const harness = createHarness({ step: "s1_wait_description" });
+
+  await handleDescriptionText(harness.context({
+    text: "Сыну 10 лет",
+    analyzeFreeText: async () => ({
+      filledSlots: {
+        location: "Мурманск",
+        interests: ["building", "logic"],
+      },
+      criterionConfidences: {
+        criterion_01_municipality: 0.91,
+      },
+    }),
+  }));
+
+  assert.equal(harness.session.descriptionSelection.fields.place, "Мурманск");
+  assert.equal(harness.session.descriptionSelection.llm.applied, true);
+  assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_status, "not_specified");
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_value, null);
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_confidence, null);
 });
 
 test("scenario 1 llm-only sends unparsed state to llm", async (t) => {
@@ -166,6 +197,7 @@ test("scenario 1 llm-only sends unparsed state to llm", async (t) => {
   assert.equal(harness.session.step, "s1_confirm_summary");
   assert.match(harness.messages[0].text, /Я понял запрос так/);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_value, null);
 });
 
 test("scenario 1 llm-only reports unavailable llm without regexp fallback", async (t) => {
@@ -191,7 +223,7 @@ test("scenario 1 llm-only reports unavailable llm without regexp fallback", asyn
   assert.equal(harness.session.descriptionSelection.fields.place, "");
   assert.equal(harness.logs.length, 0);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
-  assert.equal(harness.criteriaLogs[0].criterion_03_age_status, "missing_required");
+  assert.equal(harness.criteriaLogs[0].criterion_03_age_status, "not_specified");
   assert.equal(harness.criteriaLogs[0].criterion_03_age_confidence, null);
 });
 
@@ -209,7 +241,7 @@ test("falls back to clarification when llm enrichment fails", async () => {
   assert.match(harness.messages[0].text, /где искать занятия/);
   assert.equal(harness.session.descriptionSelection.llm.error, "llm down");
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
-  assert.equal(harness.criteriaLogs[0].criterion_03_age_status, "recognized");
+  assert.equal(harness.criteriaLogs[0].criterion_03_age_status, "not_specified");
   assert.equal(harness.criteriaLogs[0].criterion_03_age_confidence, null);
 });
 

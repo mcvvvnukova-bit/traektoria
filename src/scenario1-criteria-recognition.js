@@ -260,6 +260,8 @@ const SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS = [
 ];
 
 const SCENARIO_1_CRITERIA_LOG_COLUMNS = SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS.map(([column]) => column);
+const SCENARIO_1_CRITERIA_LOG_COLUMN_TYPES = new Map(SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS);
+const SCENARIO_1_CRITERIA_LOG_COLUMN_SET = new Set(SCENARIO_1_CRITERIA_LOG_COLUMNS);
 const SCENARIO_1_CRITERIA_LOG_ARRAY_COLUMNS = new Set(
   SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS
     .filter(([, type]) => type === "array")
@@ -279,9 +281,13 @@ const SCENARIO_1_CRITERIA_LOG_CONFIDENCE_COLUMNS = new Set(
 function buildScenario1CriteriaRecognitionRecord(options = {}) {
   const recognitionMethod = normalizeRecognitionMethod(options.recognitionMethod);
   const metadata = normalizeMetadata(options.metadata);
-  const criteria = buildScenario1CriteriaDetails(options.state, {
-    recognitionMethod,
-  });
+  const isModelRecognition = recognitionMethod === "LLM";
+  const criteria = isModelRecognition
+    ? null
+    : buildScenario1CriteriaDetails(options.state, { recognitionMethod });
+  const flatCriteria = isModelRecognition
+    ? flattenModelCriteria(options.state?.llm?.criteria)
+    : flattenScenario1Criteria(criteria);
 
   return {
     platform: options.platform || "telegram",
@@ -291,8 +297,10 @@ function buildScenario1CriteriaRecognitionRecord(options = {}) {
     channelType: metadata.channelType || null,
     inputText: String(options.inputText || ""),
     recognitionMethod,
-    recognitionConfidence: calculateRecognitionConfidence(criteria, options.state, recognitionMethod),
-    ...flattenScenario1Criteria(criteria),
+    recognitionConfidence: isModelRecognition
+      ? calculateFlatRecognitionConfidence(flatCriteria)
+      : calculateRecognitionConfidence(criteria, options.state, recognitionMethod),
+    ...flatCriteria,
   };
 }
 
@@ -538,6 +546,113 @@ function createEmptyFlatCriteria() {
   );
 }
 
+function createEmptyModelFlatCriteria() {
+  const flat = createEmptyFlatCriteria();
+  for (const definition of SCENARIO_1_CRITERIA) {
+    flat[`${definition.column}_status`] = definition.scenarios.includes("С1")
+      ? "not_specified"
+      : "not_applicable";
+  }
+  return flat;
+}
+
+function flattenModelCriteria(rawCriteria = {}) {
+  const source = rawCriteria && typeof rawCriteria === "object" && !Array.isArray(rawCriteria)
+    ? rawCriteria
+    : {};
+  const flat = createEmptyModelFlatCriteria();
+
+  for (const [column, value] of Object.entries(source)) {
+    if (SCENARIO_1_CRITERIA_LOG_COLUMN_SET.has(column)) {
+      flat[column] = normalizeFlatModelValue(column, value);
+    }
+  }
+
+  for (const definition of SCENARIO_1_CRITERIA) {
+    const criterion = source[definition.column];
+    if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) continue;
+    applyNestedModelCriterion(flat, definition.column, criterion);
+  }
+
+  return flat;
+}
+
+function applyNestedModelCriterion(flat, prefix, criterion) {
+  const valueObject = criterion.value && typeof criterion.value === "object" && !Array.isArray(criterion.value)
+    ? criterion.value
+    : {};
+  const read = (...keys) => firstModelValue(criterion, valueObject, keys);
+
+  setModelColumn(flat, `${prefix}_status`, read("status"));
+  setModelColumn(flat, `${prefix}_confidence`, read("confidence"));
+
+  switch (prefix) {
+    case "criterion_03_age":
+      setModelColumn(flat, "criterion_03_age_bucket", read("age_bucket", "ageBucket", "bucket", "age"));
+      setModelColumn(flat, "criterion_03_age_years", read("age_years", "ageYears", "years"));
+      setModelColumn(flat, "criterion_03_age_text", read("age_text", "ageText", "text"));
+      break;
+    case "criterion_06_education_form":
+      setModelColumn(flat, "criterion_06_education_form_format", read("format"));
+      setModelColumn(flat, "criterion_06_education_form_format_label", read("format_label", "formatLabel", "label"));
+      break;
+    case "criterion_07_schedule":
+      setModelColumn(flat, "criterion_07_schedule_text", read("schedule_text", "scheduleText", "text", "value"));
+      setModelColumn(flat, "criterion_07_schedule_values", read("schedule_values", "scheduleValues", "values", "schedule"));
+      break;
+    case "criterion_09_direction":
+      setModelColumn(flat, "criterion_09_direction_value", read("direction", "value"));
+      setModelColumn(flat, "criterion_09_direction_label", read("direction_label", "directionLabel", "label"));
+      break;
+    case "criterion_12_exact_interest_topic":
+      setModelColumn(flat, "criterion_12_exact_interest_topic_terms", read("terms", "specific_terms", "specificTerms", "specificInterestTerms"));
+      setModelColumn(flat, "criterion_12_exact_interest_topic_labels", read("labels", "specific_labels", "specificLabels", "specificInterestLabels"));
+      break;
+    case "criterion_13_interest_level2_category":
+      setModelColumn(flat, "criterion_13_interest_level2_category_values", read("values", "interests"));
+      setModelColumn(flat, "criterion_13_interest_level2_category_labels", read("labels", "interestLabels", "interest_labels"));
+      break;
+    case "criterion_14_interest_level1_section":
+      setModelColumn(flat, "criterion_14_interest_level1_section_direction", read("direction", "value"));
+      setModelColumn(flat, "criterion_14_interest_level1_section_direction_label", read("direction_label", "directionLabel", "label"));
+      break;
+    case "criterion_16_interest_without_thematic_match":
+      setModelColumn(flat, "criterion_16_interest_without_thematic_match_interests", read("interests"));
+      setModelColumn(flat, "criterion_16_interest_without_thematic_match_specific_terms", read("specific_terms", "specificTerms", "specificInterestTerms"));
+      setModelColumn(flat, "criterion_16_interest_without_thematic_match_interests_text", read("interests_text", "interestsText", "text", "value"));
+      setModelColumn(flat, "criterion_16_interest_without_thematic_match_direction", read("direction"));
+      break;
+    default:
+      setModelColumn(flat, `${prefix}_value`, read("value", "text"));
+      break;
+  }
+}
+
+function setModelColumn(flat, column, value) {
+  if (!SCENARIO_1_CRITERIA_LOG_COLUMN_SET.has(column)) return;
+  const normalized = normalizeFlatModelValue(column, value);
+  if (normalized === null) return;
+  if (Array.isArray(normalized) && !normalized.length) return;
+  flat[column] = normalized;
+}
+
+function normalizeFlatModelValue(column, value) {
+  const type = SCENARIO_1_CRITERIA_LOG_COLUMN_TYPES.get(column);
+  if (type === "array") return normalizeArray(value);
+  if (type === "number") return numberOrNull(value);
+  if (type === "confidence") return normalizeModelConfidence(value);
+  if (value === null || value === undefined || value === "") return null;
+  return stringifyCriterionValue(value);
+}
+
+function firstModelValue(criterion, valueObject, keys) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(criterion, key)) return criterion[key];
+    if (Object.prototype.hasOwnProperty.call(valueObject, key)) return valueObject[key];
+  }
+  return undefined;
+}
+
 function setCommon(flat, prefix, criterion) {
   flat[`${prefix}_status`] = criterion?.status || "not_specified";
   flat[`${prefix}_confidence`] = normalizeConfidenceValue(criterion?.confidence);
@@ -680,6 +795,17 @@ function calculateRecognitionConfidence(criteria, state = {}, recognitionMethod 
   const llmErrorPenalty = recognitionMethod === "LLM" && state.llm?.error ? 0.2 : 0;
 
   return roundConfidence(average - missingPenalty - ambiguityPenalty - llmErrorPenalty);
+}
+
+function calculateFlatRecognitionConfidence(flatCriteria = {}) {
+  const values = SCENARIO_1_CRITERIA
+    .filter((criterion) => criterion.scenarios.includes("С1"))
+    .map((criterion) => flatCriteria[`${criterion.column}_confidence`])
+    .filter((value) => Number.isFinite(value));
+
+  if (!values.length) return 0;
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return roundConfidence(average);
 }
 
 function countMissingRequired(fields = {}) {
