@@ -40,7 +40,8 @@ async function analyzeFreeText(session, text) {
   const content = await createChatCompletionText({
     step,
     temperature: 0.1,
-    maxTokens: 400,
+    maxTokens: 1000,
+    responseFormat: { type: "json_object" },
     messages: [
       {
         role: "system",
