@@ -1,5 +1,10 @@
 const { executeSql, queryRows, jsonToSql, textToSql, decodeJsonCell } = require("./db");
-const { SCENARIO_1_CRITERIA_COLUMNS } = require("./scenario1-criteria-recognition");
+const {
+  SCENARIO_1_CRITERIA_LOG_ARRAY_COLUMNS,
+  SCENARIO_1_CRITERIA_LOG_COLUMNS,
+  SCENARIO_1_CRITERIA_LOG_CONFIDENCE_COLUMNS,
+  SCENARIO_1_CRITERIA_LOG_NUMBER_COLUMNS,
+} = require("./scenario1-criteria-recognition");
 
 async function loadSession(platform, chatId) {
   const rows = await queryRows(`
@@ -78,8 +83,7 @@ async function logRecommendation(platform, chatId, result, metadata = {}) {
 }
 
 async function logScenario1CriteriaRecognition(platform, sessionId, record, metadata = {}) {
-  const criteria = record?.criteria || {};
-  const criterionColumns = SCENARIO_1_CRITERIA_COLUMNS;
+  const criterionColumns = SCENARIO_1_CRITERIA_LOG_COLUMNS;
   const columns = [
     "platform",
     "session_id",
@@ -107,7 +111,7 @@ async function logScenario1CriteriaRecognition(platform, sessionId, record, meta
     textToSql(record?.inputText || ""),
     textToSql(record?.recognitionMethod === "LLM" ? "LLM" : "regexp"),
     confidenceToSql(record?.recognitionConfidence),
-    ...criterionColumns.map((column) => jsonToSql(criteria[column] || {})),
+    ...criterionColumns.map((column) => scenario1CriterionValueToSql(column, record?.[column])),
     jsonToSql(mergedMetadata),
   ];
 
@@ -144,6 +148,36 @@ function confidenceToSql(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "0";
   return String(Math.max(0, Math.min(1, Math.round(number * 1000) / 1000)));
+}
+
+function nullableNumberToSql(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return "NULL";
+  return String(Math.round(number));
+}
+
+function nullableConfidenceToSql(value) {
+  if (value === null || value === undefined || value === "") return "NULL";
+  return confidenceToSql(value);
+}
+
+function textArrayToSql(value) {
+  const list = Array.isArray(value) ? value : [];
+  if (!list.length) return "ARRAY[]::TEXT[]";
+  return `ARRAY[${list.map((item) => textToSql(String(item))).join(", ")}]::TEXT[]`;
+}
+
+function scenario1CriterionValueToSql(column, value) {
+  if (SCENARIO_1_CRITERIA_LOG_ARRAY_COLUMNS.has(column)) {
+    return textArrayToSql(value);
+  }
+  if (SCENARIO_1_CRITERIA_LOG_NUMBER_COLUMNS.has(column)) {
+    return nullableNumberToSql(value);
+  }
+  if (SCENARIO_1_CRITERIA_LOG_CONFIDENCE_COLUMNS.has(column)) {
+    return nullableConfidenceToSql(value);
+  }
+  return nullableTextToSql(value);
 }
 
 module.exports = {

@@ -6,25 +6,37 @@ const {
   applyDescriptionText,
 } = require("../src/description-selection");
 const {
-  SCENARIO_1_CRITERIA_COLUMNS,
+  SCENARIO_1_CRITERIA,
+  SCENARIO_1_CRITERIA_LOG_ARRAY_COLUMNS,
+  SCENARIO_1_CRITERIA_LOG_COLUMNS,
   buildScenario1CriteriaRecognitionRecord,
-  buildScenario1CriteriaSnapshot,
 } = require("../src/scenario1-criteria-recognition");
 
-test("builds 27 separate criterion snapshots for scenario 1 recognition", () => {
+test("builds flat criterion fields for scenario 1 recognition", () => {
   const state = createDescriptionSelectionState();
   applyDescriptionText(state, "Сыну 10 лет, Североморск, робототехника после школы");
 
-  const criteria = buildScenario1CriteriaSnapshot(state, { recognitionMethod: "regexp" });
+  const record = buildScenario1CriteriaRecognitionRecord({
+    platform: "telegram",
+    sessionId: "123",
+    inputText: "Сыну 10 лет, Североморск, робототехника после школы",
+    recognitionMethod: "regexp",
+    state,
+  });
 
-  assert.equal(SCENARIO_1_CRITERIA_COLUMNS.length, 27);
-  assert.equal(Object.keys(criteria).length, 27);
-  assert.equal(criteria.criterion_01_municipality.value, "Североморск");
-  assert.equal(criteria.criterion_01_municipality.status, "recognized");
-  assert.equal(criteria.criterion_03_age.value.ageYears, 10);
-  assert.equal(criteria.criterion_03_age.confidence, 0.95);
-  assert.deepEqual(criteria.criterion_12_exact_interest_topic.value.specificInterestLabels, ["робототехника"]);
-  assert.equal(criteria.criterion_17_completed_exact_topic_match.status, "not_applicable");
+  assert.equal(SCENARIO_1_CRITERIA.length, 27);
+  assert.ok(SCENARIO_1_CRITERIA_LOG_COLUMNS.length > 27);
+  assert.equal(record.criterion_01_municipality_status, "recognized");
+  assert.equal(record.criterion_01_municipality_value, "Североморск");
+  assert.equal(record.criterion_03_age_status, "recognized");
+  assert.equal(record.criterion_03_age_bucket, "10-12");
+  assert.equal(record.criterion_03_age_years, 10);
+  assert.equal(record.criterion_03_age_text, "10 лет");
+  assert.equal(record.criterion_03_age_confidence, 0.95);
+  assert.deepEqual(record.criterion_12_exact_interest_topic_labels, ["робототехника"]);
+  assert.equal(record.criterion_17_completed_exact_topic_match_status, "not_applicable");
+  assert.equal(record.criteria, undefined);
+  assert.equal(SCENARIO_1_CRITERIA_LOG_ARRAY_COLUMNS.has("criterion_12_exact_interest_topic_labels"), true);
 });
 
 test("builds record metadata with recognition method and overall confidence", () => {
@@ -50,5 +62,7 @@ test("builds record metadata with recognition method and overall confidence", ()
   assert.equal(record.recognitionMethod, "LLM");
   assert.ok(record.recognitionConfidence > 0);
   assert.ok(record.recognitionConfidence < 1);
-  assert.equal(record.criteria.criterion_16_interest_without_thematic_match.status, "pending_scoring");
+  assert.equal(record.criterion_16_interest_without_thematic_match_status, "pending_scoring");
+  assert.deepEqual(record.criterion_16_interest_without_thematic_match_interests, []);
+  assert.equal(record.criterion_16_interest_without_thematic_match_interests_text, "широкий запрос на развитие");
 });

@@ -163,12 +163,122 @@ const SCENARIO_1_CRITERIA = [
   },
 ];
 
-const SCENARIO_1_CRITERIA_COLUMNS = SCENARIO_1_CRITERIA.map((item) => item.column);
+const SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS = [
+  ["criterion_01_municipality_status", "text"],
+  ["criterion_01_municipality_value", "text"],
+  ["criterion_01_municipality_confidence", "confidence"],
+  ["criterion_02_organization_restriction_status", "text"],
+  ["criterion_02_organization_restriction_value", "text"],
+  ["criterion_02_organization_restriction_confidence", "confidence"],
+  ["criterion_03_age_status", "text"],
+  ["criterion_03_age_bucket", "text"],
+  ["criterion_03_age_years", "number"],
+  ["criterion_03_age_text", "text"],
+  ["criterion_03_age_confidence", "confidence"],
+  ["criterion_04_cost_status", "text"],
+  ["criterion_04_cost_value", "text"],
+  ["criterion_04_cost_confidence", "confidence"],
+  ["criterion_05_completed_program_exclusion_status", "text"],
+  ["criterion_05_completed_program_exclusion_value", "text"],
+  ["criterion_05_completed_program_exclusion_confidence", "confidence"],
+  ["criterion_06_education_form_status", "text"],
+  ["criterion_06_education_form_format", "text"],
+  ["criterion_06_education_form_format_label", "text"],
+  ["criterion_06_education_form_confidence", "confidence"],
+  ["criterion_07_schedule_status", "text"],
+  ["criterion_07_schedule_text", "text"],
+  ["criterion_07_schedule_values", "array"],
+  ["criterion_07_schedule_confidence", "confidence"],
+  ["criterion_08_availability_status", "text"],
+  ["criterion_08_availability_value", "text"],
+  ["criterion_08_availability_confidence", "confidence"],
+  ["criterion_09_direction_status", "text"],
+  ["criterion_09_direction_value", "text"],
+  ["criterion_09_direction_label", "text"],
+  ["criterion_09_direction_confidence", "confidence"],
+  ["criterion_10_group_size_status", "text"],
+  ["criterion_10_group_size_value", "text"],
+  ["criterion_10_group_size_confidence", "confidence"],
+  ["criterion_11_program_topics_available_status", "text"],
+  ["criterion_11_program_topics_available_value", "text"],
+  ["criterion_11_program_topics_available_confidence", "confidence"],
+  ["criterion_12_exact_interest_topic_status", "text"],
+  ["criterion_12_exact_interest_topic_terms", "array"],
+  ["criterion_12_exact_interest_topic_labels", "array"],
+  ["criterion_12_exact_interest_topic_confidence", "confidence"],
+  ["criterion_13_interest_level2_category_status", "text"],
+  ["criterion_13_interest_level2_category_values", "array"],
+  ["criterion_13_interest_level2_category_labels", "array"],
+  ["criterion_13_interest_level2_category_confidence", "confidence"],
+  ["criterion_14_interest_level1_section_status", "text"],
+  ["criterion_14_interest_level1_section_direction", "text"],
+  ["criterion_14_interest_level1_section_direction_label", "text"],
+  ["criterion_14_interest_level1_section_confidence", "confidence"],
+  ["criterion_15_fallback_text_keywords_status", "text"],
+  ["criterion_15_fallback_text_keywords_value", "text"],
+  ["criterion_15_fallback_text_keywords_confidence", "confidence"],
+  ["criterion_16_interest_without_thematic_match_status", "text"],
+  ["criterion_16_interest_without_thematic_match_interests", "array"],
+  ["criterion_16_interest_without_thematic_match_specific_terms", "array"],
+  ["criterion_16_interest_without_thematic_match_interests_text", "text"],
+  ["criterion_16_interest_without_thematic_match_direction", "text"],
+  ["criterion_16_interest_without_thematic_match_confidence", "confidence"],
+  ["criterion_17_completed_exact_topic_match_status", "text"],
+  ["criterion_17_completed_exact_topic_match_value", "text"],
+  ["criterion_17_completed_exact_topic_match_confidence", "confidence"],
+  ["criterion_18_new_topic_same_level2_status", "text"],
+  ["criterion_18_new_topic_same_level2_value", "text"],
+  ["criterion_18_new_topic_same_level2_confidence", "confidence"],
+  ["criterion_19_new_topic_same_level1_status", "text"],
+  ["criterion_19_new_topic_same_level1_value", "text"],
+  ["criterion_19_new_topic_same_level1_confidence", "confidence"],
+  ["criterion_20_no_completed_topic_link_status", "text"],
+  ["criterion_20_no_completed_topic_link_value", "text"],
+  ["criterion_20_no_completed_topic_link_confidence", "confidence"],
+  ["criterion_21_depth_signal_status", "text"],
+  ["criterion_21_depth_signal_value", "text"],
+  ["criterion_21_depth_signal_confidence", "confidence"],
+  ["criterion_22_no_depth_signal_repeat_status", "text"],
+  ["criterion_22_no_depth_signal_repeat_value", "text"],
+  ["criterion_22_no_depth_signal_repeat_confidence", "confidence"],
+  ["criterion_23_repeat_completed_level2_status", "text"],
+  ["criterion_23_repeat_completed_level2_value", "text"],
+  ["criterion_23_repeat_completed_level2_confidence", "confidence"],
+  ["criterion_24_new_level2_new_level1_status", "text"],
+  ["criterion_24_new_level2_new_level1_value", "text"],
+  ["criterion_24_new_level2_new_level1_confidence", "confidence"],
+  ["criterion_25_new_level2_same_level1_status", "text"],
+  ["criterion_25_new_level2_same_level1_value", "text"],
+  ["criterion_25_new_level2_same_level1_confidence", "confidence"],
+  ["criterion_26_any_classifier_topic_status", "text"],
+  ["criterion_26_any_classifier_topic_value", "text"],
+  ["criterion_26_any_classifier_topic_confidence", "confidence"],
+  ["criterion_27_new_interest_program_level_status", "text"],
+  ["criterion_27_new_interest_program_level_value", "text"],
+  ["criterion_27_new_interest_program_level_confidence", "confidence"],
+];
+
+const SCENARIO_1_CRITERIA_LOG_COLUMNS = SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS.map(([column]) => column);
+const SCENARIO_1_CRITERIA_LOG_ARRAY_COLUMNS = new Set(
+  SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS
+    .filter(([, type]) => type === "array")
+    .map(([column]) => column),
+);
+const SCENARIO_1_CRITERIA_LOG_NUMBER_COLUMNS = new Set(
+  SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS
+    .filter(([, type]) => type === "number")
+    .map(([column]) => column),
+);
+const SCENARIO_1_CRITERIA_LOG_CONFIDENCE_COLUMNS = new Set(
+  SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS
+    .filter(([, type]) => type === "confidence")
+    .map(([column]) => column),
+);
 
 function buildScenario1CriteriaRecognitionRecord(options = {}) {
   const recognitionMethod = normalizeRecognitionMethod(options.recognitionMethod);
   const metadata = normalizeMetadata(options.metadata);
-  const criteria = buildScenario1CriteriaSnapshot(options.state, {
+  const criteria = buildScenario1CriteriaDetails(options.state, {
     recognitionMethod,
   });
 
@@ -181,11 +291,11 @@ function buildScenario1CriteriaRecognitionRecord(options = {}) {
     inputText: String(options.inputText || ""),
     recognitionMethod,
     recognitionConfidence: calculateRecognitionConfidence(criteria, options.state, recognitionMethod),
-    criteria,
+    ...flattenScenario1Criteria(criteria),
   };
 }
 
-function buildScenario1CriteriaSnapshot(state = {}, options = {}) {
+function buildScenario1CriteriaDetails(state = {}, options = {}) {
   const recognitionMethod = normalizeRecognitionMethod(options.recognitionMethod);
   const fields = state.fields || {};
   const ambiguities = new Set(state.ambiguities || []);
@@ -375,6 +485,150 @@ function baseCriterion(definition, details = {}) {
   };
 }
 
+function flattenScenario1Criteria(criteria = {}) {
+  const flat = createEmptyFlatCriteria();
+
+  setSimpleCriterion(flat, "criterion_01_municipality", criteria.criterion_01_municipality);
+  setSimpleCriterion(flat, "criterion_02_organization_restriction", criteria.criterion_02_organization_restriction);
+  setAgeCriterion(flat, criteria.criterion_03_age);
+  setSimpleCriterion(flat, "criterion_04_cost", criteria.criterion_04_cost);
+  setSimpleCriterion(flat, "criterion_05_completed_program_exclusion", criteria.criterion_05_completed_program_exclusion);
+  setEducationFormCriterion(flat, criteria.criterion_06_education_form);
+  setScheduleCriterion(flat, criteria.criterion_07_schedule);
+  setSimpleCriterion(flat, "criterion_08_availability", criteria.criterion_08_availability);
+  setDirectionValueCriterion(flat, criteria.criterion_09_direction);
+  setSimpleCriterion(flat, "criterion_10_group_size", criteria.criterion_10_group_size);
+  setSimpleCriterion(flat, "criterion_11_program_topics_available", criteria.criterion_11_program_topics_available);
+  setExactInterestCriterion(flat, criteria.criterion_12_exact_interest_topic);
+  setInterestCategoryCriterion(flat, criteria.criterion_13_interest_level2_category);
+  setDirectionCriterion(flat, "criterion_14_interest_level1_section", criteria.criterion_14_interest_level1_section);
+  setSimpleCriterion(flat, "criterion_15_fallback_text_keywords", criteria.criterion_15_fallback_text_keywords);
+  setInterestMismatchCriterion(flat, criteria.criterion_16_interest_without_thematic_match);
+
+  for (const column of [
+    "criterion_17_completed_exact_topic_match",
+    "criterion_18_new_topic_same_level2",
+    "criterion_19_new_topic_same_level1",
+    "criterion_20_no_completed_topic_link",
+    "criterion_21_depth_signal",
+    "criterion_22_no_depth_signal_repeat",
+    "criterion_23_repeat_completed_level2",
+    "criterion_24_new_level2_new_level1",
+    "criterion_25_new_level2_same_level1",
+    "criterion_26_any_classifier_topic",
+    "criterion_27_new_interest_program_level",
+  ]) {
+    setSimpleCriterion(flat, column, criteria[column]);
+  }
+
+  return flat;
+}
+
+function createEmptyFlatCriteria() {
+  return Object.fromEntries(
+    SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS.map(([column, type]) => [
+      column,
+      type === "array" ? [] : null,
+    ]),
+  );
+}
+
+function setCommon(flat, prefix, criterion) {
+  flat[`${prefix}_status`] = criterion?.status || "not_specified";
+  flat[`${prefix}_confidence`] = normalizeConfidenceValue(criterion?.confidence);
+}
+
+function setSimpleCriterion(flat, prefix, criterion) {
+  setCommon(flat, prefix, criterion);
+  flat[`${prefix}_value`] = stringifyCriterionValue(criterion?.value);
+}
+
+function setAgeCriterion(flat, criterion) {
+  setCommon(flat, "criterion_03_age", criterion);
+  const value = criterion?.value || {};
+  flat.criterion_03_age_bucket = value.age || null;
+  flat.criterion_03_age_years = numberOrNull(value.ageYears);
+  flat.criterion_03_age_text = value.ageText || null;
+}
+
+function setEducationFormCriterion(flat, criterion) {
+  setCommon(flat, "criterion_06_education_form", criterion);
+  const value = criterion?.value || {};
+  flat.criterion_06_education_form_format = value.format || null;
+  flat.criterion_06_education_form_format_label = value.formatLabel || null;
+}
+
+function setScheduleCriterion(flat, criterion) {
+  setCommon(flat, "criterion_07_schedule", criterion);
+  const value = criterion?.value || {};
+  flat.criterion_07_schedule_text = value.scheduleText || null;
+  flat.criterion_07_schedule_values = normalizeArray(value.schedule);
+}
+
+function setDirectionCriterion(flat, prefix, criterion) {
+  setCommon(flat, prefix, criterion);
+  const value = criterion?.value || {};
+  flat[`${prefix}_direction`] = value.direction || null;
+  flat[`${prefix}_direction_label`] = value.directionLabel || null;
+}
+
+function setDirectionValueCriterion(flat, criterion) {
+  setCommon(flat, "criterion_09_direction", criterion);
+  const value = criterion?.value || {};
+  flat.criterion_09_direction_value = value.direction || null;
+  flat.criterion_09_direction_label = value.directionLabel || null;
+}
+
+function setExactInterestCriterion(flat, criterion) {
+  setCommon(flat, "criterion_12_exact_interest_topic", criterion);
+  const value = criterion?.value || {};
+  flat.criterion_12_exact_interest_topic_terms = normalizeArray(value.specificInterestTerms);
+  flat.criterion_12_exact_interest_topic_labels = normalizeArray(value.specificInterestLabels);
+}
+
+function setInterestCategoryCriterion(flat, criterion) {
+  setCommon(flat, "criterion_13_interest_level2_category", criterion);
+  const value = criterion?.value || {};
+  flat.criterion_13_interest_level2_category_values = normalizeArray(value.interests);
+  flat.criterion_13_interest_level2_category_labels = normalizeArray(value.interestLabels);
+}
+
+function setInterestMismatchCriterion(flat, criterion) {
+  setCommon(flat, "criterion_16_interest_without_thematic_match", criterion);
+  const value = criterion?.value || {};
+  flat.criterion_16_interest_without_thematic_match_interests = normalizeArray(value.interests);
+  flat.criterion_16_interest_without_thematic_match_specific_terms = normalizeArray(value.specificInterestTerms);
+  flat.criterion_16_interest_without_thematic_match_interests_text = value.interestsText || null;
+  flat.criterion_16_interest_without_thematic_match_direction = value.direction || null;
+}
+
+function stringifyCriterionValue(value) {
+  if (value === null || value === undefined || value === "") return null;
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "object") {
+    return Object.values(value)
+      .flat()
+      .filter((item) => item !== null && item !== undefined && item !== "")
+      .join(", ") || null;
+  }
+  return String(value);
+}
+
+function normalizeArray(value) {
+  return Array.isArray(value)
+    ? value.filter((item) => item !== null && item !== undefined && item !== "").map(String)
+    : [];
+}
+
+function normalizeConfidenceValue(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
 function calculateRecognitionConfidence(criteria, state = {}, recognitionMethod = "regexp") {
   const confidenceValues = Object.values(criteria)
     .filter((criterion) => criterion.appliesToScenario1)
@@ -439,8 +693,10 @@ function roundConfidence(value) {
 
 module.exports = {
   SCENARIO_1_CRITERIA,
-  SCENARIO_1_CRITERIA_COLUMNS,
+  SCENARIO_1_CRITERIA_LOG_ARRAY_COLUMNS,
+  SCENARIO_1_CRITERIA_LOG_COLUMNS,
+  SCENARIO_1_CRITERIA_LOG_CONFIDENCE_COLUMNS,
+  SCENARIO_1_CRITERIA_LOG_NUMBER_COLUMNS,
   buildScenario1CriteriaRecognitionRecord,
-  buildScenario1CriteriaSnapshot,
   calculateRecognitionConfidence,
 };

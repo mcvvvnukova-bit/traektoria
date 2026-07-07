@@ -91,7 +91,7 @@ test("complete request goes directly to recommendations and PDF prompt", async (
   assert.equal(harness.logs[0].scenario, "description_selection");
   assert.equal(harness.criteriaLogs.length, 1);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "regexp");
-  assert.equal(harness.criteriaLogs[0].criteria.criterion_03_age.value.ageYears, 10);
+  assert.equal(harness.criteriaLogs[0].criterion_03_age_years, 10);
 });
 
 test("missing required data asks one combined clarification", async () => {
@@ -122,7 +122,7 @@ test("enriches incomplete request with llm slots before deciding next step", asy
   assert.equal(harness.session.descriptionSelection.llm.attempted, true);
   assert.equal(harness.session.descriptionSelection.llm.applied, true);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
-  assert.equal(harness.criteriaLogs[0].criteria.criterion_01_municipality.value, "Мурманск");
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_value, "Мурманск");
 });
 
 test("scenario 1 llm-only sends unparsed state to llm", async (t) => {
@@ -186,7 +186,7 @@ test("scenario 1 llm-only reports unavailable llm without regexp fallback", asyn
   assert.equal(harness.session.descriptionSelection.fields.place, "");
   assert.equal(harness.logs.length, 0);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
-  assert.equal(harness.criteriaLogs[0].criteria.criterion_03_age.status, "missing_required");
+  assert.equal(harness.criteriaLogs[0].criterion_03_age_status, "missing_required");
 });
 
 test("falls back to clarification when llm enrichment fails", async () => {
