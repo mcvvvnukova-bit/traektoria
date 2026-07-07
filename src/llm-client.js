@@ -114,7 +114,10 @@ async function createChatCompletion(options) {
     const dispatcher = buildProxyDispatcher(config);
     if (dispatcher) request.dispatcher = dispatcher;
 
-    const response = await config.fetchImpl(config.apiUrl, request);
+    const fetchImpl = dispatcher && config.fetchImpl === globalThis.fetch && undiciProxyAgents?.fetch
+      ? undiciProxyAgents.fetch
+      : config.fetchImpl;
+    const response = await fetchImpl(config.apiUrl, request);
 
     const text = await response.text();
     let payload;
