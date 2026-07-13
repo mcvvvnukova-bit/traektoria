@@ -1,5 +1,9 @@
 const { createChatCompletionText, isLlmEnabled } = require("./llm-client");
 const { SCENARIO_1_CRITERIA } = require("./scenario1-criteria-recognition");
+const {
+  MURMANSK_SETTLEMENT_PROMPT_LIST,
+  normalizeSettlementLocation,
+} = require("./murmansk-settlements");
 
 const ALLOWED_SCENARIOS = new Set([
   "first_time_selection",
@@ -99,8 +103,9 @@ function buildSystemPrompt() {
     "Допустимые goal: interest, first_try, strengths, social, discipline, discover",
     "Допустимые clarifyGroup: small_calm, active_group, structured, free",
     "Допустимые clarifyFocus: hands, logic, social, mixed",
-    "location заполняй только населенным пунктом Мурманской области из списка:",
-    "Мурманск, Североморск, Апатиты, Кировск, Мончегорск, Кандалакша, Кола, Оленегорск, Полярный, Полярные Зори, Снежногорск, Заозерск, Гаджиево, Видяево, Заполярный, Никель, Ковдор, Умба, Ловозеро, Ревда.",
+    "location заполняй только населенным пунктом Мурманской области из полного списка Росстата:",
+    MURMANSK_SETTLEMENT_PROMPT_LIST,
+    "Возвращай location названием населенного пункта без сокращения типа: 'г Мурманск' -> 'Мурманск', 'с Варзуга' -> 'Варзуга', 'ж/д ст Нял' -> 'Нял'.",
     "Допускай опечатки в названии населенного пункта только по закрытому списку населенных пунктов Мурманской области.",
     "Для длинных названий от 8 букв допускай до 3 односимвольных ошибок: пропуск, лишняя буква, замена буквы или перестановка соседних букв.",
     "Для названий 5-7 букв допускай до 2 таких ошибок.",
@@ -214,7 +219,7 @@ function normalizeAnalysis(parsed) {
       avoidances: normalizeArray(filled.avoidances, ALLOWED_AVOIDANCES),
       adaptation: normalizeEnum(filled.adaptation, ALLOWED_ADAPTATION),
       goal: normalizeEnum(filled.goal, ALLOWED_GOALS),
-      location: normalizeFreeText(filled.location),
+      location: normalizeSettlementLocation(filled.location) || normalizeFreeText(filled.location),
       budget: normalizeFreeText(filled.budget),
       schedule: normalizeFreeText(filled.schedule),
       clarifyGroup: normalizeEnum(filled.clarifyGroup, ALLOWED_CLARIFY_GROUP),

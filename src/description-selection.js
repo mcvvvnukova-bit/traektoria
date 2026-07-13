@@ -1,4 +1,5 @@
 const { analyzeQueryInterests } = require("./query-ontology");
+const { findMurmanskSettlements } = require("./murmansk-settlements");
 
 const AGE_LABELS = {
   "3-4": "3-4 года",
@@ -56,7 +57,7 @@ const INTEREST_RULES = [
   ["calm", "спокойные занятия", /спокой|усидчив|в своем темпе|не спеша/i],
 ];
 
-const MUNICIPALITY_RULES = [
+const LEGACY_MUNICIPALITY_RULES = [
   ["Мурманск", /(?:^|[^а-яё])мурманск(?:е|а|у|ом)?(?=$|[^а-яё])/i],
   ["Североморск", /североморск|североморске/i],
   ["Апатиты", /апатит/i],
@@ -836,8 +837,8 @@ function detectPlace(text) {
 }
 
 function findKnownMunicipalities(text) {
-  const matches = [];
-  for (const [place, pattern] of MUNICIPALITY_RULES) {
+  const matches = findMurmanskSettlements(text);
+  for (const [place, pattern] of LEGACY_MUNICIPALITY_RULES) {
     if (pattern.test(text)) matches.push(place);
   }
   return [...new Set(matches)];

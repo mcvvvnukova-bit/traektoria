@@ -102,6 +102,25 @@ test("treats Murmansk region as ambiguous place", () => {
   );
 });
 
+test("recognizes full Rosstat settlement list in rule-based parser", () => {
+  const state = createDescriptionSelectionState();
+  applyDescriptionText(state, "Дочке 9 лет, рисование в Варзуге");
+
+  assert.deepEqual(getMissingRequiredFields(state), []);
+  assert.equal(state.fields.place, "Варзуга");
+  assert.equal(state.fields.placeKnown, true);
+  assert.ok(state.fields.interests.includes("creative"));
+});
+
+test("recognizes railway station settlements from the Rosstat list", () => {
+  const state = createDescriptionSelectionState();
+  applyDescriptionText(state, "Сыну 10 лет, робототехника, ж/д ст Нял");
+
+  assert.deepEqual(getMissingRequiredFields(state), []);
+  assert.equal(state.fields.place, "Нял");
+  assert.equal(state.fields.placeKnown, true);
+});
+
 test("builds one prompt for multiple missing required fields", () => {
   const state = createDescriptionSelectionState();
   applyDescriptionText(state, "8 лет");

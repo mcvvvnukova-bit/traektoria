@@ -133,8 +133,13 @@ test("scenario 1 prompt explains Murmansk region location extraction", async (t)
 
   const systemPrompt = requestBody.messages[0].content;
   assert.match(systemPrompt, /населенным пунктом Мурманской области/);
+  assert.match(systemPrompt, /полного списка Росстата/);
   assert.match(systemPrompt, /Оленегорск/);
   assert.match(systemPrompt, /Мурманск/);
+  assert.match(systemPrompt, /с Варзуга/);
+  assert.match(systemPrompt, /ж\/д ст Нял/);
+  assert.match(systemPrompt, /нп Путевая Усадьба 9 км железной дороги Луостари-Никель/);
+  assert.match(systemPrompt, /ж\/д ст Нял' -> 'Нял'/);
   assert.match(systemPrompt, /Допускай опечатки/);
   assert.match(systemPrompt, /до 3 односимвольных ошибок/);
   assert.match(systemPrompt, /до 4 букв не исправляй по догадке/);
@@ -148,6 +153,34 @@ test("scenario 1 prompt explains Murmansk region location extraction", async (t)
   assert.match(systemPrompt, /criteria: объект с найденными критериями С1/);
   assert.match(systemPrompt, /criterion_01_municipality/);
   assert.match(systemPrompt, /criterion_03_age/);
+});
+
+test("scenario 1 normalizes official typed settlement values from llm", async (t) => {
+  const { analyzeFreeText } = setupEnabledLlm(t, async () => llmResponse({
+    scenario: "ready_to_recommend",
+    message_for_user: "",
+    filled_slots: {
+      age: "7-9",
+      experience: null,
+      interests: ["creative"],
+      specificInterests: ["рисование"],
+      avoidances: [],
+      adaptation: null,
+      goal: null,
+      location: "с Варзуга",
+      budget: null,
+      schedule: null,
+      clarifyGroup: null,
+      clarifyFocus: null,
+    },
+  }));
+
+  const result = await analyzeFreeText(
+    { scenario: "description_selection", mode: "description", current: {} },
+    "рисование в Варзуге для девочки 9 лет",
+  );
+
+  assert.equal(result.filledSlots.location, "Варзуга");
 });
 
 test("scenario 1 prompt and parser keep exact specific interests", async (t) => {
