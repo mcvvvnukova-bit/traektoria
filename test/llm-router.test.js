@@ -135,6 +135,10 @@ test("scenario 1 prompt explains Murmansk region location extraction", async (t)
   assert.match(systemPrompt, /населенным пунктом Мурманской области/);
   assert.match(systemPrompt, /Оленегорск/);
   assert.match(systemPrompt, /Мурманск/);
+  assert.match(systemPrompt, /Допускай опечатки/);
+  assert.match(systemPrompt, /до 3 односимвольных ошибок/);
+  assert.match(systemPrompt, /до 4 букв не исправляй по догадке/);
+  assert.match(systemPrompt, /recognized_ambiguous/);
   assert.match(systemPrompt, /новое сообщение состоит только из населенного пункта/);
   assert.match(systemPrompt, /центр города/);
   assert.match(systemPrompt, /criterion_confidences/);
