@@ -56,27 +56,10 @@ test("scenario 1 llm-only skips llm-router post heuristics", async (t) => {
   const { analyzeFreeText } = setupEnabledLlm(t, async () => llmResponse({
     scenario: "fallback",
     message_for_user: "",
-    filled_slots: {
-      age: null,
-      experience: null,
-      interests: [],
-      avoidances: [],
-      adaptation: null,
-      goal: null,
-      location: null,
-      budget: null,
-      schedule: null,
-      clarifyGroup: null,
-      clarifyFocus: null,
-    },
-    criterion_confidences: {
-      criterion_03_age: 0.83,
-      criterion_01_municipality_confidence: 0.94,
-    },
     criteria: {
       criterion_01_municipality: {
         status: "recognized",
-        value: "Мурманск",
+        value: ["Мурманск"],
         confidence: 0.94,
       },
     },
@@ -87,17 +70,12 @@ test("scenario 1 llm-only skips llm-router post heuristics", async (t) => {
     "Сыну 10 лет, робототехника после школы",
   );
 
-  assert.equal(result.filledSlots.age, null);
-  assert.deepEqual(result.filledSlots.interests, []);
-  assert.equal(result.filledSlots.schedule, null);
-  assert.deepEqual(result.criterionConfidences, {
-    criterion_01_municipality: 0.94,
-    criterion_03_age: 0.83,
-  });
+  assert.equal(result.filledSlots, undefined);
+  assert.equal(result.criterionConfidences, undefined);
   assert.deepEqual(result.criteria, {
     criterion_01_municipality: {
       status: "recognized",
-      value: "Мурманск",
+      value: ["Мурманск"],
       confidence: 0.94,
     },
   });
@@ -110,18 +88,12 @@ test("scenario 1 prompt explains Murmansk region location extraction", async (t)
     return llmResponse({
       scenario: "fallback",
       message_for_user: "",
-      filled_slots: {
-        age: null,
-        experience: null,
-        interests: [],
-        avoidances: [],
-        adaptation: null,
-        goal: null,
-        location: "Оленегорск",
-        budget: null,
-        schedule: null,
-        clarifyGroup: null,
-        clarifyFocus: null,
+      criteria: {
+        criterion_01_municipality: {
+          status: "recognized",
+          value: ["Оленегорск"],
+          confidence: 0.95,
+        },
       },
     });
   });
@@ -149,8 +121,9 @@ test("scenario 1 prompt explains Murmansk region location extraction", async (t)
   assert.match(systemPrompt, /североморские секции/);
   assert.match(systemPrompt, /новое сообщение состоит только из населенного пункта/);
   assert.match(systemPrompt, /центр города/);
-  assert.match(systemPrompt, /criterion_confidences/);
-  assert.match(systemPrompt, /criteria: объект с найденными критериями С1/);
+  assert.doesNotMatch(systemPrompt, /criterion_confidences/);
+  assert.doesNotMatch(systemPrompt, /filled_slots/);
+  assert.match(systemPrompt, /Всегда возвращай только scenario, message_for_user и criteria/);
   assert.match(systemPrompt, /criterion_01_municipality/);
   assert.match(systemPrompt, /criterion_03_age/);
 });
@@ -159,19 +132,12 @@ test("scenario 1 normalizes official typed settlement values from llm", async (t
   const { analyzeFreeText } = setupEnabledLlm(t, async () => llmResponse({
     scenario: "ready_to_recommend",
     message_for_user: "",
-    filled_slots: {
-      age: "7-9",
-      experience: null,
-      interests: ["creative"],
-      specificInterests: ["рисование"],
-      avoidances: [],
-      adaptation: null,
-      goal: null,
-      location: "с Варзуга",
-      budget: null,
-      schedule: null,
-      clarifyGroup: null,
-      clarifyFocus: null,
+    criteria: {
+      criterion_01_municipality: {
+        status: "recognized",
+        value: ["с Варзуга"],
+        confidence: 0.95,
+      },
     },
   }));
 
@@ -180,7 +146,7 @@ test("scenario 1 normalizes official typed settlement values from llm", async (t
     "рисование в Варзуге для девочки 9 лет",
   );
 
-  assert.equal(result.filledSlots.location, "Варзуга");
+  assert.deepEqual(result.criteria.criterion_01_municipality.value, ["Варзуга"]);
 });
 
 test("scenario 1 prompt and parser keep exact specific interests", async (t) => {
@@ -190,19 +156,31 @@ test("scenario 1 prompt and parser keep exact specific interests", async (t) => 
     return llmResponse({
       scenario: "ready_to_recommend",
       message_for_user: "",
-      filled_slots: {
-        age: "13 лет",
-        experience: null,
-        interests: ["sports"],
-        specificInterests: ["баскетбол"],
-        avoidances: [],
-        adaptation: null,
-        goal: null,
-        location: "Оленегорск",
-        budget: null,
-        schedule: null,
-        clarifyGroup: null,
-        clarifyFocus: null,
+      criteria: {
+        criterion_01_municipality: {
+          status: "recognized",
+          value: ["Оленегорск"],
+          confidence: 0.95,
+        },
+        criterion_03_age: {
+          status: "recognized",
+          age_bucket: "13+",
+          age_years: 13,
+          age_text: "13 лет",
+          confidence: 1,
+        },
+        criterion_12_exact_interest_topic: {
+          status: "recognized",
+          terms: ["баскетбол"],
+          labels: ["баскетбол"],
+          confidence: 0.95,
+        },
+        criterion_13_interest_level2_category: {
+          status: "recognized",
+          values: ["sports"],
+          labels: ["спорт"],
+          confidence: 0.9,
+        },
       },
     });
   });
@@ -213,14 +191,15 @@ test("scenario 1 prompt and parser keep exact specific interests", async (t) => 
   );
 
   const systemPrompt = requestBody.messages[0].content;
-  assert.match(systemPrompt, /specificInterests/);
+  assert.doesNotMatch(systemPrompt, /specificInterests/);
+  assert.match(systemPrompt, /criterion_12_exact_interest_topic/);
   assert.match(systemPrompt, /баскетбол.*sports/s);
-  assert.match(systemPrompt, /ageYears/);
+  assert.match(systemPrompt, /age_years/);
   assert.match(systemPrompt, /13 лет.*13\+/s);
   assert.match(systemPrompt, /9 лет.*7-9/s);
-  assert.equal(result.filledSlots.age, "13+");
-  assert.equal(result.filledSlots.ageYears, 13);
-  assert.equal(result.filledSlots.ageText, "13 лет");
-  assert.deepEqual(result.filledSlots.interests, ["sports"]);
-  assert.deepEqual(result.filledSlots.specificInterests, ["баскетбол"]);
+  assert.equal(result.criteria.criterion_03_age.age_bucket, "13+");
+  assert.equal(result.criteria.criterion_03_age.age_years, 13);
+  assert.equal(result.criteria.criterion_03_age.age_text, "13 лет");
+  assert.deepEqual(result.criteria.criterion_13_interest_level2_category.values, ["sports"]);
+  assert.deepEqual(result.criteria.criterion_12_exact_interest_topic.terms, ["баскетбол"]);
 });

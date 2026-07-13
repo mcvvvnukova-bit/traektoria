@@ -485,10 +485,6 @@ function buildScenario1CriteriaDetails(state = {}, options = {}) {
     note: "The final mismatch decision is made during scoring against PFDO topic data.",
   });
 
-  if (recognitionMethod === "LLM") {
-    applyModelCriterionConfidences(result, state.llm?.criterionConfidences);
-  }
-
   return result;
 }
 
@@ -771,27 +767,6 @@ function buildMunicipalityCriterionValues(fields = {}) {
 
 function normalizeConfidenceValue(value) {
   return Number.isFinite(value) ? value : null;
-}
-
-function applyModelCriterionConfidences(criteria, rawConfidences = {}) {
-  const confidences = normalizeModelCriterionConfidences(rawConfidences);
-  for (const column of SCENARIO_1_CRITERIA_COLUMNS) {
-    if (!criteria[column]) continue;
-    criteria[column].confidence = Object.prototype.hasOwnProperty.call(confidences, column)
-      ? confidences[column]
-      : null;
-  }
-  return criteria;
-}
-
-function normalizeModelCriterionConfidences(value) {
-  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const result = {};
-  for (const column of SCENARIO_1_CRITERIA_COLUMNS) {
-    const confidence = normalizeModelConfidence(source[column] ?? source[`${column}_confidence`]);
-    if (confidence !== null) result[column] = confidence;
-  }
-  return result;
 }
 
 function normalizeModelConfidence(value) {

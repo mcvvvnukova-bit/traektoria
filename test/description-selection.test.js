@@ -152,17 +152,35 @@ test("edit replaces changed interest and keeps existing age and place", () => {
   assert.equal(state.fields.interestsText, "рисование");
 });
 
-test("uses llm slots as validated enrichment for missing required fields", () => {
+test("uses llm criteria as validated enrichment for missing required fields", () => {
   const state = createDescriptionSelectionState();
   applyDescriptionText(state, "Сыну 10 лет");
 
   assert.equal(shouldUseLlmForDescription(state, "Сыну 10 лет"), true);
   applyLlmAnalysis(state, {
-    filledSlots: {
-      location: "Мурманск",
-      interests: ["building", "logic"],
-      budget: "до 1000 рублей",
-      schedule: "вечером",
+    criteria: {
+      criterion_01_municipality: {
+        status: "recognized",
+        value: ["Мурманск"],
+        confidence: 0.95,
+      },
+      criterion_04_cost: {
+        status: "recognized",
+        value: "до 1000 рублей",
+        confidence: 0.8,
+      },
+      criterion_07_schedule: {
+        status: "recognized",
+        schedule_text: "вечером",
+        schedule_values: ["evening"],
+        confidence: 0.75,
+      },
+      criterion_13_interest_level2_category: {
+        status: "recognized",
+        values: ["building", "logic"],
+        labels: ["конструирование", "логика и программирование"],
+        confidence: 0.9,
+      },
     },
   });
 
@@ -172,19 +190,38 @@ test("uses llm slots as validated enrichment for missing required fields", () =>
   assert.deepEqual(state.fields.interests, ["building", "logic"]);
   assert.equal(state.fields.budget, "до 1000 рублей");
   assert.equal(state.fields.scheduleText, "вечером");
+  assert.equal(state.llm.criteria.criterion_01_municipality.confidence, 0.95);
 });
 
-test("uses llm specific interests as exact recommendation terms", () => {
+test("uses llm exact interest criteria as recommendation terms", () => {
   const state = createDescriptionSelectionState();
 
   applyLlmAnalysis(state, {
-    filledSlots: {
-      age: "13+",
-      ageYears: 13,
-      ageText: "13 лет",
-      location: "Оленегорск",
-      interests: ["sports"],
-      specificInterests: ["баскетбол"],
+    criteria: {
+      criterion_01_municipality: {
+        status: "recognized",
+        value: ["Оленегорск"],
+        confidence: 0.95,
+      },
+      criterion_03_age: {
+        status: "recognized",
+        age_bucket: "13+",
+        age_years: 13,
+        age_text: "13 лет",
+        confidence: 1,
+      },
+      criterion_12_exact_interest_topic: {
+        status: "recognized",
+        terms: ["баскетбол"],
+        labels: ["баскетбол"],
+        confidence: 0.95,
+      },
+      criterion_13_interest_level2_category: {
+        status: "recognized",
+        values: ["sports"],
+        labels: ["спорт"],
+        confidence: 0.9,
+      },
     },
   });
 
@@ -208,12 +245,17 @@ test("uses llm specific interests as exact recommendation terms", () => {
   assert.ok(profile.specificInterestTerms.includes("баскетбол"));
 });
 
-test("keeps unknown llm specific interests as raw exact terms", () => {
+test("keeps unknown llm exact interest criteria as raw terms", () => {
   const state = createDescriptionSelectionState();
 
   applyLlmAnalysis(state, {
-    filledSlots: {
-      specificInterests: ["флорбол"],
+    criteria: {
+      criterion_12_exact_interest_topic: {
+        status: "recognized",
+        terms: ["флорбол"],
+        labels: ["флорбол"],
+        confidence: 0.85,
+      },
     },
   });
 
@@ -222,21 +264,36 @@ test("keeps unknown llm specific interests as raw exact terms", () => {
   assert.deepEqual(state.fields.specificInterestTerms, ["флорбол"]);
 });
 
-test("stores only explicit llm criterion confidences", () => {
+test("stores normalized llm criteria and ignores unknown criteria columns", () => {
   const state = createDescriptionSelectionState();
 
   applyLlmAnalysis(state, {
-    filledSlots: {},
-    criterionConfidences: {
-      criterion_03_age: "0.82",
-      criterion_01_municipality: 1.2,
-      criterion_09_direction: "unknown",
+    criteria: {
+      criterion_03_age: {
+        status: "recognized",
+        age_bucket: "10-12",
+        age_years: "10",
+        age_text: "10 лет",
+        confidence: "0.82",
+      },
+      criterion_01_municipality: {
+        status: "recognized",
+        value: ["Мурманск"],
+        confidence: 1.2,
+      },
+      unknown_column: {
+        status: "recognized",
+        value: "ignored",
+        confidence: 1,
+      },
     },
   });
 
-  assert.deepEqual(state.llm.criterionConfidences, {
-    criterion_03_age: 0.82,
-  });
+  assert.equal(state.llm.criteria.criterion_03_age.confidence, 0.82);
+  assert.equal(state.llm.criteria.criterion_03_age.age_years, 10);
+  assert.equal(state.llm.criteria.criterion_01_municipality.confidence, null);
+  assert.equal(state.llm.criteria.unknown_column, undefined);
+  assert.equal(state.llm.criterionConfidences, undefined);
 });
 
 test("does not extract child special needs from free-text requests", () => {

@@ -61,10 +61,6 @@ test("builds 27 separate criterion snapshots for scenario 1 recognition", () => 
 test("builds record metadata with recognition method and overall confidence", () => {
   const state = createDescriptionSelectionState();
   applyDescriptionText(state, "Школьник, Мурманск, что-нибудь полезное для развития");
-  state.llm.criterionConfidences = {
-    criterion_01_municipality: 0.91,
-    criterion_16_interest_without_thematic_match: 0.72,
-  };
   state.llm.criteria = {
     criterion_01_municipality: {
       status: "recognized",

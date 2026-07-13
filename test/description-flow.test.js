@@ -145,24 +145,23 @@ test("Murmansk region asks for a concrete municipality", async () => {
   assert.equal(harness.logs.length, 0);
 });
 
-test("enriches incomplete request with llm slots before deciding next step", async () => {
+test("enriches incomplete request with llm criteria before deciding next step", async () => {
   const harness = createHarness({ step: "s1_wait_description" });
 
   await handleDescriptionText(harness.context({
     text: "Сыну 10 лет",
     analyzeFreeText: async () => ({
-      filledSlots: {
-        location: "Мурманск",
-        interests: ["building", "logic"],
-      },
-      criterionConfidences: {
-        criterion_01_municipality: 0.91,
-      },
       criteria: {
         criterion_01_municipality: {
           status: "recognized",
-          value: "Мурманск",
+          value: ["Мурманск"],
           confidence: 0.91,
+        },
+        criterion_13_interest_level2_category: {
+          status: "recognized",
+          values: ["building", "logic"],
+          labels: ["конструирование", "логика и программирование"],
+          confidence: 0.9,
         },
       },
     }),
@@ -178,7 +177,7 @@ test("enriches incomplete request with llm slots before deciding next step", asy
   assert.equal(harness.criteriaLogs[0].criterion_03_age_confidence, null);
 });
 
-test("llm municipality slot fills municipality criterion log even without model criteria", async () => {
+test("does not derive fields or logs from old llm slots without criteria", async () => {
   const harness = createHarness({ step: "s1_wait_description" });
 
   await handleDescriptionText(harness.context({
@@ -188,32 +187,37 @@ test("llm municipality slot fills municipality criterion log even without model 
         location: "Мурманск",
         interests: ["building", "logic"],
       },
-      criterionConfidences: {
-        criterion_01_municipality: 0.91,
-      },
     }),
   }));
 
-  assert.equal(harness.session.descriptionSelection.fields.place, "Мурманск");
-  assert.equal(harness.session.descriptionSelection.llm.applied, true);
+  assert.equal(harness.session.step, "s1_wait_required_clarification");
+  assert.equal(harness.session.descriptionSelection.fields.place, "");
+  assert.deepEqual(harness.session.descriptionSelection.fields.interests, []);
+  assert.equal(harness.session.descriptionSelection.llm.applied, false);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
-  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_status, "recognized");
-  assert.deepEqual(harness.criteriaLogs[0].criterion_01_municipality_value, ["Мурманск"]);
-  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_confidence, 0.91);
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_status, "not_specified");
+  assert.deepEqual(harness.criteriaLogs[0].criterion_01_municipality_value, []);
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_confidence, null);
 });
 
-test("llm municipality slot logs multiple place candidates as an array", async () => {
+test("llm municipality criteria log multiple place candidates as an array", async () => {
   const harness = createHarness({ step: "s1_wait_description" });
 
   await handleDescriptionText(harness.context({
     text: "Сыну 10 лет",
     analyzeFreeText: async () => ({
-      filledSlots: {
-        location: "Мурманск и Североморск",
-        interests: ["building", "logic"],
-      },
-      criterionConfidences: {
-        criterion_01_municipality: 0.74,
+      criteria: {
+        criterion_01_municipality: {
+          status: "recognized_ambiguous",
+          value: ["Мурманск", "Североморск"],
+          confidence: 0.74,
+        },
+        criterion_13_interest_level2_category: {
+          status: "recognized",
+          values: ["building", "logic"],
+          labels: ["конструирование", "логика и программирование"],
+          confidence: 0.9,
+        },
       },
     }),
   }));
@@ -244,10 +248,25 @@ test("scenario 1 llm-only sends unparsed state to llm", async (t) => {
     analyzeFreeText: async (session) => {
       llmCurrentFields = JSON.parse(JSON.stringify(session.current.fields));
       return {
-        filledSlots: {
-          age: "10-12",
-          location: "Мурманск",
-          interests: ["building"],
+        criteria: {
+          criterion_01_municipality: {
+            status: "recognized",
+            value: ["Мурманск"],
+            confidence: 0.95,
+          },
+          criterion_03_age: {
+            status: "recognized",
+            age_bucket: "10-12",
+            age_years: 10,
+            age_text: "10 лет",
+            confidence: 0.95,
+          },
+          criterion_13_interest_level2_category: {
+            status: "recognized",
+            values: ["building"],
+            labels: ["конструирование"],
+            confidence: 0.9,
+          },
         },
       };
     },
@@ -259,10 +278,11 @@ test("scenario 1 llm-only sends unparsed state to llm", async (t) => {
   assert.equal(harness.session.descriptionSelection.originalText, "Сыну 10 лет, Североморск, робототехника после школы");
   assert.equal(harness.session.descriptionSelection.fields.place, "Мурманск");
   assert.equal(harness.session.descriptionSelection.fields.age, "10-12");
-  assert.equal(harness.session.step, "s1_confirm_summary");
-  assert.match(harness.messages[0].text, /Я понял запрос так/);
+  assert.equal(harness.session.step, "s1_pdf");
+  assert.match(harness.messages[0].text, /Подбираю программы/);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
   assert.deepEqual(harness.criteriaLogs[0].criterion_01_municipality_value, ["Мурманск"]);
+  assert.equal(harness.criteriaLogs[0].criterion_03_age_years, 10);
 });
 
 test("scenario 1 llm-only reports unavailable llm without regexp fallback", async (t) => {

@@ -1,5 +1,4 @@
 const { createChatCompletionText, isLlmEnabled } = require("./llm-client");
-const { SCENARIO_1_CRITERIA } = require("./scenario1-criteria-recognition");
 const {
   MURMANSK_SETTLEMENT_PROMPT_LIST,
   normalizeSettlementLocation,
@@ -16,14 +15,10 @@ const ALLOWED_SCENARIOS = new Set([
 ]);
 
 const ALLOWED_AGES = new Set(["3-4", "5-6", "7-9", "10-12", "13+"]);
-const ALLOWED_EXPERIENCE = new Set(["none", "tried", "active", "new"]);
 const ALLOWED_INTERESTS = new Set(["creative", "building", "sports", "social", "logic", "calm"]);
-const ALLOWED_AVOIDANCES = new Set(["noise", "strict", "stage", "routine", "intense", "unknown"]);
-const ALLOWED_ADAPTATION = new Set(["fast", "careful", "soft", "depends"]);
-const ALLOWED_GOALS = new Set(["interest", "first_try", "strengths", "social", "discipline", "discover"]);
-const ALLOWED_CLARIFY_GROUP = new Set(["small_calm", "active_group", "structured", "free"]);
-const ALLOWED_CLARIFY_FOCUS = new Set(["hands", "logic", "social", "mixed"]);
-const SCENARIO_1_CRITERION_CONFIDENCE_KEYS = SCENARIO_1_CRITERIA.map((criterion) => criterion.column);
+const ALLOWED_DIRECTIONS = new Set(["technical", "art", "sport", "social", "science", "tourism"]);
+const ALLOWED_SCHEDULE_VALUES = new Set(["weekdays", "weekends", "morning", "evening"]);
+const ALLOWED_FORMATS = new Set(["online", "offline"]);
 
 function isEnabled() {
   return isLlmEnabled("free_text") ||
@@ -76,12 +71,11 @@ function llmStepForSession(session) {
 function buildSystemPrompt() {
   return [
     "Ты анализируешь сообщения родителей для Telegram-бота по подбору кружков.",
-    "Твоя задача: свести свободный текст к ограниченному набору сценариев и заполненных слотов.",
+    "Твоя задача: свести свободный текст к ограниченному набору сценариев и строгой структуре criteria.",
     "Нельзя придумывать факты. Если данных нет, ставь null или пустой массив.",
-    "Не заполняй avoidances, adaptation, clarifyGroup и clarifyFocus без прямых словесных сигналов в сообщении.",
-    "age возвращай как диапазон, а точный числовой возраст пользователя возвращай отдельно в ageYears.",
-    "Если в сообщении есть числовой возраст со словом 'лет', 'года', 'год' или 'л.', обязательно заполни age и ageYears.",
-    "Правила age: 3-4 года -> '3-4'; 5-6 лет -> '5-6'; 7-9 лет -> '7-9'; 10-12 лет -> '10-12'; 13 лет и старше -> '13+'.",
+    "Возраст возвращай только в criterion_03_age: age_bucket как диапазон, age_years как точный числовой возраст, age_text как фрагмент пользователя.",
+    "Если в сообщении есть числовой возраст со словом 'лет', 'года', 'год' или 'л.', обязательно заполни criterion_03_age.",
+    "Правила age_bucket: 3-4 года -> '3-4'; 5-6 лет -> '5-6'; 7-9 лет -> '7-9'; 10-12 лет -> '10-12'; 13 лет и старше -> '13+'.",
     "Примеры age: '13 лет' -> '13+', '9 лет' -> '7-9', '10 лет' -> '10-12'.",
     "Отвечай только JSON-объектом без markdown и пояснений.",
     "Допустимые scenario:",
@@ -93,39 +87,30 @@ function buildSystemPrompt() {
     "- ready_to_recommend",
     "- fallback",
     "Допустимые значения age: 3-4, 5-6, 7-9, 10-12, 13+",
-    "Допустимые значения experience: none, tried, active, new",
-    "Допустимые interests: creative, building, sports, social, logic, calm",
-    "interests — это широкие категории. Конкретное занятие пользователя возвращай отдельно в specificInterests.",
-    "Например: 'баскетбол' -> interests: ['sports'], specificInterests: ['баскетбол']; 'робототехника' -> interests: ['building','logic'], specificInterests: ['робототехника'].",
-    "Если пользователь назвал конкретное занятие, например футбол, баскетбол, рисование, робототехника, шахматы, обязательно заполни specificInterests.",
-    "Допустимые avoidances: noise, strict, stage, routine, intense, unknown",
-    "Допустимые adaptation: fast, careful, soft, depends",
-    "Допустимые goal: interest, first_try, strengths, social, discipline, discover",
-    "Допустимые clarifyGroup: small_calm, active_group, structured, free",
-    "Допустимые clarifyFocus: hands, logic, social, mixed",
-    "location заполняй только населенным пунктом Мурманской области из полного списка Росстата:",
+    "Допустимые значения criterion_13_interest_level2_category.values и criterion_16_interest_without_thematic_match.interests: creative, building, sports, social, logic, calm",
+    "criterion_13_interest_level2_category.values — это широкие категории интересов.",
+    "Конкретное занятие пользователя возвращай в criterion_12_exact_interest_topic.terms и labels.",
+    "Например: 'баскетбол' -> criterion_13 values ['sports'] и criterion_12 terms ['баскетбол']; 'робототехника' -> criterion_13 values ['building','logic'] и criterion_12 terms ['робототехника'].",
+    "Если пользователь назвал конкретное занятие, например футбол, баскетбол, рисование, робототехника, шахматы, обязательно заполни criterion_12_exact_interest_topic.",
+    "Населенный пункт заполняй только в criterion_01_municipality.value и только населенным пунктом Мурманской области из полного списка Росстата:",
     MURMANSK_SETTLEMENT_PROMPT_LIST,
-    "Возвращай location названием населенного пункта без сокращения типа: 'г Мурманск' -> 'Мурманск', 'с Варзуга' -> 'Варзуга', 'ж/д ст Нял' -> 'Нял'.",
+    "Возвращай населенный пункт названием без сокращения типа: 'г Мурманск' -> 'Мурманск', 'с Варзуга' -> 'Варзуга', 'ж/д ст Нял' -> 'Нял'.",
     "Допускай опечатки в названии населенного пункта только по закрытому списку населенных пунктов Мурманской области.",
     "Для длинных названий от 8 букв допускай до 3 односимвольных ошибок: пропуск, лишняя буква, замена буквы или перестановка соседних букв.",
     "Для названий 5-7 букв допускай до 2 таких ошибок.",
     "Для названий до 4 букв не исправляй по догадке: распознавай только точное совпадение или очевидную падежную форму.",
     "Исправляй опечатку только если ближайший вариант из списка единственный и контекст явно говорит о месте поиска. Возвращай официальное название из списка.",
-    "Если возможны несколько вариантов или уверенность низкая, не выбирай за пользователя: оставь location null или верни неоднозначность через criterion_01_municipality со status \"recognized_ambiguous\".",
-    "Нормализуй location к именительному падежу из списка: 'в Оленегорске' -> 'Оленегорск', 'в Мурманске' -> 'Мурманск'.",
-    "Если пользователь использует прилагательное от населенного пункта рядом со словами 'кружки', 'секции', 'программы', 'занятия' или 'организации', считай это указанием места поиска и нормализуй location к официальному названию из списка.",
-    "Примеры: 'мурманские кружки' -> location: 'Мурманск', 'мурманские программы' -> location: 'Мурманск', 'занятия в мурманских организациях' -> location: 'Мурманск', 'североморские секции' -> location: 'Североморск'.",
-    "Применяй это правило только если прилагательное однозначно соответствует одному населенному пункту из закрытого списка. Если соответствие неоднозначно или это не место поиска, оставь location: null.",
-    "Если новое сообщение состоит только из населенного пункта, например 'Оленегорск' или 'Мурманск', это тоже location.",
-    "Если в сообщении указано несколько населенных пунктов или вся Мурманская область, не выбирай один за пользователя: верни location строкой со всеми указанными местами или 'Мурманская область'.",
-    "Если указан район, организация или неясное место без населенного пункта, например 'центр города', оставь location: null.",
-    "Для scenario=description_selection верни criterion_confidences: объект с confidence распознавания по критериям С1.",
-    `Ключи criterion_confidences: ${SCENARIO_1_CRITERION_CONFIDENCE_KEYS.join(", ")}`,
-    "Значение confidence: число от 0 до 1 только если ты явно оценил критерий по сообщению пользователя.",
-    "Если confidence по критерию нет, не выдумывай: поставь null или не включай этот ключ.",
-    "Для scenario=description_selection также верни criteria: объект с найденными критериями С1.",
-    "criteria используется для записи в плоскую таблицу логирования. Не копируй значения из filled_slots автоматически: распознавай каждый критерий отдельно по сообщению пользователя.",
-    "Если критерий распознан, обязательно укажи status, найденное значение в полях критерия и confidence от 0 до 1.",
+    "Если возможны несколько вариантов или уверенность низкая, не выбирай за пользователя: не включай критерий или верни неоднозначность через criterion_01_municipality со status \"recognized_ambiguous\".",
+    "Нормализуй criterion_01_municipality.value к именительному падежу из списка: 'в Оленегорске' -> 'Оленегорск', 'в Мурманске' -> 'Мурманск'.",
+    "Если пользователь использует прилагательное от населенного пункта рядом со словами 'кружки', 'секции', 'программы', 'занятия' или 'организации', считай это указанием места поиска и нормализуй criterion_01_municipality.value к официальному названию из списка.",
+    "Примеры: 'мурманские кружки' -> criterion_01_municipality.value ['Мурманск'], 'североморские секции' -> ['Североморск'].",
+    "Применяй это правило только если прилагательное однозначно соответствует одному населенному пункту из закрытого списка. Если соответствие неоднозначно или это не место поиска, не включай criterion_01_municipality.",
+    "Если новое сообщение состоит только из населенного пункта, например 'Оленегорск' или 'Мурманск', заполни criterion_01_municipality.",
+    "Если в сообщении указано несколько населенных пунктов или вся Мурманская область, не выбирай один за пользователя: верни все места или 'Мурманская область' в criterion_01_municipality.value со status \"recognized_ambiguous\".",
+    "Если указан район, организация или неясное место без населенного пункта, например 'центр города', не включай criterion_01_municipality.",
+    "Всегда возвращай только scenario, message_for_user и criteria.",
+    "criteria — единственный источник распознавания для дальнейшей работы и логирования.",
+    "Если критерий распознан, обязательно укажи status, найденное значение в полях критерия и confidence от 0 до 1 внутри этого критерия.",
     "Если критерий не распознан по сообщению пользователя, можешь не включать его в criteria.",
     "Формат criteria:",
     '"criterion_01_municipality":{"status":"recognized","value":["Мурманск"],"confidence":0.95}',
@@ -141,14 +126,14 @@ function buildSystemPrompt() {
     '"criterion_15_fallback_text_keywords":{"status":"recognized","value":"шахматы","confidence":0.8}',
     '"criterion_16_interest_without_thematic_match":{"status":"pending_scoring","interests":["logic"],"specific_terms":["шахматы"],"interests_text":"шахматы","direction":"science","confidence":0.7}',
     "JSON-формат:",
-    '{"scenario":"fallback","message_for_user":"","filled_slots":{"age":null,"ageYears":null,"ageText":"","experience":null,"interests":[],"specificInterests":[],"avoidances":[],"adaptation":null,"goal":null,"location":null,"budget":null,"schedule":null,"clarifyGroup":null,"clarifyFocus":null},"criterion_confidences":{},"criteria":{}}',
+    '{"scenario":"fallback","message_for_user":"","criteria":{}}',
     "message_for_user: короткая реплика на русском, максимум 18 слов. Если сказать нечего, верни пустую строку.",
   ].join("\n");
 }
 
 function applyHeuristics(text, analysis) {
   const normalizedText = ` ${String(text).toLowerCase()} `;
-  const slots = { ...analysis.filledSlots };
+  const slots = buildSlotsFromCriteria(analysis.criteria);
 
   const ageBucket = detectAgeBucket(normalizedText);
   if (ageBucket) slots.age = ageBucket;
@@ -180,7 +165,6 @@ function applyHeuristics(text, analysis) {
     ...analysis,
     scenario: detectScenario(normalizedText, slots),
     messageForUser: "",
-    filledSlots: slots,
   };
 }
 
@@ -204,46 +188,26 @@ function extractJson(content) {
 }
 
 function normalizeAnalysis(parsed) {
-  const filled = parsed?.filled_slots || {};
-  const age = normalizeAge(filled.age, filled.ageYears || filled.age_years, filled.ageText || filled.age_text);
+  const criteria = normalizeCriteria(parsed?.criteria);
   return {
     scenario: normalizeScenario(parsed?.scenario),
     messageForUser: normalizeShortText(parsed?.message_for_user),
-    filledSlots: {
-      age: age.age,
-      ageYears: age.ageYears,
-      ageText: age.ageText,
-      experience: normalizeEnum(filled.experience, ALLOWED_EXPERIENCE),
-      interests: normalizeArray(filled.interests, ALLOWED_INTERESTS),
-      specificInterests: normalizeTextArray(filled.specificInterests || filled.specific_interests),
-      avoidances: normalizeArray(filled.avoidances, ALLOWED_AVOIDANCES),
-      adaptation: normalizeEnum(filled.adaptation, ALLOWED_ADAPTATION),
-      goal: normalizeEnum(filled.goal, ALLOWED_GOALS),
-      location: normalizeSettlementLocation(filled.location) || normalizeFreeText(filled.location),
-      budget: normalizeFreeText(filled.budget),
-      schedule: normalizeFreeText(filled.schedule),
-      clarifyGroup: normalizeEnum(filled.clarifyGroup, ALLOWED_CLARIFY_GROUP),
-      clarifyFocus: normalizeEnum(filled.clarifyFocus, ALLOWED_CLARIFY_FOCUS),
-    },
-    criterionConfidences: normalizeCriterionConfidences(
-      parsed?.criterion_confidences ||
-        parsed?.criteria_confidences ||
-        parsed?.criterionConfidences ||
-        parsed?.criteriaConfidences,
-    ),
-    criteria: normalizeCriteria(
-      parsed?.criteria ||
-        parsed?.criterion_results ||
-        parsed?.criterionResults ||
-        parsed?.criterion_values ||
-        parsed?.criterionValues,
-    ),
+    criteria,
   };
 }
 
 function normalizeCriteria(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return JSON.parse(JSON.stringify(value));
+  const source = JSON.parse(JSON.stringify(value));
+  normalizeMunicipalityCriterion(source.criterion_01_municipality);
+  normalizeAgeCriterion(source.criterion_03_age);
+  normalizeEducationFormCriterion(source.criterion_06_education_form);
+  normalizeScheduleCriterion(source.criterion_07_schedule);
+  normalizeDirectionCriterion(source.criterion_09_direction);
+  normalizeInterestCategoryCriterion(source.criterion_13_interest_level2_category);
+  normalizeDirectionCriterion(source.criterion_14_interest_level1_section);
+  normalizeInterestMismatchCriterion(source.criterion_16_interest_without_thematic_match);
+  return source;
 }
 
 function normalizeScenario(value) {
@@ -295,6 +259,113 @@ function normalizeAge(value, yearsValue, textValue) {
   };
 }
 
+function buildSlotsFromCriteria(criteria = {}) {
+  const slots = {
+    age: null,
+    ageYears: null,
+    ageText: "",
+    experience: null,
+    interests: [],
+    exactInterestTerms: [],
+    avoidances: [],
+    adaptation: null,
+    goal: null,
+    location: null,
+    budget: null,
+    schedule: null,
+    clarifyGroup: null,
+    clarifyFocus: null,
+  };
+
+  const age = criteria.criterion_03_age;
+  if (age?.status && age.status !== "not_specified") {
+    slots.age = normalizeEnum(readCriterionValue(age, "age_bucket", "ageBucket", "bucket", "age"), ALLOWED_AGES);
+    slots.ageYears = normalizeAgeYears(readCriterionValue(age, "age_years", "ageYears", "years"));
+    slots.ageText = normalizeFreeText(readCriterionValue(age, "age_text", "ageText", "text")) || "";
+  }
+
+  const municipality = criteria.criterion_01_municipality;
+  const places = normalizeTextArray(readCriterionValue(municipality, "value"));
+  if (places.length === 1) slots.location = places[0];
+  if (places.length > 1) slots.location = places.join(", ");
+
+  const cost = normalizeFreeText(readCriterionValue(criteria.criterion_04_cost, "value", "text"));
+  if (cost) slots.budget = cost;
+
+  const schedule = criteria.criterion_07_schedule;
+  slots.schedule = normalizeFreeText(readCriterionValue(schedule, "schedule_text", "scheduleText", "text", "value"));
+
+  const exactInterest = criteria.criterion_12_exact_interest_topic;
+  slots.exactInterestTerms = normalizeTextArray(readCriterionValue(exactInterest, "labels", "terms", "specific_terms", "specificTerms"));
+
+  const category = criteria.criterion_13_interest_level2_category || criteria.criterion_16_interest_without_thematic_match;
+  slots.interests = normalizeArray(readCriterionValue(category, "values", "interests"), ALLOWED_INTERESTS);
+
+  return slots;
+}
+
+function normalizeMunicipalityCriterion(criterion) {
+  if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return;
+  const values = normalizeTextArray(readCriterionValue(criterion, "value"));
+  const normalized = values.map((value) => normalizeSettlementLocation(value) || value);
+  criterion.value = normalized;
+}
+
+function normalizeAgeCriterion(criterion) {
+  if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return;
+  const age = normalizeAge(
+    readCriterionValue(criterion, "age_bucket", "ageBucket", "bucket", "age"),
+    readCriterionValue(criterion, "age_years", "ageYears", "years"),
+    readCriterionValue(criterion, "age_text", "ageText", "text"),
+  );
+  if (age.age) criterion.age_bucket = age.age;
+  if (age.ageYears) criterion.age_years = age.ageYears;
+  if (age.ageText) criterion.age_text = age.ageText;
+}
+
+function normalizeEducationFormCriterion(criterion) {
+  if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return;
+  const format = normalizeEnum(readCriterionValue(criterion, "format"), ALLOWED_FORMATS);
+  if (format) criterion.format = format;
+}
+
+function normalizeScheduleCriterion(criterion) {
+  if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return;
+  const values = normalizeArray(readCriterionValue(criterion, "schedule_values", "scheduleValues", "values", "schedule"), ALLOWED_SCHEDULE_VALUES);
+  criterion.schedule_values = values;
+}
+
+function normalizeDirectionCriterion(criterion) {
+  if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return;
+  const direction = normalizeEnum(readCriterionValue(criterion, "direction", "value"), ALLOWED_DIRECTIONS);
+  if (direction) criterion.direction = direction;
+}
+
+function normalizeInterestCategoryCriterion(criterion) {
+  if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return;
+  const values = normalizeArray(readCriterionValue(criterion, "values", "interests"), ALLOWED_INTERESTS);
+  criterion.values = values;
+}
+
+function normalizeInterestMismatchCriterion(criterion) {
+  if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return;
+  criterion.interests = normalizeArray(readCriterionValue(criterion, "interests"), ALLOWED_INTERESTS);
+  const direction = normalizeEnum(readCriterionValue(criterion, "direction"), ALLOWED_DIRECTIONS);
+  if (direction) criterion.direction = direction;
+}
+
+function readCriterionValue(criterion, ...keys) {
+  if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return undefined;
+  const valueObject = criterion.value && typeof criterion.value === "object" && !Array.isArray(criterion.value)
+    ? criterion.value
+    : {};
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(criterion, key)) return criterion[key];
+    if (Object.prototype.hasOwnProperty.call(valueObject, key)) return valueObject[key];
+  }
+  return undefined;
+}
+
 function normalizeAgeYears(value) {
   const text = String(value ?? "").trim();
   const match = text.match(/(\d{1,2})/);
@@ -325,26 +396,6 @@ function normalizeFreeText(value) {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
   return normalized || null;
-}
-
-function normalizeCriterionConfidences(value) {
-  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
-  const result = {};
-  for (const key of SCENARIO_1_CRITERION_CONFIDENCE_KEYS) {
-    const confidence = normalizeConfidence(source[key] ?? source[`${key}_confidence`]);
-    if (confidence !== null) result[key] = confidence;
-  }
-  return result;
-}
-
-function normalizeConfidence(value) {
-  const raw = value && typeof value === "object" && !Array.isArray(value)
-    ? value.confidence
-    : value;
-  if (raw === null || raw === undefined || raw === "") return null;
-  const number = typeof raw === "string" ? Number(raw.trim().replace(",", ".")) : Number(raw);
-  if (!Number.isFinite(number) || number < 0 || number > 1) return null;
-  return Math.round(number * 1000) / 1000;
 }
 
 function detectAgeBucket(text) {
@@ -443,7 +494,7 @@ function detectScenario(text, slots) {
 function hasInterestSignal(slots) {
   return Boolean(
     slots?.interests?.length ||
-    slots?.specificInterests?.length,
+    slots?.exactInterestTerms?.length,
   );
 }
 

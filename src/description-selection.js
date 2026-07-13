@@ -1,5 +1,6 @@
 const { analyzeQueryInterests } = require("./query-ontology");
 const { findMurmanskSettlements } = require("./murmansk-settlements");
+const { SCENARIO_1_CRITERIA_COLUMNS } = require("./scenario1-criteria-recognition");
 
 const AGE_LABELS = {
   "3-4": "3-4 года",
@@ -56,6 +57,35 @@ const INTEREST_RULES = [
   ["logic", "логика и программирование", /логик|математ|программ|шахмат|как все устроено|информат|физик/i],
   ["calm", "спокойные занятия", /спокой|усидчив|в своем темпе|не спеша/i],
 ];
+
+const SCENARIO_1_CRITERIA_COLUMN_SET = new Set(SCENARIO_1_CRITERIA_COLUMNS);
+const RECOGNIZED_CRITERION_STATUSES = new Set([
+  "recognized",
+  "recognized_ambiguous",
+  "recognized_unverified",
+  "pending_scoring",
+]);
+const KNOWN_CRITERION_STATUSES = new Set([
+  ...RECOGNIZED_CRITERION_STATUSES,
+  "missing_required",
+  "not_specified",
+  "not_in_user_text",
+  "not_applicable",
+]);
+const ALLOWED_INTEREST_VALUES = new Set(INTEREST_RULES.map(([value]) => value));
+const ALLOWED_DIRECTION_VALUES = new Set(DIRECTION_RULES.map((item) => item.value));
+const ALLOWED_FORMAT_VALUES = new Set(["online", "offline"]);
+const ALLOWED_SCHEDULE_VALUES = new Set(["weekdays", "weekends", "morning", "evening"]);
+const FORMAT_LABELS = {
+  online: "Онлайн",
+  offline: "Офлайн",
+};
+const SCHEDULE_LABELS = {
+  weekdays: "будни",
+  weekends: "выходные",
+  morning: "утром",
+  evening: "вечером",
+};
 
 const LEGACY_MUNICIPALITY_RULES = [
   ["Мурманск", /(?:^|[^а-яё])мурманск(?:е|а|у|ом)?(?=$|[^а-яё])/i],
@@ -120,7 +150,6 @@ function createDescriptionSelectionState() {
       attempted: false,
       applied: false,
       error: "",
-      criterionConfidences: {},
       criteria: {},
     },
     lastResult: null,
@@ -143,11 +172,6 @@ function ensureDescriptionSelectionState(session) {
   }
   if (!session.descriptionSelection.llm || typeof session.descriptionSelection.llm !== "object") {
     session.descriptionSelection.llm = createDescriptionSelectionState().llm;
-  }
-  if (!session.descriptionSelection.llm.criterionConfidences ||
-    typeof session.descriptionSelection.llm.criterionConfidences !== "object" ||
-    Array.isArray(session.descriptionSelection.llm.criterionConfidences)) {
-    session.descriptionSelection.llm.criterionConfidences = {};
   }
   if (!session.descriptionSelection.llm.criteria ||
     typeof session.descriptionSelection.llm.criteria !== "object" ||
@@ -190,129 +214,221 @@ function shouldUseLlmForDescription(state, text) {
 }
 
 function applyLlmAnalysis(state, analysis, options = {}) {
+  const criteria = normalizeModelCriteria(analysis?.criteria);
   state.llm = {
     ...(state.llm || {}),
     attempted: true,
     applied: false,
     error: "",
-    criterionConfidences: normalizeCriterionConfidences(
-      analysis?.criterionConfidences ||
-        analysis?.criterion_confidences ||
-        analysis?.criteriaConfidences ||
-        analysis?.criteria_confidences,
-    ),
-    criteria: normalizeModelCriteria(
-      analysis?.criteria ||
-        analysis?.criterionResults ||
-        analysis?.criterion_results ||
-        analysis?.criterionValues ||
-        analysis?.criterion_values,
-    ),
+    criteria,
   };
 
-  const slots = analysis?.filledSlots || analysis?.filled_slots || {};
-  const patch = {};
-
-  if (slots.age && (!state.fields.age || isApproximateAgeText(state.fields.ageText))) {
-    patch.age = slots.age;
-    if (Number.isFinite(Number(slots.ageYears))) {
-      patch.ageYears = Number(slots.ageYears);
-    }
-    patch.ageText = slots.ageText || (patch.ageYears ? `${patch.ageYears} лет` : AGE_LABELS[slots.age] || slots.age);
-  }
-
-  if (slots.location && !state.fields.place) {
-    const place = detectPlace(slots.location);
-    if (place.place) {
-      patch.place = place.place;
-      patch.placeKnown = Boolean(place.known);
-      patch.placeCandidates = [];
-      patch.placeAmbiguity = "";
-      ensureLlmMunicipalityCriterion(state, {
-        status: place.known ? "recognized" : "recognized_unverified",
-        value: [place.place],
-        confidence: llmMunicipalityConfidence(state, place.known ? 0.95 : 0.6),
-      });
-    } else if (place.ambiguous) {
-      patch.placeCandidates = place.candidates || [];
-      patch.placeAmbiguity = place.ambiguity || "place_unknown";
-      ensureLlmMunicipalityCriterion(state, {
-        status: "recognized_ambiguous",
-        value: place.candidates?.length ? place.candidates : [cleanupPlace(slots.location)],
-        confidence: llmMunicipalityConfidence(state, 0.6),
-      });
-    } else {
-      patch.place = cleanupPlace(slots.location);
-      patch.placeKnown = false;
-      patch.placeCandidates = [];
-      patch.placeAmbiguity = "";
-      ensureLlmMunicipalityCriterion(state, {
-        status: "recognized_unverified",
-        value: [patch.place],
-        confidence: llmMunicipalityConfidence(state, 0.6),
-      });
-    }
-  }
-
-  if (Array.isArray(slots.interests) && slots.interests.length) {
-    patch.interests = slots.interests;
-    patch.interestLabels = labelsForInterests(slots.interests);
-    patch.interestsText = patch.interestLabels.join(", ");
-    patch.broadInterest = false;
-  }
-
-  const specificInterestPatch = buildSpecificInterestPatch(slots.specificInterests);
-  if (specificInterestPatch.specificInterestTerms?.length) {
-    patch.specificInterestTerms = specificInterestPatch.specificInterestTerms;
-    patch.specificInterestLabels = specificInterestPatch.specificInterestLabels;
-    patch.interestsText = specificInterestPatch.specificInterestLabels.join(", ");
-    patch.broadInterest = false;
-
-    if (specificInterestPatch.interests.length) {
-      patch.interests = [...new Set([...(patch.interests || []), ...specificInterestPatch.interests])];
-      patch.interestLabels = labelsForInterests(patch.interests);
-    }
-    if (specificInterestPatch.direction && !state.fields.direction) {
-      patch.direction = specificInterestPatch.direction;
-      patch.directionLabel = specificInterestPatch.directionLabel;
-    }
-  }
-
-  if (Array.isArray(slots.avoidances) && slots.avoidances.length) {
-    patch.avoidances = slots.avoidances.filter((item) => item !== "unknown");
-    patch.avoidanceLabels = labelsForAvoidances(patch.avoidances);
-  }
-
-  if (slots.goal && !state.fields.goal) {
-    patch.goal = normalizeGoalValue(slots.goal);
-    patch.goalLabel = goalLabel(patch.goal);
-  }
-
-  if (slots.budget && !state.fields.budget) {
-    patch.budget = slots.budget;
-  }
-
-  if (slots.schedule && !state.fields.scheduleText) {
-    patch.scheduleText = slots.schedule;
-    patch.schedule = detectSchedule(slots.schedule).values;
-  }
-
-  if (slots.adaptation && !state.fields.adaptation) {
-    patch.adaptation = slots.adaptation;
-  }
-
-  if (slots.clarifyGroup && !state.fields.clarifyGroup) {
-    patch.clarifyGroup = slots.clarifyGroup;
-  }
-
-  if (slots.clarifyFocus && !state.fields.clarifyFocus) {
-    patch.clarifyFocus = slots.clarifyFocus;
-  }
-
+  const patch = buildFieldsPatchFromCriteria(criteria);
   mergeFields(state.fields, patch, { mode: options.mode || "llm" });
   state.ambiguities = buildAmbiguities(state);
-  state.llm.applied = Object.keys(patch).length > 0;
+  state.llm.applied = Object.values(patch).some(isMeaningfulPatchValue);
   return state.llm.applied;
+}
+
+function buildFieldsPatchFromCriteria(criteria = {}) {
+  const patch = {};
+
+  applyCriteriaMunicipalityPatch(patch, criteria.criterion_01_municipality);
+  applyCriteriaAgePatch(patch, criteria.criterion_03_age);
+  applyCriteriaCostPatch(patch, criteria.criterion_04_cost);
+  applyCriteriaEducationFormPatch(patch, criteria.criterion_06_education_form);
+  applyCriteriaSchedulePatch(patch, criteria.criterion_07_schedule);
+  applyCriteriaDirectionPatch(patch, criteria.criterion_09_direction);
+  applyCriteriaGroupSizePatch(patch, criteria.criterion_10_group_size);
+  applyCriteriaExactInterestPatch(patch, criteria.criterion_12_exact_interest_topic);
+  applyCriteriaInterestCategoryPatch(patch, criteria.criterion_13_interest_level2_category);
+  applyCriteriaDirectionPatch(patch, criteria.criterion_14_interest_level1_section);
+  applyCriteriaFallbackKeywordsPatch(patch, criteria.criterion_15_fallback_text_keywords);
+  applyCriteriaInterestMismatchPatch(patch, criteria.criterion_16_interest_without_thematic_match);
+
+  return patch;
+}
+
+function applyCriteriaMunicipalityPatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  const values = criterionTextArray(readCriterionValue(criterion, "value"));
+  if (!values.length) return;
+
+  if (values.some(mentionsMurmanskRegion)) {
+    patch.placeCandidates = [];
+    patch.placeAmbiguity = "place_region";
+    return;
+  }
+
+  const candidates = [];
+  let unverifiedPlace = "";
+  for (const value of values) {
+    const place = detectPlace(value);
+    if (place.place) {
+      candidates.push(place.place);
+    } else if (place.candidates?.length) {
+      candidates.push(...place.candidates);
+    } else {
+      unverifiedPlace = cleanupPlace(value);
+      if (unverifiedPlace) candidates.push(unverifiedPlace);
+    }
+  }
+
+  const uniqueCandidates = [...new Set(candidates.filter(Boolean))];
+  if (!uniqueCandidates.length) return;
+
+  if (criterion.status === "recognized_ambiguous" || uniqueCandidates.length > 1) {
+    patch.placeCandidates = uniqueCandidates;
+    patch.placeAmbiguity = "place_multiple";
+    return;
+  }
+
+  patch.place = uniqueCandidates[0];
+  patch.placeKnown = criterion.status !== "recognized_unverified" && !unverifiedPlace;
+  patch.placeCandidates = [];
+  patch.placeAmbiguity = "";
+}
+
+function applyCriteriaAgePatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  const years = coerceAgeYears(readCriterionValue(criterion, "age_years", "ageYears", "years"));
+  const bucket = normalizeAgeBucket(readCriterionValue(criterion, "age_bucket", "ageBucket", "bucket", "age")) ||
+    (years ? ageBucket(years) : null);
+  if (!bucket) return;
+
+  patch.age = bucket;
+  if (years) patch.ageYears = years;
+  patch.ageText = criterionText(readCriterionValue(criterion, "age_text", "ageText", "text")) ||
+    (years ? `${years} лет` : AGE_LABELS[bucket] || bucket);
+}
+
+function applyCriteriaCostPatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  const value = criterionText(readCriterionValue(criterion, "value", "text"));
+  if (value) patch.budget = value;
+}
+
+function applyCriteriaEducationFormPatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  const format = normalizeEnumValue(readCriterionValue(criterion, "format"), ALLOWED_FORMAT_VALUES);
+  if (!format) return;
+  patch.format = format;
+  patch.formatLabel = criterionText(readCriterionValue(criterion, "format_label", "formatLabel", "label")) ||
+    FORMAT_LABELS[format] ||
+    "";
+}
+
+function applyCriteriaSchedulePatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  const schedule = normalizeEnumArray(
+    readCriterionValue(criterion, "schedule_values", "scheduleValues", "values", "schedule"),
+    ALLOWED_SCHEDULE_VALUES,
+  );
+  const scheduleText = criterionText(readCriterionValue(criterion, "schedule_text", "scheduleText", "text", "value"));
+  const detected = scheduleText ? detectSchedule(scheduleText) : { values: [], text: "" };
+  const values = [...new Set([...schedule, ...(detected.values || [])])];
+  if (!values.length && !scheduleText) return;
+  patch.schedule = values;
+  patch.scheduleText = scheduleText || labelsForSchedule(values);
+}
+
+function applyCriteriaDirectionPatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  const direction = normalizeEnumValue(readCriterionValue(criterion, "direction", "value"), ALLOWED_DIRECTION_VALUES);
+  if (!direction) return;
+  const rule = DIRECTION_RULES.find((item) => item.value === direction);
+  if (!patch.direction) {
+    patch.direction = direction;
+    patch.directionLabel = criterionText(readCriterionValue(criterion, "direction_label", "directionLabel", "label")) ||
+      rule?.label ||
+      "";
+  }
+  addPatchInterests(patch, rule?.interests || []);
+  if (!patch.interestsText && patch.directionLabel) patch.interestsText = patch.directionLabel;
+}
+
+function applyCriteriaGroupSizePatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  const value = criterionText(readCriterionValue(criterion, "value", "text"));
+  if (value) patch.groupSize = value;
+}
+
+function applyCriteriaExactInterestPatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  const terms = criterionTextArray(readCriterionValue(
+    criterion,
+    "terms",
+    "specific_terms",
+    "specificTerms",
+    "specificInterestTerms",
+  ));
+  const labels = criterionTextArray(readCriterionValue(
+    criterion,
+    "labels",
+    "specific_labels",
+    "specificLabels",
+    "specificInterestLabels",
+  ));
+  const specificInterestPatch = buildSpecificInterestPatch(labels.length ? labels : terms);
+  if (!specificInterestPatch.specificInterestTerms?.length) return;
+
+  patch.specificInterestTerms = mergeUniqueValues(patch.specificInterestTerms, specificInterestPatch.specificInterestTerms);
+  patch.specificInterestLabels = mergeUniqueValues(patch.specificInterestLabels, specificInterestPatch.specificInterestLabels);
+  patch.interestsText = patch.specificInterestLabels.join(", ");
+  patch.broadInterest = false;
+  addPatchInterests(patch, specificInterestPatch.interests);
+  if (specificInterestPatch.direction && !patch.direction) {
+    patch.direction = specificInterestPatch.direction;
+    patch.directionLabel = specificInterestPatch.directionLabel;
+  }
+}
+
+function applyCriteriaInterestCategoryPatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  const values = normalizeEnumArray(readCriterionValue(criterion, "values", "interests"), ALLOWED_INTEREST_VALUES);
+  if (!values.length) return;
+  addPatchInterests(patch, values);
+  const labels = criterionTextArray(readCriterionValue(criterion, "labels", "interestLabels", "interest_labels"));
+  if (labels.length) {
+    patch.interestLabels = mergeUniqueValues(patch.interestLabels, labels);
+    if (!patch.interestsText) patch.interestsText = labels.join(", ");
+  }
+  patch.broadInterest = criterion.status === "recognized_ambiguous";
+}
+
+function applyCriteriaFallbackKeywordsPatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  const value = criterionText(readCriterionValue(criterion, "value", "text"));
+  if (value && !patch.interestsText) patch.interestsText = value;
+}
+
+function applyCriteriaInterestMismatchPatch(patch, criterion) {
+  if (!isRecognizedCriterion(criterion)) return;
+  addPatchInterests(patch, normalizeEnumArray(readCriterionValue(criterion, "interests"), ALLOWED_INTEREST_VALUES));
+
+  const specificTerms = criterionTextArray(readCriterionValue(
+    criterion,
+    "specific_terms",
+    "specificTerms",
+    "specificInterestTerms",
+  ));
+  const specificInterestPatch = buildSpecificInterestPatch(specificTerms);
+  if (specificInterestPatch.specificInterestTerms?.length) {
+    patch.specificInterestTerms = mergeUniqueValues(patch.specificInterestTerms, specificInterestPatch.specificInterestTerms);
+    patch.specificInterestLabels = mergeUniqueValues(patch.specificInterestLabels, specificInterestPatch.specificInterestLabels);
+    patch.broadInterest = false;
+  }
+
+  const interestsText = criterionText(readCriterionValue(criterion, "interests_text", "interestsText", "text", "value"));
+  if (interestsText && !patch.interestsText) patch.interestsText = interestsText;
+
+  const direction = normalizeEnumValue(readCriterionValue(criterion, "direction"), ALLOWED_DIRECTION_VALUES);
+  if (direction && !patch.direction) {
+    const rule = DIRECTION_RULES.find((item) => item.value === direction);
+    patch.direction = direction;
+    patch.directionLabel = rule?.label || "";
+    addPatchInterests(patch, rule?.interests || []);
+  }
 }
 
 function buildSpecificInterestPatch(value) {
@@ -376,37 +492,230 @@ function recordLlmError(state, error) {
     attempted: true,
     applied: false,
     error: error?.message || String(error || "unknown_error"),
-    criterionConfidences: {},
     criteria: {},
   };
 }
 
 function normalizeModelCriteria(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return JSON.parse(JSON.stringify(value));
-}
-
-function ensureLlmMunicipalityCriterion(state, criterion) {
-  if (!state.llm || typeof state.llm !== "object") return;
-  if (!state.llm.criteria || typeof state.llm.criteria !== "object" || Array.isArray(state.llm.criteria)) {
-    state.llm.criteria = {};
-  }
-  if (state.llm.criteria.criterion_01_municipality) return;
-  state.llm.criteria.criterion_01_municipality = criterion;
-}
-
-function llmMunicipalityConfidence(state, fallback) {
-  return state.llm?.criterionConfidences?.criterion_01_municipality ?? fallback;
-}
-
-function normalizeCriterionConfidences(value) {
-  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const result = {};
-  for (const [key, raw] of Object.entries(source)) {
-    const confidence = normalizeConfidence(raw);
-    if (confidence !== null) result[key] = confidence;
+  for (const [column, rawCriterion] of Object.entries(value)) {
+    if (!SCENARIO_1_CRITERIA_COLUMN_SET.has(column)) continue;
+    if (!rawCriterion || typeof rawCriterion !== "object" || Array.isArray(rawCriterion)) continue;
+
+    const criterion = JSON.parse(JSON.stringify(rawCriterion));
+    criterion.status = normalizeCriterionStatus(criterion.status, criterion);
+    const confidence = normalizeConfidence(criterion.confidence);
+    criterion.confidence = confidence;
+    normalizeModelCriterionFields(column, criterion);
+    result[column] = criterion;
   }
   return result;
+}
+
+function normalizeModelCriterionFields(column, criterion) {
+  switch (column) {
+    case "criterion_01_municipality": {
+      const values = criterionTextArray(readCriterionValue(criterion, "value"))
+        .map((item) => normalizeSettlementName(item))
+        .filter(Boolean);
+      if (values.length) criterion.value = [...new Set(values)];
+      break;
+    }
+    case "criterion_03_age": {
+      const years = coerceAgeYears(readCriterionValue(criterion, "age_years", "ageYears", "years"));
+      const bucket = normalizeAgeBucket(readCriterionValue(criterion, "age_bucket", "ageBucket", "bucket", "age")) ||
+        (years ? ageBucket(years) : null);
+      if (bucket) criterion.age_bucket = bucket;
+      if (years) criterion.age_years = years;
+      const ageText = criterionText(readCriterionValue(criterion, "age_text", "ageText", "text"));
+      if (ageText) criterion.age_text = ageText;
+      break;
+    }
+    case "criterion_06_education_form": {
+      const format = normalizeEnumValue(readCriterionValue(criterion, "format"), ALLOWED_FORMAT_VALUES);
+      if (format) {
+        criterion.format = format;
+        criterion.format_label = criterionText(readCriterionValue(criterion, "format_label", "formatLabel", "label")) ||
+          FORMAT_LABELS[format];
+      }
+      break;
+    }
+    case "criterion_07_schedule": {
+      const values = normalizeEnumArray(
+        readCriterionValue(criterion, "schedule_values", "scheduleValues", "values", "schedule"),
+        ALLOWED_SCHEDULE_VALUES,
+      );
+      const scheduleText = criterionText(readCriterionValue(criterion, "schedule_text", "scheduleText", "text", "value"));
+      if (values.length) criterion.schedule_values = values;
+      if (scheduleText) criterion.schedule_text = scheduleText;
+      break;
+    }
+    case "criterion_09_direction":
+    case "criterion_14_interest_level1_section": {
+      const direction = normalizeEnumValue(readCriterionValue(criterion, "direction", "value"), ALLOWED_DIRECTION_VALUES);
+      if (direction) {
+        const rule = DIRECTION_RULES.find((item) => item.value === direction);
+        criterion.direction = direction;
+        criterion.direction_label = criterionText(readCriterionValue(criterion, "direction_label", "directionLabel", "label")) ||
+          rule?.label ||
+          "";
+      }
+      break;
+    }
+    case "criterion_12_exact_interest_topic": {
+      const terms = criterionTextArray(readCriterionValue(
+        criterion,
+        "terms",
+        "specific_terms",
+        "specificTerms",
+        "specificInterestTerms",
+      ));
+      const labels = criterionTextArray(readCriterionValue(
+        criterion,
+        "labels",
+        "specific_labels",
+        "specificLabels",
+        "specificInterestLabels",
+      ));
+      if (terms.length) criterion.terms = terms;
+      if (labels.length) criterion.labels = labels;
+      break;
+    }
+    case "criterion_13_interest_level2_category": {
+      const values = normalizeEnumArray(readCriterionValue(criterion, "values", "interests"), ALLOWED_INTEREST_VALUES);
+      const labels = criterionTextArray(readCriterionValue(criterion, "labels", "interestLabels", "interest_labels"));
+      if (values.length) criterion.values = values;
+      if (labels.length) criterion.labels = labels;
+      break;
+    }
+    case "criterion_16_interest_without_thematic_match": {
+      const interests = normalizeEnumArray(readCriterionValue(criterion, "interests"), ALLOWED_INTEREST_VALUES);
+      const specificTerms = criterionTextArray(readCriterionValue(
+        criterion,
+        "specific_terms",
+        "specificTerms",
+        "specificInterestTerms",
+      ));
+      const interestsText = criterionText(readCriterionValue(criterion, "interests_text", "interestsText", "text", "value"));
+      const direction = normalizeEnumValue(readCriterionValue(criterion, "direction"), ALLOWED_DIRECTION_VALUES);
+      if (interests.length) criterion.interests = interests;
+      if (specificTerms.length) criterion.specific_terms = specificTerms;
+      if (interestsText) criterion.interests_text = interestsText;
+      if (direction) criterion.direction = direction;
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+function normalizeCriterionStatus(value, criterion) {
+  const status = String(value || "").trim();
+  if (KNOWN_CRITERION_STATUSES.has(status)) return status;
+  return hasCriterionPayload(criterion) ? "recognized_unverified" : "not_specified";
+}
+
+function hasCriterionPayload(criterion) {
+  if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return false;
+  for (const [key, value] of Object.entries(criterion)) {
+    if (key === "status" || key === "confidence" || key === "note") continue;
+    if (isMeaningfulPatchValue(value)) return true;
+    if (value && typeof value === "object" && !Array.isArray(value) && Object.values(value).some(isMeaningfulPatchValue)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isRecognizedCriterion(criterion) {
+  return Boolean(criterion && RECOGNIZED_CRITERION_STATUSES.has(criterion.status));
+}
+
+function readCriterionValue(criterion, ...keys) {
+  if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return undefined;
+  const valueObject = criterion.value && typeof criterion.value === "object" && !Array.isArray(criterion.value)
+    ? criterion.value
+    : {};
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(criterion, key)) return criterion[key];
+    if (Object.prototype.hasOwnProperty.call(valueObject, key)) return valueObject[key];
+  }
+  return undefined;
+}
+
+function criterionText(value) {
+  const values = criterionTextArray(value);
+  return values.join(", ");
+}
+
+function criterionTextArray(value) {
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object"
+      ? Object.values(value).flat()
+      : [value];
+  return [...new Set(source
+    .map((item) => String(item ?? "").trim())
+    .filter(Boolean))]
+    .slice(0, 8);
+}
+
+function normalizeSettlementName(value) {
+  const text = criterionText(value);
+  if (!text) return "";
+  if (mentionsMurmanskRegion(text)) return "Мурманская область";
+  const place = detectPlace(text);
+  if (place.place) return place.place;
+  const candidates = place.candidates || [];
+  if (candidates.length === 1) return candidates[0];
+  return cleanupPlace(text);
+}
+
+function normalizeEnumValue(value, allowed) {
+  const text = String(value ?? "").trim();
+  return allowed.has(text) ? text : null;
+}
+
+function normalizeEnumArray(value, allowed) {
+  return criterionTextArray(value)
+    .map((item) => normalizeEnumValue(item, allowed))
+    .filter(Boolean)
+    .filter((item, index, list) => list.indexOf(item) === index);
+}
+
+function normalizeAgeBucket(value) {
+  const text = String(value ?? "").trim();
+  return Object.prototype.hasOwnProperty.call(AGE_LABELS, text) ? text : null;
+}
+
+function coerceAgeYears(value) {
+  const match = String(value ?? "").match(/(\d{1,2})/);
+  if (!match) return null;
+  const years = Number(match[1]);
+  return ageBucket(years) ? years : null;
+}
+
+function addPatchInterests(patch, values) {
+  const interests = normalizeEnumArray(values, ALLOWED_INTEREST_VALUES);
+  if (!interests.length) return;
+  patch.interests = mergeUniqueValues(patch.interests, interests);
+  patch.interestLabels = labelsForInterests(patch.interests);
+  patch.broadInterest = false;
+}
+
+function mergeUniqueValues(left = [], right = []) {
+  return [...new Set([...(left || []), ...(right || [])].filter(Boolean))];
+}
+
+function labelsForSchedule(values = []) {
+  return values.map((value) => SCHEDULE_LABELS[value]).filter(Boolean).join(", ");
+}
+
+function isMeaningfulPatchValue(value) {
+  if (Array.isArray(value)) return value.length > 0;
+  if (value && typeof value === "object") return Object.values(value).some(isMeaningfulPatchValue);
+  return value !== null && value !== undefined && value !== "";
 }
 
 function normalizeConfidence(value) {
