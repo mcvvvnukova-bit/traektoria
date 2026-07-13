@@ -593,8 +593,7 @@ function applyNestedModelCriterion(flat, prefix, criterion) {
 
   switch (prefix) {
     case "criterion_03_age":
-      setModelColumn(flat, "criterion_03_age_bucket", read("age_bucket", "ageBucket", "bucket", "age"));
-      setModelColumn(flat, "criterion_03_age_years", read("age_years", "ageYears", "years"));
+      setModelAgeColumns(flat, read);
       setModelColumn(flat, "criterion_03_age_text", read("age_text", "ageText", "text"));
       break;
     case "criterion_06_education_form":
@@ -631,6 +630,14 @@ function applyNestedModelCriterion(flat, prefix, criterion) {
       setModelColumn(flat, `${prefix}_value`, read("value", "text"));
       break;
   }
+}
+
+function setModelAgeColumns(flat, read) {
+  const years = numberOrNull(read("age_years", "ageYears", "years")) ||
+    coerceAgeYears(read("age_text", "ageText", "text"));
+  if (!years) return;
+  flat.criterion_03_age_years = years;
+  flat.criterion_03_age_bucket = ageBucketFromYears(years);
 }
 
 function setModelColumn(flat, column, value) {
@@ -782,6 +789,22 @@ function normalizeModelConfidence(value) {
 function numberOrNull(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function coerceAgeYears(value) {
+  const match = String(value ?? "").match(/(\d{1,2})/);
+  if (!match) return null;
+  const years = Number(match[1]);
+  return ageBucketFromYears(years) ? years : null;
+}
+
+function ageBucketFromYears(age) {
+  if (age >= 3 && age <= 4) return "3-4";
+  if (age >= 5 && age <= 6) return "5-6";
+  if (age >= 7 && age <= 9) return "7-9";
+  if (age >= 10 && age <= 12) return "10-12";
+  if (age >= 13 && age <= 18) return "13+";
+  return null;
 }
 
 function calculateRecognitionConfidence(criteria, state = {}, recognitionMethod = "regexp") {

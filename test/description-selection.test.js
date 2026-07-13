@@ -205,7 +205,6 @@ test("uses llm exact interest criteria as recommendation terms", () => {
       },
       criterion_03_age: {
         status: "recognized",
-        age_bucket: "13+",
         age_years: 13,
         age_text: "13 лет",
         confidence: 1,
@@ -272,8 +271,8 @@ test("stores normalized llm criteria and ignores unknown criteria columns", () =
       criterion_03_age: {
         status: "recognized",
         age_bucket: "10-12",
-        age_years: "10",
-        age_text: "10 лет",
+        age_years: "15",
+        age_text: "15 лет",
         confidence: "0.82",
       },
       criterion_01_municipality: {
@@ -290,7 +289,11 @@ test("stores normalized llm criteria and ignores unknown criteria columns", () =
   });
 
   assert.equal(state.llm.criteria.criterion_03_age.confidence, 0.82);
-  assert.equal(state.llm.criteria.criterion_03_age.age_years, 10);
+  assert.equal(state.llm.criteria.criterion_03_age.age_bucket, "13+");
+  assert.equal(state.llm.criteria.criterion_03_age.age_years, 15);
+  assert.equal(state.fields.age, "13+");
+  assert.equal(state.fields.ageYears, 15);
+  assert.equal(state.fields.ageText, "15 лет");
   assert.equal(state.llm.criteria.criterion_01_municipality.confidence, null);
   assert.equal(state.llm.criteria.unknown_column, undefined);
   assert.equal(state.llm.criterionConfidences, undefined);

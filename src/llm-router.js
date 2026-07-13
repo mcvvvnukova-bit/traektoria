@@ -15,7 +15,6 @@ const ALLOWED_SCENARIOS = new Set([
   "fallback",
 ]);
 
-const ALLOWED_AGES = new Set(["3-4", "5-6", "7-9", "10-12", "13+"]);
 const ALLOWED_INTERESTS = new Set(["creative", "building", "sports", "social", "logic", "calm"]);
 const ALLOWED_DIRECTIONS = new Set(["technical", "art", "sport", "social", "science", "tourism"]);
 const ALLOWED_SCHEDULE_VALUES = new Set(["weekdays", "weekends", "morning", "evening"]);
@@ -74,10 +73,10 @@ function buildSystemPrompt() {
     "Ты анализируешь сообщения родителей для Telegram-бота по подбору кружков.",
     "Твоя задача: свести свободный текст к ограниченному набору сценариев и строгой структуре criteria.",
     "Нельзя придумывать факты. Если данных нет, ставь null или пустой массив.",
-    "Возраст возвращай только в criterion_03_age: age_bucket как диапазон, age_years как точный числовой возраст, age_text как фрагмент пользователя.",
+    "Возраст возвращай только в criterion_03_age: age_years как точный числовой возраст и age_text как фрагмент пользователя.",
     "Если в сообщении есть числовой возраст со словом 'лет', 'года', 'год' или 'л.', обязательно заполни criterion_03_age.",
-    "Правила age_bucket: 3-4 года -> '3-4'; 5-6 лет -> '5-6'; 7-9 лет -> '7-9'; 10-12 лет -> '10-12'; 13 лет и старше -> '13+'.",
-    "Примеры age: '13 лет' -> '13+', '9 лет' -> '7-9', '10 лет' -> '10-12'.",
+    "Не возвращай age_bucket, age, bucket или возрастной диапазон: код сам рассчитает диапазон из age_years.",
+    "Примеры age_years: '13 лет' -> 13, '9 лет' -> 9, '10 лет' -> 10.",
     "Отвечай только JSON-объектом без markdown и пояснений.",
     "Допустимые scenario:",
     "- first_time_selection",
@@ -87,12 +86,20 @@ function buildSystemPrompt() {
     "- clarify_constraints",
     "- ready_to_recommend",
     "- fallback",
-    "Допустимые значения age: 3-4, 5-6, 7-9, 10-12, 13+",
     "Допустимые значения criterion_13_interest_level2_category.values и criterion_16_interest_without_thematic_match.interests: creative, building, sports, social, logic, calm",
     "criterion_13_interest_level2_category.values — это широкие категории интересов.",
     "Конкретное занятие пользователя возвращай в criterion_12_exact_interest_topic.terms и labels.",
     "Например: 'баскетбол' -> criterion_13 values ['sports'] и criterion_12 terms ['баскетбол']; 'робототехника' -> criterion_13 values ['building','logic'] и criterion_12 terms ['робототехника'].",
     "Если пользователь назвал конкретное занятие, например футбол, баскетбол, рисование, робототехника, шахматы, обязательно заполни criterion_12_exact_interest_topic.",
+    "Бюджет или стоимость возвращай только в criterion_04_cost.value.",
+    "Если пользователь пишет 'до 3000 рублей', 'до 3000', 'не дороже 3000', 'бюджет 3000', 'готовы платить 3000', нормализуй criterion_04_cost.value к 'до 3000 рублей'.",
+    "Если пользователь пишет сумму с суффиксом 'к' или 'К', считай это тысячами рублей: '2К' и '2к' -> 2000, 'до 2К' -> criterion_04_cost.value 'до 2000 рублей'.",
+    "Если пользователь пишет разговорную сумму в тысячах, считай это бюджетом в рублях: 'Хотелось бы уложиться тысяч в пять', 'тысяч в пять', 'пять тысяч', 'около пяти тысяч', 'в пределах 5 тысяч' -> criterion_04_cost.value 'до 5000 рублей'.",
+    "Если пользователь пишет, что стоимость или цена не важна, например 'Стоимость не важна', 'Цена значения не имеет', 'по цене ограничений нет', нормализуй criterion_04_cost.value к 'без ограничений'.",
+    "Если пользователь просит дешевый вариант, например 'подешевле', 'недорого', 'не слишком дорого', 'бюджетно', нормализуй criterion_04_cost.value к 'недорого'.",
+    "Если пользователь просит дорогой вариант, например 'подороже', 'дорогие', 'можно дорого', 'премиальный вариант', нормализуй criterion_04_cost.value к 'дорого'.",
+    "Если пользователь пишет 'бесплатно', 'только бесплатные', 'без оплаты' или 'не готовы платить', нормализуй criterion_04_cost.value к 'бесплатно'.",
+    "Не теряй бюджет, если в том же сообщении есть возраст: 'Есть что-нибудь до 3000 рублей для мальчика 10 лет?' -> criterion_03_age age_years 10 и criterion_04_cost value 'до 3000 рублей'.",
     "Населенный пункт заполняй только в criterion_01_municipality.value и только населенным пунктом Мурманской области из полного списка Росстата:",
     MURMANSK_SETTLEMENT_PROMPT_LIST,
     "Возвращай населенный пункт названием без сокращения типа: 'г Мурманск' -> 'Мурманск', 'с Варзуга' -> 'Варзуга', 'ж/д ст Нял' -> 'Нял'.",
@@ -115,10 +122,12 @@ function buildSystemPrompt() {
     "Всегда возвращай только scenario, message_for_user и criteria.",
     "criteria — единственный источник распознавания для дальнейшей работы и логирования.",
     "Если критерий распознан, обязательно укажи status, найденное значение в полях критерия и confidence от 0 до 1 внутри этого критерия.",
+    "confidence — твоя собственная оценка уверенности по тексту пользователя; не копируй числа confidence из примеров автоматически.",
+    "Высокий confidence ставь для дословно указанного значения, более низкий — для косвенного или неоднозначного вывода.",
     "Если критерий не распознан по сообщению пользователя, можешь не включать его в criteria.",
     "Формат criteria:",
     '"criterion_01_municipality":{"status":"recognized","value":["Мурманск"],"confidence":0.95}',
-    '"criterion_03_age":{"status":"recognized","age_bucket":"5-6","age_years":5,"age_text":"5 лет","confidence":1}',
+    '"criterion_03_age":{"status":"recognized","age_years":5,"age_text":"5 лет","confidence":1}',
     '"criterion_04_cost":{"status":"recognized","value":"бесплатно","confidence":0.8}',
     '"criterion_06_education_form":{"status":"recognized","format":"offline","format_label":"Очно","confidence":0.8}',
     '"criterion_07_schedule":{"status":"recognized","schedule_text":"по выходным","schedule_values":["weekends"],"confidence":0.75}',
@@ -130,7 +139,7 @@ function buildSystemPrompt() {
     '"criterion_15_fallback_text_keywords":{"status":"recognized","value":"шахматы","confidence":0.8}',
     '"criterion_16_interest_without_thematic_match":{"status":"pending_scoring","interests":["logic"],"specific_terms":["шахматы"],"interests_text":"шахматы","direction":"science","confidence":0.7}',
     "Примеры:",
-    "Сообщение: 'ребенок 7 лет хочет заниматься баскетболом в Титане' -> criterion_01_municipality {\"status\":\"recognized\",\"value\":[\"Титан\"],\"confidence\":0.95}; criterion_03_age age_bucket '7-9'; criterion_12 terms ['баскетбол']; criterion_13 values ['sports'].",
+    "Сообщение: 'ребенок 7 лет хочет заниматься баскетболом в Титане' -> criterion_01_municipality {\"status\":\"recognized\",\"value\":[\"Титан\"],\"confidence\":0.95}; criterion_03_age age_years 7, age_text '7 лет'; criterion_12 terms ['баскетбол']; criterion_13 values ['sports'].",
     "Сообщение: 'ребенок 7 лет хочет баскетбол в спортклубе Титан' -> не включай criterion_01_municipality, потому что 'спортклуб' указывает на организацию.",
     "JSON-формат:",
     '{"scenario":"fallback","message_for_user":"","criteria":{}}',
@@ -233,20 +242,10 @@ function normalizeEnum(value, allowed) {
   return allowed.has(value) ? value : null;
 }
 
-function normalizeAge(value, yearsValue, textValue) {
-  const text = String(value ?? "").trim();
+function normalizeAge(yearsValue, textValue) {
   const ageText = normalizeFreeText(textValue);
-  const enumValue = normalizeEnum(value, ALLOWED_AGES);
-  const explicitYears = normalizeAgeYears(yearsValue);
-  if (enumValue) {
-    return {
-      age: enumValue,
-      ageYears: explicitYears,
-      ageText: ageText || (explicitYears ? `${explicitYears} лет` : ""),
-    };
-  }
-
-  const range = text.match(/(\d{1,2})\s*[-–]\s*(\d{1,2})/);
+  const explicitYears = normalizeAgeYears(yearsValue) || normalizeAgeYears(ageText);
+  const range = ageText ? ageText.match(/(\d{1,2})\s*[-–]\s*(\d{1,2})/) : null;
   if (range) {
     const first = Number(range[1]);
     const second = Number(range[2]);
@@ -258,8 +257,7 @@ function normalizeAge(value, yearsValue, textValue) {
     };
   }
 
-  const numeric = text.match(/(\d{1,2})/);
-  const ageYears = explicitYears || (numeric ? Number(numeric[1]) : null);
+  const ageYears = explicitYears;
   if (!ageYears) {
     return {
       age: null,
@@ -294,8 +292,8 @@ function buildSlotsFromCriteria(criteria = {}) {
 
   const age = criteria.criterion_03_age;
   if (age?.status && age.status !== "not_specified") {
-    slots.age = normalizeEnum(readCriterionValue(age, "age_bucket", "ageBucket", "bucket", "age"), ALLOWED_AGES);
     slots.ageYears = normalizeAgeYears(readCriterionValue(age, "age_years", "ageYears", "years"));
+    slots.age = slots.ageYears ? ageBucketFromYears(slots.ageYears) : null;
     slots.ageText = normalizeFreeText(readCriterionValue(age, "age_text", "ageText", "text")) || "";
   }
 
@@ -328,14 +326,27 @@ function normalizeMunicipalityCriterion(criterion) {
 
 function normalizeAgeCriterion(criterion) {
   if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return;
+  removeAgeBucketFields(criterion);
   const age = normalizeAge(
-    readCriterionValue(criterion, "age_bucket", "ageBucket", "bucket", "age"),
     readCriterionValue(criterion, "age_years", "ageYears", "years"),
     readCriterionValue(criterion, "age_text", "ageText", "text"),
   );
   if (age.age) criterion.age_bucket = age.age;
   if (age.ageYears) criterion.age_years = age.ageYears;
   if (age.ageText) criterion.age_text = age.ageText;
+}
+
+function removeAgeBucketFields(criterion) {
+  delete criterion.age_bucket;
+  delete criterion.ageBucket;
+  delete criterion.bucket;
+  delete criterion.age;
+  if (criterion.value && typeof criterion.value === "object" && !Array.isArray(criterion.value)) {
+    delete criterion.value.age_bucket;
+    delete criterion.value.ageBucket;
+    delete criterion.value.bucket;
+    delete criterion.value.age;
+  }
 }
 
 function normalizeEducationFormCriterion(criterion) {

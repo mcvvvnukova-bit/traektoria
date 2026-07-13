@@ -256,7 +256,6 @@ test("scenario 1 llm-only sends unparsed state to llm", async (t) => {
           },
           criterion_03_age: {
             status: "recognized",
-            age_bucket: "10-12",
             age_years: 10,
             age_text: "10 лет",
             confidence: 0.95,
@@ -282,6 +281,7 @@ test("scenario 1 llm-only sends unparsed state to llm", async (t) => {
   assert.match(harness.messages[0].text, /Подбираю программы/);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
   assert.deepEqual(harness.criteriaLogs[0].criterion_01_municipality_value, ["Мурманск"]);
+  assert.equal(harness.criteriaLogs[0].criterion_03_age_bucket, "10-12");
   assert.equal(harness.criteriaLogs[0].criterion_03_age_years, 10);
 });
 

@@ -45,6 +45,25 @@ test("applies cost as a hard filter before scoring", () => {
   assert.equal(result.score, 0);
 });
 
+test("does not apply cost filter when budget has no restrictions", () => {
+  const result = scoreProgramCandidate(
+    baseCandidate({
+      groups: [{ period_price: "5000" }],
+      topics: [{ name: "Робототехника", key: "robotics" }],
+    }),
+    {
+      scenario: SCENARIO_DESCRIPTION,
+      municipalityId: 10,
+      age: "10-12",
+      budget: "без ограничений",
+      interests: ["building"],
+    },
+  );
+
+  assert.equal(result.passesFilters, true);
+  assert.notEqual(result.exclusionReason, "budget_mismatch");
+});
+
 test("uses best thematic match per interest instead of summing all hierarchy levels", () => {
   const result = scoreProgramCandidate(
     baseCandidate({

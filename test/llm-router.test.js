@@ -146,7 +146,6 @@ test("scenario 1 user prompt passes Rosstat settlement candidates to llm", async
         },
         criterion_03_age: {
           status: "recognized",
-          age_bucket: "7-9",
           age_years: 7,
           age_text: "7 лет",
           confidence: 1,
@@ -179,6 +178,46 @@ test("scenario 1 user prompt passes Rosstat settlement candidates to llm", async
   assert.deepEqual(result.criteria.criterion_01_municipality.value, ["Титан"]);
   assert.equal(result.criteria.criterion_03_age.age_bucket, "7-9");
   assert.deepEqual(result.criteria.criterion_12_exact_interest_topic.terms, ["баскетбол"]);
+});
+
+test("scenario 1 prompt explains budget extraction and confidence scoring", async (t) => {
+  let requestBody = null;
+  const { analyzeFreeText } = setupEnabledLlm(t, async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return llmResponse({
+      scenario: "fallback",
+      message_for_user: "",
+      criteria: {},
+    });
+  });
+
+  await analyzeFreeText(
+    { scenario: "description_selection", mode: "description", current: {} },
+    "Есть что-нибудь до 3000 рублей для мальчика 10 лет?",
+  );
+
+  const systemPrompt = requestBody.messages[0].content;
+  assert.match(systemPrompt, /Бюджет или стоимость возвращай только в criterion_04_cost\.value/);
+  assert.match(systemPrompt, /до 3000 рублей/);
+  assert.match(systemPrompt, /не дороже 3000/);
+  assert.match(systemPrompt, /бюджет 3000/);
+  assert.match(systemPrompt, /готовы платить 3000/);
+  assert.match(systemPrompt, /2К.*2к.*2000/s);
+  assert.match(systemPrompt, /до 2К.*до 2000 рублей/s);
+  assert.match(systemPrompt, /Хотелось бы уложиться тысяч в пять.*до 5000 рублей/s);
+  assert.match(systemPrompt, /тысяч в пять.*до 5000 рублей/s);
+  assert.match(systemPrompt, /пять тысяч.*около пяти тысяч.*в пределах 5 тысяч/s);
+  assert.match(systemPrompt, /Стоимость не важна.*без ограничений/s);
+  assert.match(systemPrompt, /Цена значения не имеет.*без ограничений/s);
+  assert.match(systemPrompt, /по цене ограничений нет.*без ограничений/s);
+  assert.match(systemPrompt, /подешевле.*недорого/s);
+  assert.match(systemPrompt, /не слишком дорого.*бюджетно.*недорого/s);
+  assert.match(systemPrompt, /подороже.*дорого/s);
+  assert.match(systemPrompt, /дорогие.*премиальный вариант.*дорого/s);
+  assert.match(systemPrompt, /бесплатно/);
+  assert.match(systemPrompt, /Есть что-нибудь до 3000 рублей.*criterion_03_age age_years 10.*criterion_04_cost value 'до 3000 рублей'/s);
+  assert.match(systemPrompt, /confidence.*собственная оценка уверенности/s);
+  assert.match(systemPrompt, /не копируй числа confidence из примеров автоматически/);
 });
 
 test("scenario 1 normalizes official typed settlement values from llm", async (t) => {
@@ -217,7 +256,6 @@ test("scenario 1 prompt and parser keep exact specific interests", async (t) => 
         },
         criterion_03_age: {
           status: "recognized",
-          age_bucket: "13+",
           age_years: 13,
           age_text: "13 лет",
           confidence: 1,
@@ -248,11 +286,39 @@ test("scenario 1 prompt and parser keep exact specific interests", async (t) => 
   assert.match(systemPrompt, /criterion_12_exact_interest_topic/);
   assert.match(systemPrompt, /баскетбол.*sports/s);
   assert.match(systemPrompt, /age_years/);
-  assert.match(systemPrompt, /13 лет.*13\+/s);
-  assert.match(systemPrompt, /9 лет.*7-9/s);
+  assert.match(systemPrompt, /Не возвращай age_bucket/);
+  assert.doesNotMatch(systemPrompt, /"age_bucket":/);
+  assert.doesNotMatch(systemPrompt, /age_bucket '7-9'/);
+  assert.match(systemPrompt, /13 лет.*13/s);
+  assert.match(systemPrompt, /9 лет.*9/s);
   assert.equal(result.criteria.criterion_03_age.age_bucket, "13+");
   assert.equal(result.criteria.criterion_03_age.age_years, 13);
   assert.equal(result.criteria.criterion_03_age.age_text, "13 лет");
   assert.deepEqual(result.criteria.criterion_13_interest_level2_category.values, ["sports"]);
   assert.deepEqual(result.criteria.criterion_12_exact_interest_topic.terms, ["баскетбол"]);
+});
+
+test("scenario 1 derives age bucket from age_years when old llm bucket conflicts", async (t) => {
+  const { analyzeFreeText } = setupEnabledLlm(t, async () => llmResponse({
+    scenario: "ready_to_recommend",
+    message_for_user: "",
+    criteria: {
+      criterion_03_age: {
+        status: "recognized",
+        age_bucket: "10-12",
+        age_years: 15,
+        age_text: "15 лет",
+        confidence: 1,
+      },
+    },
+  }));
+
+  const result = await analyzeFreeText(
+    { scenario: "description_selection", mode: "description", current: {} },
+    "ребенку 15 лет",
+  );
+
+  assert.equal(result.criteria.criterion_03_age.age_bucket, "13+");
+  assert.equal(result.criteria.criterion_03_age.age_years, 15);
+  assert.equal(result.criteria.criterion_03_age.age_text, "15 лет");
 });

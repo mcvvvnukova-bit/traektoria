@@ -291,9 +291,9 @@ function applyCriteriaMunicipalityPatch(patch, criterion) {
 
 function applyCriteriaAgePatch(patch, criterion) {
   if (!isRecognizedCriterion(criterion)) return;
-  const years = coerceAgeYears(readCriterionValue(criterion, "age_years", "ageYears", "years"));
-  const bucket = normalizeAgeBucket(readCriterionValue(criterion, "age_bucket", "ageBucket", "bucket", "age")) ||
-    (years ? ageBucket(years) : null);
+  const years = coerceAgeYears(readCriterionValue(criterion, "age_years", "ageYears", "years")) ||
+    coerceAgeYears(readCriterionValue(criterion, "age_text", "ageText", "text"));
+  const bucket = years ? ageBucket(years) : null;
   if (!bucket) return;
 
   patch.age = bucket;
@@ -523,9 +523,10 @@ function normalizeModelCriterionFields(column, criterion) {
       break;
     }
     case "criterion_03_age": {
-      const years = coerceAgeYears(readCriterionValue(criterion, "age_years", "ageYears", "years"));
-      const bucket = normalizeAgeBucket(readCriterionValue(criterion, "age_bucket", "ageBucket", "bucket", "age")) ||
-        (years ? ageBucket(years) : null);
+      removeAgeBucketFields(criterion);
+      const years = coerceAgeYears(readCriterionValue(criterion, "age_years", "ageYears", "years")) ||
+        coerceAgeYears(readCriterionValue(criterion, "age_text", "ageText", "text"));
+      const bucket = years ? ageBucket(years) : null;
       if (bucket) criterion.age_bucket = bucket;
       if (years) criterion.age_years = years;
       const ageText = criterionText(readCriterionValue(criterion, "age_text", "ageText", "text"));
@@ -610,6 +611,19 @@ function normalizeModelCriterionFields(column, criterion) {
   }
 }
 
+function removeAgeBucketFields(criterion) {
+  delete criterion.age_bucket;
+  delete criterion.ageBucket;
+  delete criterion.bucket;
+  delete criterion.age;
+  if (criterion.value && typeof criterion.value === "object" && !Array.isArray(criterion.value)) {
+    delete criterion.value.age_bucket;
+    delete criterion.value.ageBucket;
+    delete criterion.value.bucket;
+    delete criterion.value.age;
+  }
+}
+
 function normalizeCriterionStatus(value, criterion) {
   const status = String(value || "").trim();
   if (KNOWN_CRITERION_STATUSES.has(status)) return status;
@@ -682,11 +696,6 @@ function normalizeEnumArray(value, allowed) {
     .map((item) => normalizeEnumValue(item, allowed))
     .filter(Boolean)
     .filter((item, index, list) => list.indexOf(item) === index);
-}
-
-function normalizeAgeBucket(value) {
-  const text = String(value ?? "").trim();
-  return Object.prototype.hasOwnProperty.call(AGE_LABELS, text) ? text : null;
 }
 
 function coerceAgeYears(value) {

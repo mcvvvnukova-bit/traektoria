@@ -16,12 +16,12 @@ const {
 
 test("builds flat criterion fields for scenario 1 recognition", () => {
   const state = createDescriptionSelectionState();
-  applyDescriptionText(state, "Сыну 10 лет, Североморск, робототехника после школы");
+  applyDescriptionText(state, "Сыну 15 лет, Североморск, робототехника после школы");
 
   const record = buildScenario1CriteriaRecognitionRecord({
     platform: "telegram",
     sessionId: "123",
-    inputText: "Сыну 10 лет, Североморск, робототехника после школы",
+    inputText: "Сыну 15 лет, Североморск, робототехника после школы",
     recognitionMethod: "regexp",
     state,
   });
@@ -32,9 +32,9 @@ test("builds flat criterion fields for scenario 1 recognition", () => {
   assert.equal(record.criterion_01_municipality_status, "recognized");
   assert.deepEqual(record.criterion_01_municipality_value, ["Североморск"]);
   assert.equal(record.criterion_03_age_status, "recognized");
-  assert.equal(record.criterion_03_age_bucket, "10-12");
-  assert.equal(record.criterion_03_age_years, 10);
-  assert.equal(record.criterion_03_age_text, "10 лет");
+  assert.equal(record.criterion_03_age_bucket, "13+");
+  assert.equal(record.criterion_03_age_years, 15);
+  assert.equal(record.criterion_03_age_text, "15 лет");
   assert.equal(record.criterion_03_age_confidence, 0.95);
   assert.deepEqual(record.criterion_12_exact_interest_topic_labels, ["робототехника"]);
   assert.equal(record.criterion_17_completed_exact_topic_match_status, "not_applicable");
@@ -122,15 +122,15 @@ test("does not build llm log values from normalized fields when model omits crit
   assert.equal(record.recognitionConfidence, 0);
 });
 
-test("writes only model-provided criteria fields for llm recognition", () => {
+test("writes model criteria fields and derives age bucket from age years for llm recognition", () => {
   const state = createDescriptionSelectionState();
   applyDescriptionText(state, "Сыну 10 лет, Североморск, робототехника после школы");
   state.llm.criteria = {
     criterion_03_age: {
       status: "recognized",
       age_bucket: "10-12",
-      age_years: 10,
-      age_text: "10 лет",
+      age_years: 15,
+      age_text: "15 лет",
       confidence: 0.82,
     },
     criterion_12_exact_interest_topic: {
@@ -150,8 +150,8 @@ test("writes only model-provided criteria fields for llm recognition", () => {
   });
 
   assert.equal(record.criterion_03_age_status, "recognized");
-  assert.equal(record.criterion_03_age_bucket, "10-12");
-  assert.equal(record.criterion_03_age_years, 10);
+  assert.equal(record.criterion_03_age_bucket, "13+");
+  assert.equal(record.criterion_03_age_years, 15);
   assert.equal(record.criterion_03_age_confidence, 0.82);
   assert.deepEqual(record.criterion_12_exact_interest_topic_terms, ["робототехника"]);
   assert.equal(record.criterion_12_exact_interest_topic_confidence, 0.77);
