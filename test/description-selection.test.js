@@ -169,6 +169,12 @@ test("uses llm criteria as validated enrichment for missing required fields", ()
         value: "до 1000 рублей",
         confidence: 0.8,
       },
+      criterion_06_education_form: {
+        status: "recognized",
+        education_form_id: 3,
+        format_label: "Заочная",
+        confidence: 0.86,
+      },
       criterion_07_schedule: {
         status: "recognized",
         schedule_text: "вечером",
@@ -189,8 +195,29 @@ test("uses llm criteria as validated enrichment for missing required fields", ()
   assert.equal(state.fields.placeKnown, true);
   assert.deepEqual(state.fields.interests, ["building", "logic"]);
   assert.equal(state.fields.budget, "до 1000 рублей");
+  assert.equal(state.fields.educationFormId, 3);
+  assert.equal(state.fields.educationFormLabel, "Заочная");
+  assert.equal(state.fields.format, 3);
+  assert.equal(state.fields.formatLabel, "Заочная");
   assert.equal(state.fields.scheduleText, "вечером");
   assert.equal(state.llm.criteria.criterion_01_municipality.confidence, 0.95);
+});
+
+test("recognizes PFDO education form ids from free text", () => {
+  const mixed = createDescriptionSelectionState();
+  applyDescriptionText(mixed, "Сыну 10 лет, Мурманск, робототехника, нужен очно-заочный формат");
+  assert.equal(mixed.fields.educationFormId, 2);
+  assert.equal(mixed.fields.educationFormLabel, "Очно-заочная");
+
+  const remote = createDescriptionSelectionState();
+  applyDescriptionText(remote, "Дочке 9 лет, рисование в Мурманске, только онлайн");
+  assert.equal(remote.fields.educationFormId, 3);
+  assert.equal(remote.fields.educationFormLabel, "Заочная");
+
+  const inPerson = createDescriptionSelectionState();
+  applyDescriptionText(inPerson, "Сыну 8 лет, шахматы в Коле, очно");
+  assert.equal(inPerson.fields.educationFormId, 1);
+  assert.equal(inPerson.fields.educationFormLabel, "Очная");
 });
 
 test("uses llm exact interest criteria as recommendation terms", () => {

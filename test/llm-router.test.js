@@ -220,6 +220,53 @@ test("scenario 1 prompt explains budget extraction and confidence scoring", asyn
   assert.match(systemPrompt, /не копируй числа confidence из примеров автоматически/);
 });
 
+test("scenario 1 prompt and parser use PFDO education form ids", async (t) => {
+  let requestBody = null;
+  const { analyzeFreeText } = setupEnabledLlm(t, async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return llmResponse({
+      scenario: "ready_to_recommend",
+      message_for_user: "",
+      criteria: {
+        criterion_06_education_form: {
+          status: "recognized",
+          education_form_id: "2",
+          format: "offline",
+          format_label: "",
+          confidence: 0.87,
+        },
+      },
+    });
+  });
+
+  const result = await analyzeFreeText(
+    { scenario: "description_selection", mode: "description", current: {} },
+    "Нужен смешанный формат, частично онлайн и частично очно",
+  );
+
+  const systemPrompt = requestBody.messages[0].content;
+  assert.match(systemPrompt, /criterion_06_education_form\.education_form_id/);
+  assert.match(systemPrompt, /1 — Очная/);
+  assert.match(systemPrompt, /2 — Очно-заочная/);
+  assert.match(systemPrompt, /3 — Заочная/);
+  assert.match(systemPrompt, /Не удаленно.*Без Zoom.*Только не через интернет.*education_form_id 1/s);
+  assert.match(systemPrompt, /очно-заочно.*education_form_id 2/s);
+  assert.match(systemPrompt, /онлайн.*education_form_id 3/s);
+  assert.match(systemPrompt, /Дистанционно.*Удаленно.*Через интернет.*education_form_id 3/s);
+  assert.match(systemPrompt, /По видеосвязи.*Через Zoom.*education_form_id 3/s);
+  assert.match(systemPrompt, /Чтобы ребенок учился дома.*Хотим заниматься через компьютер.*education_form_id 3/s);
+  assert.match(systemPrompt, /Хотелось бы заниматься через интернет.*Ищем дистанционные курсы по программированию.*education_form_id 3/s);
+  assert.match(systemPrompt, /Лучше заниматься из дома.*education_form_id 3/s);
+  assert.match(systemPrompt, /Форма обучения не важна.*не включай criterion_06_education_form/s);
+  assert.match(systemPrompt, /Любая форма обучения подойдет.*не включай criterion_06_education_form/s);
+  assert.match(systemPrompt, /Не имеет значения, как проходят занятия.*не включай criterion_06_education_form/s);
+  assert.match(systemPrompt, /Не используй значения online, offline, full_time, part_time или correspondence/);
+  assert.doesNotMatch(systemPrompt, /"criterion_06_education_form":\{"status":"recognized","format"/);
+  assert.equal(result.criteria.criterion_06_education_form.education_form_id, 2);
+  assert.equal(result.criteria.criterion_06_education_form.format_label, "Очно-заочная");
+  assert.equal(result.criteria.criterion_06_education_form.format, undefined);
+});
+
 test("scenario 1 normalizes official typed settlement values from llm", async (t) => {
   const { analyzeFreeText } = setupEnabledLlm(t, async () => llmResponse({
     scenario: "ready_to_recommend",

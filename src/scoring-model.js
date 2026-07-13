@@ -1,3 +1,8 @@
+const {
+  educationFormLabel,
+  normalizeEducationFormId,
+} = require("./education-forms");
+
 const SCENARIO_DESCRIPTION = "s1";
 const SCENARIO_AGENT = "s2";
 const SCENARIO_DEEP = "s3";
@@ -227,6 +232,7 @@ function normalizeScoringContext(rawContext = {}) {
     scheduleText: rawContext.scheduleText || rawContext.schedule || "",
     scheduleValues: Array.isArray(rawContext.schedule) ? rawContext.schedule : [],
     directionLabel,
+    educationFormId: normalizeEducationFormId(rawContext.educationFormId ?? rawContext.education_form_id ?? rawContext.format),
     format: rawContext.format || rawContext.educationForm || rawContext.formatLabel || "",
     groupSize: rawContext.groupSize || groupSizeFromClarifier(rawContext.clarifyGroup),
     interests: normalizeInterestInputs(rawContext),
@@ -363,20 +369,31 @@ function matchesBudget(candidate, budgetAmount) {
 }
 
 function matchesEducationForm(candidate, context) {
+  const requestedId = normalizeEducationFormId(context.educationFormId ?? context.format);
   const requested = normalizeText(context.format);
-  if (!requested || requested.includes("люб") || requested === "any") return true;
+  if (!requestedId && (!requested || requested.includes("люб") || requested === "any")) return true;
 
   const label = normalizeText(candidate.eduFormName || candidate.educationFormName || candidate.formatLabel || "");
   const eduForm = nullableNumber(candidate.eduForm ?? candidate.edu_form);
   if (!label && eduForm == null) return true;
 
-  if (requested.includes("офлайн") || requested.includes("очн")) {
-    if (label) return label.includes("очн") && !label.includes("заочн");
+  if (requestedId) {
+    if (eduForm != null) return eduForm === requestedId;
+    return label ? label === normalizeText(educationFormLabel(requestedId)) : true;
+  }
+
+  if (requested.includes("очно-заоч")) {
+    if (label) return label.includes("очно-заоч");
     return true;
   }
 
-  if (requested.includes("онлайн") || requested.includes("заоч")) {
-    if (label) return label.includes("заоч") || label.includes("дистан");
+  if (requested.includes("заоч") || requested.includes("онлайн") || requested.includes("дистан")) {
+    if (label) return label.includes("заоч") && !label.includes("очно-заоч");
+    return true;
+  }
+
+  if (requested.includes("очн") || requested.includes("офлайн")) {
+    if (label) return label.includes("очн") && !label.includes("заочн");
     return true;
   }
 

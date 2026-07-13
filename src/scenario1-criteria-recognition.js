@@ -1,3 +1,8 @@
+const {
+  educationFormLabel,
+  normalizeEducationFormId,
+} = require("./education-forms");
+
 const SCENARIO_1_CRITERIA = [
   {
     number: 1,
@@ -371,14 +376,15 @@ function buildScenario1CriteriaDetails(state = {}, options = {}) {
     recognitionMethod,
   });
 
+  const educationFormId = normalizeEducationFormId(fields.educationFormId ?? fields.format);
   result.criterion_06_education_form = baseCriterion(SCENARIO_1_CRITERIA[5], {
-    status: fields.format ? "recognized" : "not_specified",
-    value: fields.format ? {
-      format: fields.format,
-      formatLabel: fields.formatLabel || "",
+    status: educationFormId ? "recognized" : "not_specified",
+    value: educationFormId ? {
+      educationFormId,
+      formatLabel: fields.educationFormLabel || fields.formatLabel || educationFormLabel(educationFormId),
     } : null,
-    confidence: fields.format ? 0.85 : null,
-    sourceFields: ["fields.format", "fields.formatLabel"],
+    confidence: educationFormId ? 0.85 : null,
+    sourceFields: ["fields.educationFormId", "fields.educationFormLabel"],
     recognitionMethod,
   });
 
@@ -597,7 +603,7 @@ function applyNestedModelCriterion(flat, prefix, criterion) {
       setModelColumn(flat, "criterion_03_age_text", read("age_text", "ageText", "text"));
       break;
     case "criterion_06_education_form":
-      setModelColumn(flat, "criterion_06_education_form_format", read("format"));
+      setModelColumn(flat, "criterion_06_education_form_format", read("education_form_id", "educationFormId", "edu_form", "eduForm", "id"));
       setModelColumn(flat, "criterion_06_education_form_format_label", read("format_label", "formatLabel", "label"));
       break;
     case "criterion_07_schedule":
@@ -694,7 +700,8 @@ function setAgeCriterion(flat, criterion) {
 function setEducationFormCriterion(flat, criterion) {
   setCommon(flat, "criterion_06_education_form", criterion);
   const value = criterion?.value || {};
-  flat.criterion_06_education_form_format = value.format || null;
+  const educationFormId = normalizeEducationFormId(value.educationFormId ?? value.format);
+  flat.criterion_06_education_form_format = educationFormId ? String(educationFormId) : null;
   flat.criterion_06_education_form_format_label = value.formatLabel || null;
 }
 

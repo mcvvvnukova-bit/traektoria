@@ -10,6 +10,7 @@ const { FLOW, SCENARIO_1, SCENARIO_2, SCENARIO_3, SCENARIO_4 } = require("./flow
 const { getRecommendations } = require("./recommendations");
 const { createSelectionPdf } = require("./pdf-selection");
 const { analyzeFreeText } = require("./llm-router");
+const { educationFormLabel, normalizeEducationFormId } = require("./education-forms");
 const {
   createDescriptionSelectionState,
   ensureDescriptionSelectionState,
@@ -166,6 +167,8 @@ function createScenario2State() {
     goal: null,
     goalLabel: "",
     schedule: [],
+    educationFormId: null,
+    educationFormLabel: "",
     format: null,
     formatLabel: "",
     place: "",
@@ -1265,7 +1268,12 @@ async function handleCallback(callbackQuery) {
   }
 
   if (data.startsWith("s2:format:")) {
-    setSelectedOption(session.scenario2, "format", "formatLabel", data, SCENARIO_2.format.options);
+    setSelectedOption(session.scenario2, "educationFormId", "educationFormLabel", data, SCENARIO_2.format.options);
+    const educationFormId = normalizeEducationFormId(session.scenario2.educationFormId);
+    session.scenario2.educationFormId = educationFormId;
+    session.scenario2.educationFormLabel = educationFormId ? educationFormLabel(educationFormId) : "Любая форма";
+    session.scenario2.format = educationFormId;
+    session.scenario2.formatLabel = session.scenario2.educationFormLabel;
     return askScenario2Place(chatId, session);
   }
 
@@ -1546,8 +1554,10 @@ function buildRecommendationProfile(state) {
     budget: state.cost,
     schedule: scheduleText(state.schedule),
     scheduleValues: state.schedule || [],
-    format: state.format,
-    formatLabel: state.formatLabel,
+    educationFormId: state.educationFormId || state.format || null,
+    educationFormLabel: state.educationFormLabel || state.formatLabel || "",
+    format: state.educationFormId || state.format,
+    formatLabel: state.educationFormLabel || state.formatLabel,
     clarifyGroup: mapGroupSize(state.groupSize),
     clarifyFocus: null,
     groupSize: state.groupSize,

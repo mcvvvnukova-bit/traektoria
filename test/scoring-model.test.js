@@ -64,6 +64,44 @@ test("does not apply cost filter when budget has no restrictions", () => {
   assert.notEqual(result.exclusionReason, "budget_mismatch");
 });
 
+test("applies education form id as a hard filter", () => {
+  const mismatch = scoreProgramCandidate(
+    baseCandidate({
+      eduForm: 3,
+      eduFormName: "Заочная",
+      topics: [{ name: "Робототехника", key: "robotics" }],
+    }),
+    {
+      scenario: SCENARIO_DESCRIPTION,
+      municipalityId: 10,
+      age: "10-12",
+      educationFormId: 1,
+      interests: ["building"],
+    },
+  );
+
+  assert.equal(mismatch.passesFilters, false);
+  assert.equal(mismatch.exclusionReason, "education_form_mismatch");
+
+  const match = scoreProgramCandidate(
+    baseCandidate({
+      eduForm: 3,
+      eduFormName: "Заочная",
+      topics: [{ name: "Робототехника", key: "robotics" }],
+    }),
+    {
+      scenario: SCENARIO_DESCRIPTION,
+      municipalityId: 10,
+      age: "10-12",
+      educationFormId: 3,
+      interests: ["building"],
+    },
+  );
+
+  assert.equal(match.passesFilters, true);
+  assert.notEqual(match.exclusionReason, "education_form_mismatch");
+});
+
 test("uses best thematic match per interest instead of summing all hierarchy levels", () => {
   const result = scoreProgramCandidate(
     baseCandidate({

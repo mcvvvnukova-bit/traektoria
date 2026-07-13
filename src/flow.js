@@ -164,11 +164,12 @@ const SCENARIO_2 = {
     ],
   },
   format: {
-    text: "Какой формат занятий удобнее?",
+    text: "Какая форма обучения удобнее?",
     options: [
-      ["Офлайн", "s2:format:offline"],
-      ["Онлайн", "s2:format:online"],
-      ["Любой формат", "s2:format:any"],
+      ["Очная", "s2:format:1"],
+      ["Очно-заочная", "s2:format:2"],
+      ["Заочная", "s2:format:3"],
+      ["Любая форма", "s2:format:any"],
     ],
   },
   place: {

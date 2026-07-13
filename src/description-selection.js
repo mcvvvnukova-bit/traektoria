@@ -1,6 +1,11 @@
 const { analyzeQueryInterests } = require("./query-ontology");
 const { findMurmanskSettlements } = require("./murmansk-settlements");
 const { SCENARIO_1_CRITERIA_COLUMNS } = require("./scenario1-criteria-recognition");
+const {
+  EDUCATION_FORM_LABELS,
+  educationFormLabel,
+  normalizeEducationFormId,
+} = require("./education-forms");
 
 const AGE_LABELS = {
   "3-4": "3-4 года",
@@ -74,12 +79,7 @@ const KNOWN_CRITERION_STATUSES = new Set([
 ]);
 const ALLOWED_INTEREST_VALUES = new Set(INTEREST_RULES.map(([value]) => value));
 const ALLOWED_DIRECTION_VALUES = new Set(DIRECTION_RULES.map((item) => item.value));
-const ALLOWED_FORMAT_VALUES = new Set(["online", "offline"]);
 const ALLOWED_SCHEDULE_VALUES = new Set(["weekdays", "weekends", "morning", "evening"]);
-const FORMAT_LABELS = {
-  online: "Онлайн",
-  offline: "Офлайн",
-};
 const SCHEDULE_LABELS = {
   weekdays: "будни",
   weekends: "выходные",
@@ -137,6 +137,8 @@ function createDescriptionSelectionState() {
       budget: "",
       schedule: [],
       scheduleText: "",
+      educationFormId: null,
+      educationFormLabel: "",
       format: null,
       formatLabel: "",
       avoidances: [],
@@ -310,12 +312,21 @@ function applyCriteriaCostPatch(patch, criterion) {
 
 function applyCriteriaEducationFormPatch(patch, criterion) {
   if (!isRecognizedCriterion(criterion)) return;
-  const format = normalizeEnumValue(readCriterionValue(criterion, "format"), ALLOWED_FORMAT_VALUES);
-  if (!format) return;
-  patch.format = format;
-  patch.formatLabel = criterionText(readCriterionValue(criterion, "format_label", "formatLabel", "label")) ||
-    FORMAT_LABELS[format] ||
-    "";
+  const educationFormId = normalizeEducationFormId(readCriterionValue(
+    criterion,
+    "education_form_id",
+    "educationFormId",
+    "edu_form",
+    "eduForm",
+    "id",
+  ));
+  if (!educationFormId) return;
+  const label = criterionText(readCriterionValue(criterion, "format_label", "formatLabel", "label")) ||
+    educationFormLabel(educationFormId);
+  patch.educationFormId = educationFormId;
+  patch.educationFormLabel = label;
+  patch.format = educationFormId;
+  patch.formatLabel = label;
 }
 
 function applyCriteriaSchedulePatch(patch, criterion) {
@@ -534,11 +545,24 @@ function normalizeModelCriterionFields(column, criterion) {
       break;
     }
     case "criterion_06_education_form": {
-      const format = normalizeEnumValue(readCriterionValue(criterion, "format"), ALLOWED_FORMAT_VALUES);
-      if (format) {
-        criterion.format = format;
+      const educationFormId = normalizeEducationFormId(readCriterionValue(
+        criterion,
+        "education_form_id",
+        "educationFormId",
+        "edu_form",
+        "eduForm",
+        "id",
+      ));
+      delete criterion.format;
+      delete criterion.educationForm;
+      if (criterion.value && typeof criterion.value === "object" && !Array.isArray(criterion.value)) {
+        delete criterion.value.format;
+        delete criterion.value.educationForm;
+      }
+      if (educationFormId) {
+        criterion.education_form_id = educationFormId;
         criterion.format_label = criterionText(readCriterionValue(criterion, "format_label", "formatLabel", "label")) ||
-          FORMAT_LABELS[format];
+          educationFormLabel(educationFormId);
       }
       break;
     }
@@ -813,6 +837,8 @@ function parseDescriptionText(text) {
 
   const format = detectFormat(normalized);
   if (format) {
+    fields.educationFormId = format.value;
+    fields.educationFormLabel = format.label;
     fields.format = format.value;
     fields.formatLabel = format.label;
   }
@@ -953,8 +979,10 @@ function buildRecommendationProfile(state) {
     budget: fields.budget,
     schedule: fields.scheduleText,
     scheduleValues: fields.schedule || [],
-    format: fields.format,
-    formatLabel: fields.formatLabel,
+    educationFormId: fields.educationFormId || fields.format || null,
+    educationFormLabel: fields.educationFormLabel || fields.formatLabel || "",
+    format: fields.educationFormId || fields.format || null,
+    formatLabel: fields.educationFormLabel || fields.formatLabel || "",
     clarifyGroup: fields.clarifyGroup || null,
     clarifyFocus: fields.clarifyFocus || null,
     groupSize: fields.groupSize || null,
@@ -979,8 +1007,10 @@ function buildPdfAnswers(state) {
     goal: fields.goal || "discover",
     goalLabel: fields.goalLabel || "Подобрать подходящие занятия",
     schedule: fields.schedule || [],
-    format: fields.format || null,
-    formatLabel: fields.formatLabel || "Любой формат",
+    educationFormId: fields.educationFormId || fields.format || null,
+    educationFormLabel: fields.educationFormLabel || fields.formatLabel || "",
+    format: fields.educationFormId || fields.format || null,
+    formatLabel: fields.educationFormLabel || fields.formatLabel || "Любая форма",
     place: fields.place || "",
     cost: fields.budget || "",
     wantsRefinement: false,
@@ -1234,8 +1264,15 @@ function addSchedule(values, labels, condition, value, label) {
 }
 
 function detectFormat(text) {
-  if (/онлайн|дистанц/.test(text)) return { value: "online", label: "Онлайн" };
-  if (/офлайн|очно|рядом/.test(text)) return { value: "offline", label: "Офлайн" };
+  if (/очно[-\s]?заочн|смешан|гибрид|частично\s+(?:онлайн|дистанц|очно)/.test(text)) {
+    return { value: 2, label: EDUCATION_FORM_LABELS[2] };
+  }
+  if (/заочн|онлайн|дистанц|удален/.test(text)) {
+    return { value: 3, label: EDUCATION_FORM_LABELS[3] };
+  }
+  if (/очн|офлайн|на месте|в аудитори|рядом/.test(text)) {
+    return { value: 1, label: EDUCATION_FORM_LABELS[1] };
+  }
   return null;
 }
 

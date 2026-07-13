@@ -16,12 +16,12 @@ const {
 
 test("builds flat criterion fields for scenario 1 recognition", () => {
   const state = createDescriptionSelectionState();
-  applyDescriptionText(state, "Сыну 15 лет, Североморск, робототехника после школы");
+  applyDescriptionText(state, "Сыну 15 лет, Североморск, робототехника после школы, очно");
 
   const record = buildScenario1CriteriaRecognitionRecord({
     platform: "telegram",
     sessionId: "123",
-    inputText: "Сыну 15 лет, Североморск, робототехника после школы",
+    inputText: "Сыну 15 лет, Североморск, робототехника после школы, очно",
     recognitionMethod: "regexp",
     state,
   });
@@ -36,6 +36,9 @@ test("builds flat criterion fields for scenario 1 recognition", () => {
   assert.equal(record.criterion_03_age_years, 15);
   assert.equal(record.criterion_03_age_text, "15 лет");
   assert.equal(record.criterion_03_age_confidence, 0.95);
+  assert.equal(record.criterion_06_education_form_status, "recognized");
+  assert.equal(record.criterion_06_education_form_format, "1");
+  assert.equal(record.criterion_06_education_form_format_label, "Очная");
   assert.deepEqual(record.criterion_12_exact_interest_topic_labels, ["робототехника"]);
   assert.equal(record.criterion_17_completed_exact_topic_match_status, "not_applicable");
   assert.equal(record.criteria, undefined);
@@ -133,6 +136,12 @@ test("writes model criteria fields and derives age bucket from age years for llm
       age_text: "15 лет",
       confidence: 0.82,
     },
+    criterion_06_education_form: {
+      status: "recognized",
+      education_form_id: 2,
+      format_label: "Очно-заочная",
+      confidence: 0.73,
+    },
     criterion_12_exact_interest_topic: {
       status: "recognized",
       terms: ["робототехника"],
@@ -153,6 +162,9 @@ test("writes model criteria fields and derives age bucket from age years for llm
   assert.equal(record.criterion_03_age_bucket, "13+");
   assert.equal(record.criterion_03_age_years, 15);
   assert.equal(record.criterion_03_age_confidence, 0.82);
+  assert.equal(record.criterion_06_education_form_format, "2");
+  assert.equal(record.criterion_06_education_form_format_label, "Очно-заочная");
+  assert.equal(record.criterion_06_education_form_confidence, 0.73);
   assert.deepEqual(record.criterion_12_exact_interest_topic_terms, ["робототехника"]);
   assert.equal(record.criterion_12_exact_interest_topic_confidence, 0.77);
   assert.deepEqual(record.criterion_01_municipality_value, []);

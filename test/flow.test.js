@@ -34,6 +34,15 @@ test("scenario 2 does not ask about child special needs", () => {
   assert.doesNotMatch(JSON.stringify(SCENARIO_2), /ОВЗ|РАС|СДВГ|зрением|слухом|особенности ребенка/i);
 });
 
+test("scenario 2 education form options use PFDO ids", () => {
+  assert.deepEqual(SCENARIO_2.format.options, [
+    ["Очная", "s2:format:1"],
+    ["Очно-заочная", "s2:format:2"],
+    ["Заочная", "s2:format:3"],
+    ["Любая форма", "s2:format:any"],
+  ]);
+});
+
 test("scenario 3 has a separate municipality prompt after completed program review", () => {
   assert.match(SCENARIO_3.municipality.text, /В каком населенном пункте/);
   assert.match(SCENARIO_3.municipality.text, /хотите продолжить обучение/);

@@ -4,6 +4,10 @@ const {
   MURMANSK_SETTLEMENT_PROMPT_LIST,
   normalizeSettlementLocation,
 } = require("./murmansk-settlements");
+const {
+  educationFormLabel,
+  normalizeEducationFormId,
+} = require("./education-forms");
 
 const ALLOWED_SCENARIOS = new Set([
   "first_time_selection",
@@ -18,7 +22,6 @@ const ALLOWED_SCENARIOS = new Set([
 const ALLOWED_INTERESTS = new Set(["creative", "building", "sports", "social", "logic", "calm"]);
 const ALLOWED_DIRECTIONS = new Set(["technical", "art", "sport", "social", "science", "tourism"]);
 const ALLOWED_SCHEDULE_VALUES = new Set(["weekdays", "weekends", "morning", "evening"]);
-const ALLOWED_FORMATS = new Set(["online", "offline"]);
 
 function isEnabled() {
   return isLlmEnabled("free_text") ||
@@ -100,6 +103,13 @@ function buildSystemPrompt() {
     "Если пользователь просит дорогой вариант, например 'подороже', 'дорогие', 'можно дорого', 'премиальный вариант', нормализуй criterion_04_cost.value к 'дорого'.",
     "Если пользователь пишет 'бесплатно', 'только бесплатные', 'без оплаты' или 'не готовы платить', нормализуй criterion_04_cost.value к 'бесплатно'.",
     "Не теряй бюджет, если в том же сообщении есть возраст: 'Есть что-нибудь до 3000 рублей для мальчика 10 лет?' -> criterion_03_age age_years 10 и criterion_04_cost value 'до 3000 рублей'.",
+    "Форму обучения возвращай только в criterion_06_education_form.",
+    "Допустимые значения criterion_06_education_form.education_form_id строго соответствуют справочнику edu_form: 1 — Очная; 2 — Очно-заочная; 3 — Заочная.",
+    "Если пользователь пишет 'очно', 'очная', 'офлайн', 'на месте', 'в аудитории', 'Не удаленно', 'Без Zoom', 'Только не через интернет', возвращай education_form_id 1 и format_label 'Очная'.",
+    "Если пользователь пишет 'очно-заочно', 'очно заочно', 'смешанный формат', 'гибридный формат', 'частично онлайн и частично очно', возвращай education_form_id 2 и format_label 'Очно-заочная'.",
+    "Если пользователь пишет 'заочно', 'заочная', 'онлайн', 'дистанционно', 'Дистанционно', 'удаленно', 'Удаленно', 'Через интернет', 'По видеосвязи', 'Через Zoom', 'Чтобы ребенок учился дома', 'Хотим заниматься через компьютер', 'Хотелось бы заниматься через интернет', 'Ищем дистанционные курсы по программированию', 'Лучше заниматься из дома', возвращай education_form_id 3 и format_label 'Заочная'.",
+    "Если пользователь пишет 'любой формат', 'форма не важна', 'Форма обучения не важна', 'Любая форма обучения подойдет', 'Не имеет значения, как проходят занятия', 'как удобно', не включай criterion_06_education_form, потому что ограничения по форме обучения нет.",
+    "Не используй значения online, offline, full_time, part_time или correspondence в criterion_06_education_form.",
     "Населенный пункт заполняй только в criterion_01_municipality.value и только населенным пунктом Мурманской области из полного списка Росстата:",
     MURMANSK_SETTLEMENT_PROMPT_LIST,
     "Возвращай населенный пункт названием без сокращения типа: 'г Мурманск' -> 'Мурманск', 'с Варзуга' -> 'Варзуга', 'ж/д ст Нял' -> 'Нял'.",
@@ -129,7 +139,7 @@ function buildSystemPrompt() {
     '"criterion_01_municipality":{"status":"recognized","value":["Мурманск"],"confidence":0.95}',
     '"criterion_03_age":{"status":"recognized","age_years":5,"age_text":"5 лет","confidence":1}',
     '"criterion_04_cost":{"status":"recognized","value":"бесплатно","confidence":0.8}',
-    '"criterion_06_education_form":{"status":"recognized","format":"offline","format_label":"Очно","confidence":0.8}',
+    '"criterion_06_education_form":{"status":"recognized","education_form_id":1,"format_label":"Очная","confidence":0.8}',
     '"criterion_07_schedule":{"status":"recognized","schedule_text":"по выходным","schedule_values":["weekends"],"confidence":0.75}',
     '"criterion_09_direction":{"status":"recognized","direction":"science","direction_label":"Естественно-научная","confidence":0.8}',
     '"criterion_10_group_size":{"status":"recognized","value":"маленькая группа","confidence":0.7}',
@@ -286,6 +296,8 @@ function buildSlotsFromCriteria(criteria = {}) {
     location: null,
     budget: null,
     schedule: null,
+    educationFormId: null,
+    educationFormLabel: "",
     clarifyGroup: null,
     clarifyFocus: null,
   };
@@ -304,6 +316,23 @@ function buildSlotsFromCriteria(criteria = {}) {
 
   const cost = normalizeFreeText(readCriterionValue(criteria.criterion_04_cost, "value", "text"));
   if (cost) slots.budget = cost;
+
+  const educationForm = criteria.criterion_06_education_form;
+  if (educationForm?.status && educationForm.status !== "not_specified") {
+    const educationFormId = normalizeEducationFormId(readCriterionValue(
+      educationForm,
+      "education_form_id",
+      "educationFormId",
+      "edu_form",
+      "eduForm",
+      "id",
+    ));
+    if (educationFormId) {
+      slots.educationFormId = educationFormId;
+      slots.educationFormLabel = normalizeFreeText(readCriterionValue(educationForm, "format_label", "formatLabel", "label")) ||
+        educationFormLabel(educationFormId);
+    }
+  }
 
   const schedule = criteria.criterion_07_schedule;
   slots.schedule = normalizeFreeText(readCriterionValue(schedule, "schedule_text", "scheduleText", "text", "value"));
@@ -351,8 +380,24 @@ function removeAgeBucketFields(criterion) {
 
 function normalizeEducationFormCriterion(criterion) {
   if (!criterion || typeof criterion !== "object" || Array.isArray(criterion)) return;
-  const format = normalizeEnum(readCriterionValue(criterion, "format"), ALLOWED_FORMATS);
-  if (format) criterion.format = format;
+  const educationFormId = normalizeEducationFormId(readCriterionValue(
+    criterion,
+    "education_form_id",
+    "educationFormId",
+    "edu_form",
+    "eduForm",
+    "id",
+  ));
+  delete criterion.format;
+  delete criterion.educationForm;
+  if (criterion.value && typeof criterion.value === "object" && !Array.isArray(criterion.value)) {
+    delete criterion.value.format;
+    delete criterion.value.educationForm;
+  }
+  if (!educationFormId) return;
+  criterion.education_form_id = educationFormId;
+  criterion.format_label = normalizeFreeText(readCriterionValue(criterion, "format_label", "formatLabel", "label")) ||
+    educationFormLabel(educationFormId);
 }
 
 function normalizeScheduleCriterion(criterion) {
