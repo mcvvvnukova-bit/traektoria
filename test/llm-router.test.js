@@ -121,11 +121,64 @@ test("scenario 1 prompt explains Murmansk region location extraction", async (t)
   assert.match(systemPrompt, /североморские секции/);
   assert.match(systemPrompt, /новое сообщение состоит только из населенного пункта/);
   assert.match(systemPrompt, /центр города/);
+  assert.match(systemPrompt, /точно совпадает с населенным пунктом из списка/);
+  assert.match(systemPrompt, /в Титане/);
+  assert.match(systemPrompt, /спортклубе Титан/);
   assert.doesNotMatch(systemPrompt, /criterion_confidences/);
   assert.doesNotMatch(systemPrompt, /filled_slots/);
   assert.match(systemPrompt, /Всегда возвращай только scenario, message_for_user и criteria/);
   assert.match(systemPrompt, /criterion_01_municipality/);
   assert.match(systemPrompt, /criterion_03_age/);
+});
+
+test("scenario 1 user prompt passes Rosstat settlement candidates to llm", async (t) => {
+  let requestBody = null;
+  const { analyzeFreeText } = setupEnabledLlm(t, async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return llmResponse({
+      scenario: "ready_to_recommend",
+      message_for_user: "",
+      criteria: {
+        criterion_01_municipality: {
+          status: "recognized",
+          value: ["Титан"],
+          confidence: 0.95,
+        },
+        criterion_03_age: {
+          status: "recognized",
+          age_bucket: "7-9",
+          age_years: 7,
+          age_text: "7 лет",
+          confidence: 1,
+        },
+        criterion_12_exact_interest_topic: {
+          status: "recognized",
+          terms: ["баскетбол"],
+          labels: ["баскетбол"],
+          confidence: 0.95,
+        },
+        criterion_13_interest_level2_category: {
+          status: "recognized",
+          values: ["sports"],
+          labels: ["спорт"],
+          confidence: 0.9,
+        },
+      },
+    });
+  });
+
+  const result = await analyzeFreeText(
+    { scenario: "description_selection", mode: "description", current: {} },
+    "ребенок 7 лет хочет заниматься баскетболом в Титане",
+  );
+
+  const userPrompt = requestBody.messages[1].content;
+  assert.match(userPrompt, /официальные населенные пункты Мурманской области/);
+  assert.match(userPrompt, /\["Титан"\]/);
+  assert.match(userPrompt, /criterion_01_municipality\.value/);
+  assert.deepEqual(result.criteria.criterion_01_municipality.value, ["Титан"]);
+  assert.equal(result.criteria.criterion_03_age.age_bucket, "7-9");
+  assert.deepEqual(result.criteria.criterion_12_exact_interest_topic.terms, ["баскетбол"]);
 });
 
 test("scenario 1 normalizes official typed settlement values from llm", async (t) => {

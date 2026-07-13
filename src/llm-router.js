@@ -1,5 +1,6 @@
 const { createChatCompletionText, isLlmEnabled } = require("./llm-client");
 const {
+  findMurmanskSettlements,
   MURMANSK_SETTLEMENT_PROMPT_LIST,
   normalizeSettlementLocation,
 } = require("./murmansk-settlements");
@@ -100,6 +101,9 @@ function buildSystemPrompt() {
     "Для названий 5-7 букв допускай до 2 таких ошибок.",
     "Для названий до 4 букв не исправляй по догадке: распознавай только точное совпадение или очевидную падежную форму.",
     "Исправляй опечатку только если ближайший вариант из списка единственный и контекст явно говорит о месте поиска. Возвращай официальное название из списка.",
+    "Если слово или фраза после предлогов 'в', 'во', 'из', 'рядом с', 'около' точно совпадает с населенным пунктом из списка, заполняй criterion_01_municipality.",
+    "Названия вроде 'Титан' могут выглядеть как бренд, но если они есть в списке населенных пунктов и нет явного маркера организации, считай их местом поиска.",
+    "Явные маркеры организации: 'клуб', 'спортклуб', 'СК', 'ДЮСШ', 'центр', 'школа', 'секция', 'организация', 'студия'. При таких маркерах не превращай название организации в населенный пункт.",
     "Если возможны несколько вариантов или уверенность низкая, не выбирай за пользователя: не включай критерий или верни неоднозначность через criterion_01_municipality со status \"recognized_ambiguous\".",
     "Нормализуй criterion_01_municipality.value к именительному падежу из списка: 'в Оленегорске' -> 'Оленегорск', 'в Мурманске' -> 'Мурманск'.",
     "Если пользователь использует прилагательное от населенного пункта рядом со словами 'кружки', 'секции', 'программы', 'занятия' или 'организации', считай это указанием места поиска и нормализуй criterion_01_municipality.value к официальному названию из списка.",
@@ -125,6 +129,9 @@ function buildSystemPrompt() {
     '"criterion_14_interest_level1_section":{"status":"recognized","direction":"science","direction_label":"Естественно-научная","confidence":0.9}',
     '"criterion_15_fallback_text_keywords":{"status":"recognized","value":"шахматы","confidence":0.8}',
     '"criterion_16_interest_without_thematic_match":{"status":"pending_scoring","interests":["logic"],"specific_terms":["шахматы"],"interests_text":"шахматы","direction":"science","confidence":0.7}',
+    "Примеры:",
+    "Сообщение: 'ребенок 7 лет хочет заниматься баскетболом в Титане' -> criterion_01_municipality {\"status\":\"recognized\",\"value\":[\"Титан\"],\"confidence\":0.95}; criterion_03_age age_bucket '7-9'; criterion_12 terms ['баскетбол']; criterion_13 values ['sports'].",
+    "Сообщение: 'ребенок 7 лет хочет баскетбол в спортклубе Титан' -> не включай criterion_01_municipality, потому что 'спортклуб' указывает на организацию.",
     "JSON-формат:",
     '{"scenario":"fallback","message_for_user":"","criteria":{}}',
     "message_for_user: короткая реплика на русском, максимум 18 слов. Если сказать нечего, верни пустую строку.",
@@ -169,12 +176,20 @@ function applyHeuristics(text, analysis) {
 }
 
 function buildUserPrompt(session, text) {
-  return [
+  const lines = [
     `Текущее состояние сессии: ${JSON.stringify(session)}`,
     `Новое сообщение пользователя: ${JSON.stringify(text)}`,
     "Извлекай данные из нового сообщения. Не копируй null из текущего состояния, если новое сообщение содержит значение.",
-    "Верни только JSON.",
-  ].join("\n");
+  ];
+  const settlementCandidates = findMurmanskSettlements(text);
+  if (settlementCandidates.length) {
+    lines.push(
+      `Код нашел в новом сообщении официальные населенные пункты Мурманской области из справочника Росстата: ${JSON.stringify(settlementCandidates)}.`,
+      "Если эти кандидаты соответствуют месту поиска занятий, верни их в criterion_01_municipality.value. Если рядом есть явный маркер организации, не используй кандидата как населенный пункт.",
+    );
+  }
+  lines.push("Верни только JSON.");
+  return lines.join("\n");
 }
 
 function extractJson(content) {
