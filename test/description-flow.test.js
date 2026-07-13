@@ -104,6 +104,47 @@ test("missing required data asks one combined clarification", async () => {
   assert.match(harness.messages[0].text, /интересы или направление/);
 });
 
+test("multiple municipalities ask for one exact place before recommendations", async () => {
+  const harness = createHarness({ step: "s1_wait_description" });
+
+  await handleDescriptionText(harness.context({
+    text: "Сыну 10 лет, Мурманск и Североморск, робототехника после школы",
+  }));
+
+  assert.equal(harness.session.step, "s1_wait_required_clarification");
+  assert.match(harness.messages[0].text, /несколько населенных пунктов/);
+  assert.match(harness.messages[0].text, /Мурманск, Североморск/);
+  assert.equal(harness.logs.length, 0);
+
+  await handleDescriptionText(harness.context({
+    text: "Мурманск или Кола",
+  }));
+
+  assert.equal(harness.session.step, "s1_wait_required_clarification");
+  assert.match(harness.messages[1].text, /Мурманск, Кола/);
+  assert.equal(harness.logs.length, 0);
+
+  await handleDescriptionText(harness.context({
+    text: "Североморск",
+  }));
+
+  assert.equal(harness.session.step, "s1_pdf");
+  assert.match(harness.messages[2].text, /Подбираю программы/);
+  assert.equal(harness.logs[0].scenario, "description_selection");
+});
+
+test("Murmansk region asks for a concrete municipality", async () => {
+  const harness = createHarness({ step: "s1_wait_description" });
+
+  await handleDescriptionText(harness.context({
+    text: "Сыну 10 лет, Мурманская область, робототехника после школы",
+  }));
+
+  assert.equal(harness.session.step, "s1_wait_required_clarification");
+  assert.match(harness.messages[0].text, /конкретный населенный пункт Мурманской области/);
+  assert.equal(harness.logs.length, 0);
+});
+
 test("enriches incomplete request with llm slots before deciding next step", async () => {
   const harness = createHarness({ step: "s1_wait_description" });
 
@@ -132,12 +173,12 @@ test("enriches incomplete request with llm slots before deciding next step", asy
   assert.equal(harness.session.descriptionSelection.llm.attempted, true);
   assert.equal(harness.session.descriptionSelection.llm.applied, true);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
-  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_value, "Мурманск");
+  assert.deepEqual(harness.criteriaLogs[0].criterion_01_municipality_value, ["Мурманск"]);
   assert.equal(harness.criteriaLogs[0].criterion_01_municipality_confidence, 0.91);
   assert.equal(harness.criteriaLogs[0].criterion_03_age_confidence, null);
 });
 
-test("llm slots enrich dialog state but do not fill criteria log without model criteria", async () => {
+test("llm municipality slot fills municipality criterion log even without model criteria", async () => {
   const harness = createHarness({ step: "s1_wait_description" });
 
   await handleDescriptionText(harness.context({
@@ -156,9 +197,33 @@ test("llm slots enrich dialog state but do not fill criteria log without model c
   assert.equal(harness.session.descriptionSelection.fields.place, "Мурманск");
   assert.equal(harness.session.descriptionSelection.llm.applied, true);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
-  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_status, "not_specified");
-  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_value, null);
-  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_confidence, null);
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_status, "recognized");
+  assert.deepEqual(harness.criteriaLogs[0].criterion_01_municipality_value, ["Мурманск"]);
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_confidence, 0.91);
+});
+
+test("llm municipality slot logs multiple place candidates as an array", async () => {
+  const harness = createHarness({ step: "s1_wait_description" });
+
+  await handleDescriptionText(harness.context({
+    text: "Сыну 10 лет",
+    analyzeFreeText: async () => ({
+      filledSlots: {
+        location: "Мурманск и Североморск",
+        interests: ["building", "logic"],
+      },
+      criterionConfidences: {
+        criterion_01_municipality: 0.74,
+      },
+    }),
+  }));
+
+  assert.equal(harness.session.step, "s1_wait_required_clarification");
+  assert.match(harness.messages[0].text, /Мурманск, Североморск/);
+  assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_status, "recognized_ambiguous");
+  assert.deepEqual(harness.criteriaLogs[0].criterion_01_municipality_value, ["Мурманск", "Североморск"]);
+  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_confidence, 0.74);
 });
 
 test("scenario 1 llm-only sends unparsed state to llm", async (t) => {
@@ -197,7 +262,7 @@ test("scenario 1 llm-only sends unparsed state to llm", async (t) => {
   assert.equal(harness.session.step, "s1_confirm_summary");
   assert.match(harness.messages[0].text, /Я понял запрос так/);
   assert.equal(harness.criteriaLogs[0].recognitionMethod, "LLM");
-  assert.equal(harness.criteriaLogs[0].criterion_01_municipality_value, null);
+  assert.deepEqual(harness.criteriaLogs[0].criterion_01_municipality_value, ["Мурманск"]);
 });
 
 test("scenario 1 llm-only reports unavailable llm without regexp fallback", async (t) => {

@@ -162,7 +162,11 @@ function nullableConfidenceToSql(value) {
 }
 
 function textArrayToSql(value) {
-  const list = Array.isArray(value) ? value : [];
+  const list = Array.isArray(value)
+    ? value
+    : value === null || value === undefined || value === ""
+      ? []
+      : [value];
   if (!list.length) return "ARRAY[]::TEXT[]";
   return `ARRAY[${list.map((item) => textToSql(String(item))).join(", ")}]::TEXT[]`;
 }

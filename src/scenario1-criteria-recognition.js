@@ -166,7 +166,7 @@ const SCENARIO_1_CRITERIA_COLUMNS = SCENARIO_1_CRITERIA.map((criterion) => crite
 
 const SCENARIO_1_CRITERIA_LOG_COLUMN_DEFINITIONS = [
   ["criterion_01_municipality_status", "text"],
-  ["criterion_01_municipality_value", "text"],
+  ["criterion_01_municipality_value", "array"],
   ["criterion_01_municipality_confidence", "confidence"],
   ["criterion_02_organization_restriction_status", "text"],
   ["criterion_02_organization_restriction_value", "text"],
@@ -325,11 +325,20 @@ function buildScenario1CriteriaDetails(state = {}, options = {}) {
     });
   }
 
+  const municipalityValues = buildMunicipalityCriterionValues(fields);
   result.criterion_01_municipality = baseCriterion(SCENARIO_1_CRITERIA[0], {
-    status: fields.place ? (fields.placeKnown === false ? "recognized_unverified" : "recognized") : "missing_required",
-    value: fields.place || null,
-    confidence: fields.place ? (fields.placeKnown === false ? 0.6 : 0.95) : 0,
-    sourceFields: ["fields.place", "fields.placeKnown"],
+    status: fields.place
+      ? (fields.placeKnown === false ? "recognized_unverified" : "recognized")
+      : municipalityValues.length
+        ? "recognized_ambiguous"
+        : "missing_required",
+    value: municipalityValues,
+    confidence: fields.place
+      ? (fields.placeKnown === false ? 0.6 : 0.95)
+      : municipalityValues.length
+        ? 0.6
+        : 0,
+    sourceFields: ["fields.place", "fields.placeKnown", "fields.placeCandidates", "fields.placeAmbiguity"],
     recognitionMethod,
   });
 
@@ -660,7 +669,15 @@ function setCommon(flat, prefix, criterion) {
 
 function setSimpleCriterion(flat, prefix, criterion) {
   setCommon(flat, prefix, criterion);
-  flat[`${prefix}_value`] = stringifyCriterionValue(criterion?.value);
+  setCriterionValueColumn(flat, `${prefix}_value`, criterion?.value);
+}
+
+function setCriterionValueColumn(flat, column, value) {
+  if (SCENARIO_1_CRITERIA_LOG_COLUMN_TYPES.get(column) === "array") {
+    flat[column] = normalizeArray(value);
+    return;
+  }
+  flat[column] = stringifyCriterionValue(value);
 }
 
 function setAgeCriterion(flat, criterion) {
@@ -735,9 +752,21 @@ function stringifyCriterionValue(value) {
 }
 
 function normalizeArray(value) {
-  return Array.isArray(value)
-    ? value.filter((item) => item !== null && item !== undefined && item !== "").map(String)
-    : [];
+  const source = Array.isArray(value)
+    ? value
+    : value && typeof value === "object"
+      ? Object.values(value).flat()
+      : [value];
+  return source
+    .filter((item) => item !== null && item !== undefined && item !== "")
+    .map(String);
+}
+
+function buildMunicipalityCriterionValues(fields = {}) {
+  if (fields.place) return normalizeArray(fields.place);
+  if ((fields.placeCandidates || []).length) return normalizeArray(fields.placeCandidates);
+  if (fields.placeAmbiguity === "place_region") return ["Мурманская область"];
+  return [];
 }
 
 function normalizeConfidenceValue(value) {

@@ -87,9 +87,15 @@ async function handleDescriptionText(context) {
   if (missing.length) {
     session.step = "s1_wait_required_clarification";
     await persistSession(target, session);
-    const prompt = missing.length === 1 && state.clarifications.length > 0
-      ? buildSingleFieldPrompt(missing[0])
-      : buildRequiredClarificationPrompt(missing);
+    const hasPlaceAmbiguity = missing.includes("place") && (
+      (state.fields?.placeCandidates || []).length > 1 ||
+      state.fields?.placeAmbiguity === "place_region"
+    );
+    const prompt = hasPlaceAmbiguity
+      ? buildSingleFieldPrompt("place", state)
+      : missing.length === 1 && state.clarifications.length > 0
+        ? buildSingleFieldPrompt(missing[0], state)
+        : buildRequiredClarificationPrompt(missing, state);
     return sendMessage(target, prompt);
   }
 

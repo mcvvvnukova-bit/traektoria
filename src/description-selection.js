@@ -57,13 +57,13 @@ const INTEREST_RULES = [
 ];
 
 const MUNICIPALITY_RULES = [
-  ["Мурманск", /мурманск|мурманске/i],
+  ["Мурманск", /(?:^|[^а-яё])мурманск(?:е|а|у|ом)?(?=$|[^а-яё])/i],
   ["Североморск", /североморск|североморске/i],
   ["Апатиты", /апатит/i],
   ["Кировск", /кировск|кировске/i],
   ["Мончегорск", /мончегорск|мончегорске/i],
   ["Кандалакша", /кандалакш/i],
-  ["Кола", /\bкол[аеу]\b/i],
+  ["Кола", /(?:^|[^а-яё])кол[аеу](?=$|[^а-яё])/i],
   ["Оленегорск", /оленегорск|оленегорске/i],
   ["Полярный", /полярн(ый|ом)/i],
   ["Полярные Зори", /полярн(ые|ых)\s+зор/i],
@@ -90,6 +90,8 @@ function createDescriptionSelectionState() {
       ageText: "",
       place: "",
       placeKnown: false,
+      placeCandidates: [],
+      placeAmbiguity: "",
       interestsText: "",
       interests: [],
       interestLabels: [],
@@ -220,8 +222,35 @@ function applyLlmAnalysis(state, analysis, options = {}) {
 
   if (slots.location && !state.fields.place) {
     const place = detectPlace(slots.location);
-    patch.place = place.place || cleanupPlace(slots.location);
-    patch.placeKnown = Boolean(place.known);
+    if (place.place) {
+      patch.place = place.place;
+      patch.placeKnown = Boolean(place.known);
+      patch.placeCandidates = [];
+      patch.placeAmbiguity = "";
+      ensureLlmMunicipalityCriterion(state, {
+        status: place.known ? "recognized" : "recognized_unverified",
+        value: [place.place],
+        confidence: llmMunicipalityConfidence(state, place.known ? 0.95 : 0.6),
+      });
+    } else if (place.ambiguous) {
+      patch.placeCandidates = place.candidates || [];
+      patch.placeAmbiguity = place.ambiguity || "place_unknown";
+      ensureLlmMunicipalityCriterion(state, {
+        status: "recognized_ambiguous",
+        value: place.candidates?.length ? place.candidates : [cleanupPlace(slots.location)],
+        confidence: llmMunicipalityConfidence(state, 0.6),
+      });
+    } else {
+      patch.place = cleanupPlace(slots.location);
+      patch.placeKnown = false;
+      patch.placeCandidates = [];
+      patch.placeAmbiguity = "";
+      ensureLlmMunicipalityCriterion(state, {
+        status: "recognized_unverified",
+        value: [patch.place],
+        confidence: llmMunicipalityConfidence(state, 0.6),
+      });
+    }
   }
 
   if (Array.isArray(slots.interests) && slots.interests.length) {
@@ -356,6 +385,19 @@ function normalizeModelCriteria(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function ensureLlmMunicipalityCriterion(state, criterion) {
+  if (!state.llm || typeof state.llm !== "object") return;
+  if (!state.llm.criteria || typeof state.llm.criteria !== "object" || Array.isArray(state.llm.criteria)) {
+    state.llm.criteria = {};
+  }
+  if (state.llm.criteria.criterion_01_municipality) return;
+  state.llm.criteria.criterion_01_municipality = criterion;
+}
+
+function llmMunicipalityConfidence(state, fallback) {
+  return state.llm?.criterionConfidences?.criterion_01_municipality ?? fallback;
+}
+
 function normalizeCriterionConfidences(value) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const result = {};
@@ -393,7 +435,13 @@ function parseDescriptionText(text) {
   if (place.place) {
     fields.place = place.place;
     fields.placeKnown = place.known;
-    if (place.ambiguous) ambiguities.push("place_unknown");
+    fields.placeCandidates = [];
+    fields.placeAmbiguity = "";
+    if (place.ambiguous) ambiguities.push(place.ambiguity || "place_unknown");
+  } else if (place.ambiguous) {
+    fields.placeCandidates = place.candidates || [];
+    fields.placeAmbiguity = place.ambiguity || "place_unknown";
+    ambiguities.push(place.ambiguity || "place_unknown");
   }
 
   const interests = detectInterests(text);
@@ -483,8 +531,12 @@ function mergeFields(target, patch, options = {}) {
 
   for (const [key, value] of Object.entries(patch)) {
     if (value == null || value === "") continue;
+    if (key === "place" && value) {
+      target.placeCandidates = [];
+      target.placeAmbiguity = "";
+    }
     if (Array.isArray(value)) {
-      if (replaceArrays || !Array.isArray(target[key])) {
+      if (key === "placeCandidates" || replaceArrays || !Array.isArray(target[key])) {
         target[key] = [...value];
       } else {
         target[key] = [...new Set([...(target[key] || []), ...value])];
@@ -518,7 +570,11 @@ function shouldConfirmSummary(state) {
   return getMissingRequiredFields(state).length === 0 && buildAmbiguities(state).length > 0;
 }
 
-function buildRequiredClarificationPrompt(missing) {
+function buildRequiredClarificationPrompt(missing, state = {}) {
+  if (missing.includes("place") && hasPlaceSelectionAmbiguity(state)) {
+    return buildSingleFieldPrompt("place", state);
+  }
+
   const labels = missing.map((field) => {
     if (field === "age") return "сколько лет ребенку";
     if (field === "place") return "где искать занятия";
@@ -530,9 +586,19 @@ function buildRequiredClarificationPrompt(missing) {
   return `Чтобы подобрать программы, уточните, пожалуйста: ${joinRussianList(labels)}.`;
 }
 
-function buildSingleFieldPrompt(field) {
+function buildSingleFieldPrompt(field, state = {}) {
   if (field === "age") return "Уточните, пожалуйста, сколько лет ребенку.";
-  if (field === "place") return "Уточните, пожалуйста, где искать занятия: населенный пункт, район или организация.";
+  if (field === "place") {
+    const fields = state.fields || {};
+    const candidates = fields.placeCandidates || [];
+    if (candidates.length > 1) {
+      return `Вы указали несколько населенных пунктов: ${candidates.join(", ")}. Уточните, пожалуйста, в каком одном населенном пункте искать кружки.`;
+    }
+    if (fields.placeAmbiguity === "place_region") {
+      return "Уточните, пожалуйста, конкретный населенный пункт Мурманской области, где искать кружки.";
+    }
+    return "Уточните, пожалуйста, где искать занятия: населенный пункт, район или организация.";
+  }
   return "Уточните, пожалуйста, какие интересы ребенка или направленность программы важны.";
 }
 
@@ -655,6 +721,8 @@ function buildAmbiguities(state, extra = []) {
   if (fields.place && fields.placeKnown === false && !looksLikeOrganizationOrDistrict(fields.place)) {
     values.add("place_unknown");
   }
+  if ((fields.placeCandidates || []).length > 1) values.add("place_multiple");
+  if (fields.placeAmbiguity === "place_region") values.add("place_region");
   if (fields.broadInterest) values.add("interest_broad");
   if (fields.interests?.includes("sports") && fields.avoidances?.includes("intense")) {
     values.add("interest_conflict");
@@ -718,8 +786,33 @@ function ageBucket(age) {
 }
 
 function detectPlace(text) {
-  for (const [place, pattern] of MUNICIPALITY_RULES) {
-    if (pattern.test(text)) return { place, known: true, ambiguous: false };
+  const knownPlaces = findKnownMunicipalities(text);
+  if (knownPlaces.length > 1) {
+    return {
+      place: "",
+      known: false,
+      ambiguous: true,
+      ambiguity: "place_multiple",
+      candidates: knownPlaces,
+    };
+  }
+  if (knownPlaces.length === 1) {
+    return {
+      place: knownPlaces[0],
+      known: true,
+      ambiguous: false,
+      candidates: [],
+    };
+  }
+
+  if (mentionsMurmanskRegion(text)) {
+    return {
+      place: "",
+      known: false,
+      ambiguous: true,
+      ambiguity: "place_region",
+      candidates: [],
+    };
   }
 
   const placeMatch = String(text).match(/(?:\bв|\bво|\bг\.|\bгород|\bрайон|\bпоселок|\bпгт|\bзато|\bискать в)\s+([А-ЯЁ][а-яё-]+(?:\s+[А-ЯЁ][а-яё-]+)?)/);
@@ -740,6 +833,23 @@ function detectPlace(text) {
   }
 
   return { place: "", known: false, ambiguous: false };
+}
+
+function findKnownMunicipalities(text) {
+  const matches = [];
+  for (const [place, pattern] of MUNICIPALITY_RULES) {
+    if (pattern.test(text)) matches.push(place);
+  }
+  return [...new Set(matches)];
+}
+
+function mentionsMurmanskRegion(text) {
+  return /мурманск(?:ая|ой|ую)?\s+област/i.test(String(text || ""));
+}
+
+function hasPlaceSelectionAmbiguity(state = {}) {
+  const fields = state.fields || {};
+  return (fields.placeCandidates || []).length > 1 || fields.placeAmbiguity === "place_region";
 }
 
 function cleanupPlace(value) {

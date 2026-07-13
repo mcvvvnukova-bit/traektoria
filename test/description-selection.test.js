@@ -57,6 +57,51 @@ test("keeps concrete basketball terms in the recommendation profile", () => {
   assert.deepEqual(profile.specificInterestLabels, ["баскетбол"]);
 });
 
+test("treats multiple municipalities as place ambiguity", () => {
+  const state = createDescriptionSelectionState();
+  applyDescriptionText(state, "Сыну 10 лет, Мурманск и Североморск, робототехника");
+
+  assert.equal(state.fields.place, "");
+  assert.deepEqual(state.fields.placeCandidates, ["Мурманск", "Североморск"]);
+  assert.equal(state.fields.placeAmbiguity, "place_multiple");
+  assert.deepEqual(getMissingRequiredFields(state), ["place"]);
+  assert.equal(
+    buildRequiredClarificationPrompt(getMissingRequiredFields(state), state),
+    "Вы указали несколько населенных пунктов: Мурманск, Североморск. Уточните, пожалуйста, в каком одном населенном пункте искать кружки.",
+  );
+});
+
+test("keeps asking for place until one municipality is provided", () => {
+  const state = createDescriptionSelectionState();
+  applyDescriptionText(state, "Сыну 10 лет, Мурманск и Североморск, робототехника");
+  applyDescriptionText(state, "Мурманск или Кола", { mode: "clarification" });
+
+  assert.equal(state.fields.place, "");
+  assert.deepEqual(state.fields.placeCandidates, ["Мурманск", "Кола"]);
+  assert.equal(state.fields.placeAmbiguity, "place_multiple");
+
+  applyDescriptionText(state, "Североморск", { mode: "clarification" });
+
+  assert.equal(state.fields.place, "Североморск");
+  assert.deepEqual(state.fields.placeCandidates, []);
+  assert.equal(state.fields.placeAmbiguity, "");
+  assert.deepEqual(getMissingRequiredFields(state), []);
+});
+
+test("treats Murmansk region as ambiguous place", () => {
+  const state = createDescriptionSelectionState();
+  applyDescriptionText(state, "Сыну 10 лет, Мурманская область, робототехника");
+
+  assert.equal(state.fields.place, "");
+  assert.deepEqual(state.fields.placeCandidates, []);
+  assert.equal(state.fields.placeAmbiguity, "place_region");
+  assert.deepEqual(getMissingRequiredFields(state), ["place"]);
+  assert.equal(
+    buildRequiredClarificationPrompt(getMissingRequiredFields(state), state),
+    "Уточните, пожалуйста, конкретный населенный пункт Мурманской области, где искать кружки.",
+  );
+});
+
 test("builds one prompt for multiple missing required fields", () => {
   const state = createDescriptionSelectionState();
   applyDescriptionText(state, "8 лет");

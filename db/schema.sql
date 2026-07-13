@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS scenario1_criteria_recognition_log (
   recognition_method TEXT NOT NULL,
   recognition_confidence NUMERIC(4,3) NOT NULL DEFAULT 0,
   criterion_01_municipality_status TEXT NOT NULL DEFAULT 'not_specified',
-  criterion_01_municipality_value TEXT,
+  criterion_01_municipality_value TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   criterion_01_municipality_confidence NUMERIC(4,3),
   criterion_02_organization_restriction_status TEXT NOT NULL DEFAULT 'not_specified',
   criterion_02_organization_restriction_value TEXT,
@@ -202,7 +202,7 @@ CREATE TABLE IF NOT EXISTS scenario1_criteria_recognition_log (
 
 ALTER TABLE scenario1_criteria_recognition_log
   ADD COLUMN IF NOT EXISTS criterion_01_municipality_status TEXT NOT NULL DEFAULT 'not_specified',
-  ADD COLUMN IF NOT EXISTS criterion_01_municipality_value TEXT,
+  ADD COLUMN IF NOT EXISTS criterion_01_municipality_value TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   ADD COLUMN IF NOT EXISTS criterion_01_municipality_confidence NUMERIC(4,3),
   ADD COLUMN IF NOT EXISTS criterion_02_organization_restriction_status TEXT NOT NULL DEFAULT 'not_specified',
   ADD COLUMN IF NOT EXISTS criterion_02_organization_restriction_value TEXT,
@@ -293,6 +293,30 @@ ALTER TABLE scenario1_criteria_recognition_log
   ADD COLUMN IF NOT EXISTS criterion_27_new_interest_program_level_status TEXT NOT NULL DEFAULT 'not_specified',
   ADD COLUMN IF NOT EXISTS criterion_27_new_interest_program_level_value TEXT,
   ADD COLUMN IF NOT EXISTS criterion_27_new_interest_program_level_confidence NUMERIC(4,3);
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'scenario1_criteria_recognition_log'
+      AND column_name = 'criterion_01_municipality_value'
+      AND udt_name = 'text'
+  ) THEN
+    ALTER TABLE scenario1_criteria_recognition_log
+      ALTER COLUMN criterion_01_municipality_value TYPE TEXT[]
+      USING CASE
+        WHEN criterion_01_municipality_value IS NULL OR criterion_01_municipality_value = ''
+          THEN ARRAY[]::TEXT[]
+        ELSE ARRAY[criterion_01_municipality_value]::TEXT[]
+      END;
+  END IF;
+END $$;
+
+ALTER TABLE scenario1_criteria_recognition_log
+  ALTER COLUMN criterion_01_municipality_value SET DEFAULT ARRAY[]::TEXT[],
+  ALTER COLUMN criterion_01_municipality_value SET NOT NULL;
 
 ALTER TABLE scenario1_criteria_recognition_log
   DROP COLUMN IF EXISTS criterion_01_municipality,
